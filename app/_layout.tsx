@@ -1,7 +1,5 @@
-import { useEffect } from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import { Stack } from 'expo-router';
 import { useFrameworkReady } from '../hooks/useFrameworkReady';
-import { RootNavigator } from '../src/navigation/RootNavigator';
 import { useNotificationsSetup } from '../src/hooks/useNotificationsSetup';
 
 export default function RootLayout() {
@@ -9,8 +7,8 @@ export default function RootLayout() {
   useNotificationsSetup();
 
   return (
-    <NavigationContainer>
-      <RootNavigator />
-    </NavigationContainer>
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="index" />
+    </Stack>
   );
 }
