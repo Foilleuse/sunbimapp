@@ -18,6 +18,7 @@
       }
     },
     "production": {
+      "channel": "sunbim",
       "distribution": "store",
       "ios": {
         "simulator": false

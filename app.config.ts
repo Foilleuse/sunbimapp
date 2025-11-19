@@ -9,6 +9,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   icon: './assets/images/icon.png',
   scheme: 'sunbim',
   userInterfaceStyle: 'automatic',
+  runtimeVersion: {
+    policy: 'sdkVersion',
+  },
   splash: {
     image: './assets/images/icon.png',
     resizeMode: 'contain',
