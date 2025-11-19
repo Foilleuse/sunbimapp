@@ -30,8 +30,8 @@
     "production": {
       "ios": {
         "appleId": "your-apple-id@example.com",
-        "ascAppId": "your-asc-app-id",
-        "appleTeamId": "your-apple-team-id"
+        "ascAppId": "6755459161",
+        "appleTeamId": "9FM5V587CB"
       },
       "android": {
         "serviceAccountKeyPath": "./path-to-your-service-account.json",
