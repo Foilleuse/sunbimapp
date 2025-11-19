@@ -21,6 +21,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       NSCameraUsageDescription: 'Sunbim a besoin d\'accéder à la caméra pour capturer vos nuages quotidiens.',
       NSPhotoLibraryUsageDescription: 'Sunbim a besoin d\'accéder à vos photos pour sauvegarder vos créations.',
       NSPhotoLibraryAddUsageDescription: 'Sunbim a besoin de sauvegarder vos dessins dans votre galerie.',
+      ITSAppUsesNonExemptEncryption: false,
     },
   },
   android: {
