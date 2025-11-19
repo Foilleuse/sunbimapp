@@ -19,8 +19,8 @@
     },
     "production": {
       "channel": "sunbim",
+      "distribution": "store",
       "ios": {
-        "distribution": "store",
         "simulator": false
       },
       "android": {
