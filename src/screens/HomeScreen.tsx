@@ -27,7 +27,7 @@ const HomeScreen = () => {
   const drawingColors: DrawingColor[] = ['black', 'red', 'blue', 'green'];
 
   const handleClear = () => {
-    if (Platform.OS === 'web') {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
       const confirmed = window.confirm('Voulez-vous vraiment effacer votre dessin ?');
       if (confirmed && canvasRef.current) {
         canvasRef.current.clear();
