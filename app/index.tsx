@@ -73,14 +73,8 @@ export default function DrawPage() {
       <Image
         source={{ uri: cloud.image_url }}
         style={styles.cloudImage}
-        resizeMode="contain"
+        resizeMode="cover"
       />
-      {cloud.title && (
-        <Text style={styles.title}>{cloud.title}</Text>
-      )}
-      {cloud.description && (
-        <Text style={styles.description}>{cloud.description}</Text>
-      )}
     </View>
   );
 }
@@ -88,27 +82,11 @@ export default function DrawPage() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: 20,
+    backgroundColor: '#000',
   },
   cloudImage: {
     width: '100%',
-    height: 300,
-    marginBottom: 20,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#000',
-    marginBottom: 10,
-    textAlign: 'center',
-  },
-  description: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
+    height: '100%',
   },
   errorText: {
     fontSize: 16,
