@@ -4,11 +4,12 @@ import 'react-native-url-polyfill/auto';
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
+let supabase: ReturnType<typeof createClient> | null = null;
+
 if (!supabaseUrl || !supabaseAnonKey) {
   console.error('Supabase is not configured correctly (missing URL or anon key).');
-  export const supabase = null;
 } else {
-  export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  supabase = createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
       storage: undefined,
       autoRefreshToken: true,
@@ -17,3 +18,5 @@ if (!supabaseUrl || !supabaseAnonKey) {
     },
   });
 }
+
+export { supabase };
