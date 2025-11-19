@@ -70,6 +70,9 @@ export default function DrawPage() {
 
   return (
     <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.headerText}>sunbim</Text>
+      </View>
       <Image
         source={{ uri: cloud.image_url }}
         style={styles.cloudImage}
@@ -83,6 +86,23 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000',
+  },
+  header: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#fff',
+    paddingTop: 50,
+    paddingBottom: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+  },
+  headerText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#000',
   },
   cloudImage: {
     width: '100%',
