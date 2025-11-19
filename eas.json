@@ -20,7 +20,7 @@
     "production": {
       "channel": "sunbim",
       "ios": {
-        "distribution": "app-store",
+        "distribution": "store",
         "simulator": false
       },
       "android": {
