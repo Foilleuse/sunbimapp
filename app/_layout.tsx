@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
-import { useFrameworkReady } from '@/hooks/useFrameworkReady';
+import { useFrameworkReady } from '../hooks/useFrameworkReady';
 import { RootNavigator } from '../src/navigation/RootNavigator';
 import { useNotificationsSetup } from '../src/hooks/useNotificationsSetup';
 
