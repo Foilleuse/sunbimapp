@@ -1,10 +1,13 @@
-import { Slot } from 'expo-router';
+import { Stack } from 'expo-router';
 import { useFrameworkReady } from '../hooks/useFrameworkReady';
-import { useNotificationsSetup } from '../src/hooks/useNotificationsSetup';
 
 export default function RootLayout() {
   useFrameworkReady();
-  useNotificationsSetup();
 
-  return <Slot />;
+  return (
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="index" />
+      <Stack.Screen name="+not-found" />
+    </Stack>
+  );
 }
