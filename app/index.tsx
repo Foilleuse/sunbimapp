@@ -1,7 +1,10 @@
 import { View, Text, StyleSheet, Image, ActivityIndicator, ScrollView } from 'react-native';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { supabase } from '../src/lib/supabaseClient';
 import { OTADebugPanel } from '../src/components/OTADebugPanel';
+import { DrawingCanvas } from '../src/components/DrawingCanvas';
+import { DrawingControls } from '../src/components/DrawingControls';
 
 interface Cloud {
   id: string;
@@ -15,6 +18,10 @@ export default function DrawPage() {
   const [cloud, setCloud] = useState<Cloud | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isDrawingEnabled, setIsDrawingEnabled] = useState(false);
+  const [strokeColor, setStrokeColor] = useState('#000000');
+  const [strokeWidth, setStrokeWidth] = useState(6);
+  const canvasRef = useRef<any>(null);
 
   useEffect(() => {
     fetchTodaysCloud();
@@ -92,18 +99,46 @@ export default function DrawPage() {
     );
   }
 
+  const handleClear = () => {
+    if (canvasRef.current) {
+      canvasRef.current.clearCanvas();
+    }
+  };
+
+  const toggleDrawing = () => {
+    setIsDrawingEnabled((prev) => !prev);
+  };
+
   return (
-    <View style={styles.container}>
-      <OTADebugPanel />
-      <View style={styles.header}>
-        <Text style={styles.headerText}>sunbim OTA</Text>
+    <GestureHandlerRootView style={styles.container}>
+      <View style={styles.container}>
+        <OTADebugPanel />
+        <View style={styles.header}>
+          <Text style={styles.headerText}>sunbim</Text>
+        </View>
+        <Image
+          source={{ uri: cloud.image_url }}
+          style={styles.cloudImage}
+          resizeMode="cover"
+        />
+        <DrawingCanvas
+          ref={canvasRef}
+          isDrawingEnabled={isDrawingEnabled}
+          strokeColor={strokeColor}
+          strokeWidth={strokeWidth}
+          onClear={handleClear}
+        />
+        <DrawingControls
+          isDrawingEnabled={isDrawingEnabled}
+          onToggleDrawing={toggleDrawing}
+          onClear={handleClear}
+          strokeColor={strokeColor}
+          onColorChange={setStrokeColor}
+          strokeWidth={strokeWidth}
+          onStrokeWidthChange={setStrokeWidth}
+        />
       </View>
-      <Image
-        source={{ uri: cloud.image_url }}
-        style={styles.cloudImage}
-        resizeMode="cover"
-      />
-    </View>
+    </GestureHandlerRootView>
   );
 }
 
