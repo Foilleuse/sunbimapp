@@ -25,7 +25,17 @@ export default function DrawPage() {
       setLoading(true);
       setError(null);
 
+      console.log('🔍 Supabase client check:', supabase ? 'OK' : 'NULL');
+      console.log('🔍 Supabase URL:', process.env.EXPO_PUBLIC_SUPABASE_URL ? 'OK' : 'MISSING');
+      console.log('🔍 Supabase Key:', process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ? 'OK' : 'MISSING');
+
+      if (!supabase) {
+        throw new Error('Supabase client is not initialized. Check environment variables.');
+      }
+
       const today = new Date().toISOString().split('T')[0];
+
+      console.log('🔍 Fetching cloud for:', today);
 
       const { data, error: fetchError } = await supabase
         .from('clouds')
@@ -34,12 +44,16 @@ export default function DrawPage() {
         .maybeSingle();
 
       if (fetchError) {
+        console.error('❌ Supabase error:', fetchError);
         throw fetchError;
       }
 
+      console.log('✅ Cloud data:', data ? 'Found' : 'None for today');
       setCloud(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load cloud');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load cloud';
+      console.error('❌ Error loading cloud:', errorMessage);
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -48,7 +62,10 @@ export default function DrawPage() {
   if (loading) {
     return (
       <View style={styles.container}>
-        <ActivityIndicator size="large" color="#87CEEB" />
+        <OTADebugPanel />
+        <View style={styles.centerContent}>
+          <ActivityIndicator size="large" color="#87CEEB" />
+        </View>
       </View>
     );
   }
@@ -56,7 +73,10 @@ export default function DrawPage() {
   if (error) {
     return (
       <View style={styles.container}>
-        <Text style={styles.errorText}>Error: {error}</Text>
+        <OTADebugPanel />
+        <View style={styles.centerContent}>
+          <Text style={styles.errorText}>Error: {error}</Text>
+        </View>
       </View>
     );
   }
@@ -64,7 +84,10 @@ export default function DrawPage() {
   if (!cloud) {
     return (
       <View style={styles.container}>
-        <Text style={styles.noCloudText}>No cloud published for today</Text>
+        <OTADebugPanel />
+        <View style={styles.centerContent}>
+          <Text style={styles.noCloudText}>No cloud published for today</Text>
+        </View>
       </View>
     );
   }
@@ -88,6 +111,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000',
+  },
+  centerContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   header: {
     position: 'absolute',

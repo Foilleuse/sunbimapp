@@ -1,15 +1,23 @@
-# 📝 Résumé des Corrections OTA - Sunbim
+# 📝 Résumé des Corrections - Sunbim
 
-## 🔴 Problème Identifié
+## 🔴 Problèmes Identifiés
 
+### Problème 1 : OTA Updates
 L'app ne téléchargeait aucun update OTA (0 downloads) car :
 1. **Aucune configuration `updates`** dans `app.config.ts`
 2. **Aucune vérification automatique** au démarrage de l'app
 3. **Aucun diagnostic** pour identifier les problèmes
 
+### Problème 2 : Erreur Supabase
+`Error: Cannot read property 'from' of null`
+- Le client Supabase pouvait être `null`
+- Pas de logs de diagnostic pour identifier la cause
+
 ## ✅ Corrections Appliquées
 
-### 1. **app.config.ts** - Configuration OTA Complète
+### A. Corrections OTA
+
+#### 1. **app.config.ts** - Configuration OTA Complète
 ```typescript
 updates: {
   enabled: true,                    // Active les OTA updates
@@ -19,12 +27,12 @@ updates: {
 }
 ```
 
-### 2. **app/_layout.tsx** - Vérification Automatique
+#### 2. **app/_layout.tsx** - Vérification Automatique
 - Ajout d'un `useEffect` qui vérifie les updates au démarrage
 - Logs détaillés pour diagnostiquer : "Sunbim OTA: ..."
 - Téléchargement et reload automatique si update disponible
 
-### 3. **src/components/OTADebugPanel.tsx** - Nouveau Composant
+#### 3. **src/components/OTADebugPanel.tsx** - Nouveau Composant
 Panneau de debug affiché en haut de l'écran avec :
 - ✅ Statut : Updates activés ou non
 - 📱 Runtime Version : exposdk:54.0.0
@@ -33,15 +41,33 @@ Panneau de debug affiché en haut de l'écran avec :
 - 🔄 Bouton "Check Update" : Force une vérification manuelle
 - 🔃 Bouton "Reload" : Recharge l'app
 
-### 4. **app/index.tsx** - Intégration du Debug Panel
+#### 4. **app/index.tsx** - Intégration du Debug Panel
 Ajout de `<OTADebugPanel />` en haut de l'écran principal
 
-### 5. **package.json** - Script Corrigé
+#### 5. **package.json** - Script Corrigé
 ```json
 "ota:publish": "CI=1 eas update --branch sunbim --message"
 ```
 
 Remplace le warning `--non-interactive` par `CI=1`
+
+### B. Corrections Supabase
+
+#### 6. **src/lib/supabaseClient.ts** - Client Non-Nullable
+- Le client Supabase ne peut plus être `null`
+- Si les variables d'env sont manquantes, erreur explicite immédiate
+- Logs de diagnostic améliorés
+
+#### 7. **app/index.tsx** - Logs de Diagnostic Supabase
+- Ajout de vérifications : client, URL, key
+- OTA Debug Panel visible même en cas d'erreur
+- Messages d'erreur plus clairs
+
+## 🧪 Test Cloud Aujourd'hui
+
+Votre base de données contient déjà **8 clouds** dont un pour aujourd'hui (2025-11-20) :
+- URL: `https://nnaboyzmqofqnehzmrnp.supabase.co/storage/v1/object/public/clouds/7473151.jpg`
+- Politique RLS : Accès public en lecture activé ✅
 
 ## 🚀 Prochaines Actions Requises
 
@@ -92,16 +118,24 @@ L'app devrait :
 
 ## 📁 Fichiers Modifiés
 
+### OTA
 - ✏️ `app.config.ts` - Ajout section `updates`
 - ✏️ `app/_layout.tsx` - Ajout vérification automatique OTA
-- ✏️ `app/index.tsx` - Intégration debug panel
 - ✏️ `package.json` - Script `ota:publish` corrigé
 - ➕ `src/components/OTADebugPanel.tsx` - Nouveau composant
-- ➕ `OTA_SETUP_GUIDE.md` - Guide complet (ce fichier)
 
-## 🔍 Debug
+### Supabase
+- ✏️ `src/lib/supabaseClient.ts` - Client non-nullable
+- ✏️ `app/index.tsx` - Logs de diagnostic + OTA panel sur tous les états
 
-Si après le nouveau build, ça ne fonctionne toujours pas :
+### Documentation
+- ➕ `OTA_SETUP_GUIDE.md` - Guide complet OTA
+- ➕ `SUPABASE_FIX.md` - Correction erreur Supabase
+- ➕ `CHANGES_SUMMARY.md` - Ce fichier
+
+## 🔍 Debug OTA
+
+Si après le nouveau build, les OTA ne fonctionnent toujours pas :
 
 1. Vérifiez que le debug panel affiche "Updates Enabled: YES"
 2. Vérifiez que Runtime = "exposdk:54.0.0"
@@ -116,6 +150,19 @@ Si après le nouveau build, ça ne fonctionne toujours pas :
 - Chaque changement de `app.config.ts` nécessite un nouveau build
 - Le debug panel peut être retiré une fois que tout fonctionne
 
+## 🔍 Debug Supabase
+
+Si vous voyez toujours l'erreur Supabase, consultez les nouveaux logs dans la console :
+```
+🔍 Supabase client check: OK
+🔍 Supabase URL: OK
+🔍 Supabase Key: OK
+🔍 Fetching cloud for: 2025-11-20
+✅ Cloud data: Found
+```
+
 ---
 
-**Documentation complète disponible dans `OTA_SETUP_GUIDE.md`**
+**Documentation complète disponible dans :**
+- `OTA_SETUP_GUIDE.md` - Guide OTA complet
+- `SUPABASE_FIX.md` - Détails correction Supabase
