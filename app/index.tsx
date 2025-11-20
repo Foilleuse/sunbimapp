@@ -102,7 +102,7 @@ const styles = StyleSheet.create({
   headerText: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#FF0000',
+    color: '#000000',
   },
   cloudImage: {
     width: '100%',
