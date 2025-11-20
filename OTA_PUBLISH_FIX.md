@@ -8,11 +8,72 @@ export failed
 Error: update command failed.
 ```
 
-## 🔍 Cause
+Ou :
 
-La commande `eas update` utilise en arrière-plan `expo export` avec le flag `--non-interactive` qui est déprécié dans les versions récentes d'Expo CLI.
+```
+ReferenceError: ReadableStream is not defined
+```
 
-## ✅ Solution Recommandée : Utiliser `eas-cli` Directement
+## 🔍 Causes
+
+1. **Version Node.js trop ancienne** - Node 16 ne supporte pas `ReadableStream`
+2. **Flag déprécié** - `--non-interactive` n'est plus supporté dans Expo CLI
+
+## ⚠️ IMPORTANT : Vérifier la Version Node.js
+
+**Expo SDK 54 requiert Node.js 18 ou supérieur.**
+
+Vérifiez votre version :
+```bash
+node --version
+```
+
+Si vous voyez `v16.x.x`, vous devez changer de version Node.
+
+## ✅ Solution 1 : Mettre à Jour Node.js (CRITIQUE)
+
+### Sur GitHub Codespaces / Devcontainer
+
+Si vous êtes dans un Codespace qui utilise Node 16, changez de version :
+
+```bash
+# Vérifier les versions disponibles
+nvm list
+
+# Utiliser Node 22 (ou 18+)
+nvm use 22
+
+# Ou installer si pas disponible
+nvm install 22
+nvm use 22
+
+# Vérifier
+node --version  # Doit afficher v22.x.x ou v18.x.x minimum
+```
+
+### Sur votre Machine Locale
+
+**Avec nvm (recommandé) :**
+```bash
+nvm install 22
+nvm use 22
+```
+
+**Avec Volta :**
+```bash
+volta install node@22
+```
+
+### Fichier .nvmrc Créé
+
+Un fichier `.nvmrc` a été ajouté au projet avec la version `22`. Si vous utilisez nvm, tapez simplement :
+```bash
+nvm use
+```
+
+## ✅ Solution 2 : Publier l'Update OTA
+
+Une fois Node.js à jour, utilisez `eas-cli` directement.
 
 ### Option 1 : Via npx (Recommandé)
 
