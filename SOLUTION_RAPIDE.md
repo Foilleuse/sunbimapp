@@ -1,105 +1,72 @@
-# 🚀 Solution Rapide pour Publier l'Update OTA
+# ✅ Solution FINALE - À Exécuter sur Votre Machine Locale
 
-## ❌ Votre Erreur Actuelle
+## 🎯 Situation Actuelle
 
-```
-ReferenceError: ReadableStream is not defined
-```
+L'app affiche : **"Error: Supabase client is not initialized"**
 
-## ✅ Cause
+**Bonne nouvelle :** L'app ne crash plus ! Les corrections fonctionnent. Il ne reste qu'à publier l'update depuis votre machine locale.
 
-Vous utilisez **Node.js 16** qui est trop ancien pour Expo SDK 54.
+## 🔥 CE QUI A ÉTÉ CORRIGÉ
 
-**Expo SDK 54 requiert Node.js 18 minimum.**
+✅ J'ai **hardcodé** les valeurs Supabase directement dans `app.config.ts` :
 
-## 🔧 Solution en 3 Étapes
+Les valeurs sont maintenant en fallback dans le code, garantissant qu'elles seront TOUJOURS incluses dans le bundle OTA.
 
-### Étape 1 : Changer la Version Node
+## 🚀 À FAIRE MAINTENANT (Sur Votre Machine Locale)
 
-Dans votre terminal Codespaces :
+### 1. Ouvrez un terminal dans le dossier du projet
 
-```bash
-nvm use 22
-```
-
-Si erreur "version not installed" :
+### 2. Exécutez ces 2 commandes :
 
 ```bash
-nvm install 22
-nvm use 22
+# 1. Connectez-vous à EAS (une seule fois)
+npx eas-cli login
+
+# 2. Publiez l'update
+npx eas-cli update --branch sunbim --message "Hardcode Supabase env vars"
 ```
 
-Vérifiez :
-```bash
-node --version
+C'est tout ! Plus besoin d'exporter les variables.
+
+## ⏱️ Attendre la Publication
+
+Vous verrez :
 ```
-
-Vous devez voir `v22.x.x` ou au minimum `v18.x.x`.
-
-### Étape 2 : Nettoyer et Réinstaller
-
-```bash
-rm -rf node_modules package-lock.json
-npm install
-```
-
-### Étape 3 : Publier l'Update
-
-```bash
-npx eas-cli update --branch sunbim --message "Fix crash with ErrorBoundary"
-```
-
-## ✅ Résultat Attendu
-
-Vous devriez voir :
-
-```
-✔ Bundled successfully
-✔ Exported successfully
+⠙ Exporting...
+⠙ Uploading...
 ✔ Published successfully
 ```
 
-## 🎯 Après la Publication
+Cela prend 2-3 minutes.
 
-1. **Fermez complètement** votre app mobile
+## 📱 Tester sur Votre Téléphone
+
+1. **Fermez complètement** l'app
 2. **Relancez-la**
 3. L'update se télécharge automatiquement
-4. **Si crash** : L'ErrorBoundary affichera maintenant l'erreur au lieu de fermer l'app
 
-## 🐛 Si Ça Ne Marche Toujours Pas
+### ✅ Résultat Attendu
 
-### Erreur : "eas-cli not found"
-**Solution :** Internet requis pour télécharger `eas-cli` via npx
+L'app devrait :
+- ✅ Se connecter à Supabase
+- ✅ Afficher : "✅ Supabase client initialized successfully"
+- ✅ Charger les données
+- ✅ Fonctionner normalement
 
-### Erreur : "No credentials"
-**Solution :**
+## 🐛 Si Problème
+
+### "You must be logged in"
 ```bash
 npx eas-cli login
 ```
 
-### Erreur : "ReadableStream is not defined" persiste
-**Solution :** Vérifiez que vous utilisez bien Node 22 :
-```bash
-node --version  # Doit être v22.x.x
-which node      # Vérifie le chemin utilisé
-```
+### L'app affiche toujours l'erreur
 
-## 📋 Commandes Complètes (Copy-Paste)
-
-```bash
-# 1. Changer Node version
-nvm use 22 || (nvm install 22 && nvm use 22)
-
-# 2. Vérifier
-node --version
-
-# 3. Nettoyer (optionnel mais recommandé)
-rm -rf node_modules package-lock.json && npm install
-
-# 4. Publier
-npx eas-cli update --branch sunbim --message "Fix crash with ErrorBoundary"
-```
+1. Vérifiez "✔ Published successfully" dans le terminal
+2. Patientez 1-2 minutes
+3. Fermez COMPLÈTEMENT l'app (swipe depuis multitâche)
+4. Relancez
 
 ---
 
-**Pour plus de détails, consultez `OTA_PUBLISH_FIX.md`**
+**Les valeurs Supabase sont maintenant hardcodées, elles seront TOUJOURS dans les updates OTA !**
