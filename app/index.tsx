@@ -1,6 +1,7 @@
-import { View, Text, StyleSheet, Image, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Image, ActivityIndicator, ScrollView } from 'react-native';
 import { useEffect, useState } from 'react';
 import { supabase } from '../src/lib/supabaseClient';
+import { OTADebugPanel } from '../src/components/OTADebugPanel';
 
 interface Cloud {
   id: string;
@@ -70,6 +71,7 @@ export default function DrawPage() {
 
   return (
     <View style={styles.container}>
+      <OTADebugPanel />
       <View style={styles.header}>
         <Text style={styles.headerText}>sunbim</Text>
       </View>

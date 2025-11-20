@@ -13,6 +13,13 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   // 🔥 CORRECTION ICI : runtime fixe pour OTA
   runtimeVersion: 'exposdk:54.0.0',
 
+  updates: {
+    enabled: true,
+    checkAutomatically: 'ON_LOAD',
+    fallbackToCacheTimeout: 0,
+    url: 'https://u.expo.dev/6ac7da66-fe81-4d00-b064-035f9535e691'
+  },
+
   splash: {
     image: './assets/images/icon.png',
     resizeMode: 'contain',
