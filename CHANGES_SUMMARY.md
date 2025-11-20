@@ -13,6 +13,12 @@ L'app ne téléchargeait aucun update OTA (0 downloads) car :
 - Le client Supabase pouvait être `null`
 - Pas de logs de diagnostic pour identifier la cause
 
+### Problème 3 : Crash après Update OTA
+L'app se ferme automatiquement après le démarrage suite à un update OTA
+- Pas de gestion d'erreur globale
+- Impossible de voir pourquoi l'app crashe
+- Possible boucle infinie de reload
+
 ## ✅ Corrections Appliquées
 
 ### A. Corrections OTA
@@ -62,6 +68,24 @@ Remplace le warning `--non-interactive` par `CI=1`
 - Ajout de vérifications : client, URL, key
 - OTA Debug Panel visible même en cas d'erreur
 - Messages d'erreur plus clairs
+
+### C. Corrections Crash OTA
+
+#### 8. **src/components/ErrorBoundary.tsx** - Nouveau Composant
+- Capture toutes les erreurs React non gérées
+- Affiche l'erreur complète à l'écran (message + stack)
+- Bouton "Réessayer" pour relancer l'app
+- **Essentiel** pour diagnostiquer les crashs
+
+#### 9. **app/_layout.tsx** - Protection Anti-Boucle
+- Ajout de `isCheckingUpdates` pour éviter les vérifications multiples
+- ErrorBoundary enveloppe toute l'app
+- Logs "Is embedded launch" pour savoir si build ou OTA
+
+#### 10. **src/components/OTADebugPanel.tsx** - Gestion d'Erreur
+- Try-catch autour de `loadUpdateInfo()`
+- Affiche un message si expo-updates plante
+- Ne bloque pas l'app en cas d'erreur
 
 ## 🧪 Test Cloud Aujourd'hui
 
@@ -128,9 +152,15 @@ L'app devrait :
 - ✏️ `src/lib/supabaseClient.ts` - Client non-nullable
 - ✏️ `app/index.tsx` - Logs de diagnostic + OTA panel sur tous les états
 
+### Crash OTA
+- ➕ `src/components/ErrorBoundary.tsx` - Nouveau composant de gestion d'erreur
+- ✏️ `app/_layout.tsx` - Protection anti-boucle + ErrorBoundary
+- ✏️ `src/components/OTADebugPanel.tsx` - Gestion d'erreur améliorée
+
 ### Documentation
 - ➕ `OTA_SETUP_GUIDE.md` - Guide complet OTA
 - ➕ `SUPABASE_FIX.md` - Correction erreur Supabase
+- ➕ `OTA_CRASH_FIX.md` - Correction crash après update
 - ➕ `CHANGES_SUMMARY.md` - Ce fichier
 
 ## 🔍 Debug OTA
@@ -161,8 +191,24 @@ Si vous voyez toujours l'erreur Supabase, consultez les nouveaux logs dans la co
 ✅ Cloud data: Found
 ```
 
+## 🔍 Debug Crash OTA
+
+Si l'app crashe après un update OTA :
+
+1. **L'ErrorBoundary devrait maintenant afficher l'erreur** au lieu de fermer l'app
+2. **Prenez un screenshot** de l'écran d'erreur (contient toutes les infos)
+3. **Si l'app se ferme quand même**, c'est un crash natif :
+   - Vérifiez les logs natifs (Xcode/Logcat)
+   - Peut nécessiter un nouveau build complet
+
+**Important:** Publiez un update OTA avec ces corrections pour tester :
+```bash
+npm run ota:publish "Fix crash with ErrorBoundary"
+```
+
 ---
 
 **Documentation complète disponible dans :**
 - `OTA_SETUP_GUIDE.md` - Guide OTA complet
 - `SUPABASE_FIX.md` - Détails correction Supabase
+- `OTA_CRASH_FIX.md` - Diagnostiquer les crashs OTA

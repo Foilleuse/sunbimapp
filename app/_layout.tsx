@@ -1,11 +1,13 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Stack } from 'expo-router';
 import { Platform } from 'react-native';
 import * as Updates from 'expo-updates';
 import { useFrameworkReady } from '../hooks/useFrameworkReady';
+import { ErrorBoundary } from '../src/components/ErrorBoundary';
 
 export default function RootLayout() {
   useFrameworkReady();
+  const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
 
   useEffect(() => {
     async function checkForUpdates() {
@@ -19,11 +21,19 @@ export default function RootLayout() {
         return;
       }
 
+      if (isCheckingUpdates) {
+        console.log('⚠️ Sunbim OTA: Already checking for updates');
+        return;
+      }
+
       try {
+        setIsCheckingUpdates(true);
+
         console.log('🔄 Sunbim OTA: Running update check on load');
         console.log('📱 Sunbim OTA: Runtime version:', Updates.runtimeVersion);
         console.log('📱 Sunbim OTA: Channel:', Updates.channel);
         console.log('📱 Sunbim OTA: Update ID:', Updates.updateId);
+        console.log('📱 Sunbim OTA: Is embedded launch:', Updates.isEmbeddedLaunch);
 
         const update = await Updates.checkForUpdateAsync();
 
@@ -37,6 +47,8 @@ export default function RootLayout() {
         }
       } catch (error) {
         console.error('❌ Sunbim OTA: Error checking for updates', error);
+      } finally {
+        setIsCheckingUpdates(false);
       }
     }
 
@@ -44,9 +56,11 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="index" />
-      <Stack.Screen name="+not-found" />
-    </Stack>
+    <ErrorBoundary>
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="index" />
+        <Stack.Screen name="+not-found" />
+      </Stack>
+    </ErrorBoundary>
   );
 }

@@ -6,30 +6,43 @@ export function OTADebugPanel() {
   const [isChecking, setIsChecking] = useState(false);
   const [lastCheck, setLastCheck] = useState<string>('');
   const [updateInfo, setUpdateInfo] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadUpdateInfo();
   }, []);
 
   const loadUpdateInfo = () => {
-    if (Platform.OS === 'web') {
+    try {
+      if (Platform.OS === 'web') {
+        setUpdateInfo({
+          isEnabled: false,
+          channel: 'N/A (Web)',
+          runtimeVersion: 'N/A',
+          updateId: 'N/A',
+          isEmbeddedLaunch: true
+        });
+        return;
+      }
+
+      setUpdateInfo({
+        isEnabled: Updates.isEnabled,
+        channel: Updates.channel || 'default',
+        runtimeVersion: Updates.runtimeVersion || 'unknown',
+        updateId: Updates.updateId || 'embedded',
+        isEmbeddedLaunch: Updates.isEmbeddedLaunch
+      });
+    } catch (err) {
+      console.error('Error loading update info:', err);
+      setError(err instanceof Error ? err.message : 'Unknown error');
       setUpdateInfo({
         isEnabled: false,
-        channel: 'N/A (Web)',
-        runtimeVersion: 'N/A',
-        updateId: 'N/A',
+        channel: 'Error',
+        runtimeVersion: 'Error',
+        updateId: 'Error',
         isEmbeddedLaunch: true
       });
-      return;
     }
-
-    setUpdateInfo({
-      isEnabled: Updates.isEnabled,
-      channel: Updates.channel || 'default',
-      runtimeVersion: Updates.runtimeVersion || 'unknown',
-      updateId: Updates.updateId || 'embedded',
-      isEmbeddedLaunch: Updates.isEmbeddedLaunch
-    });
   };
 
   const handleCheckForUpdate = async () => {
@@ -79,6 +92,15 @@ export function OTADebugPanel() {
       console.error('❌ Sunbim OTA: Error reloading', error);
     }
   };
+
+  if (error) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.title}>⚠️ OTA Error</Text>
+        <Text style={styles.errorText}>{error}</Text>
+      </View>
+    );
+  }
 
   if (!updateInfo) {
     return null;
@@ -220,5 +242,10 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 11,
     fontWeight: '600',
+  },
+  errorText: {
+    fontSize: 10,
+    color: '#f87171',
+    marginTop: 4,
   },
 });
