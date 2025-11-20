@@ -9,28 +9,25 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   icon: './assets/images/icon.png',
   scheme: 'sunbim',
   userInterfaceStyle: 'automatic',
-
-  // 🔥 CORRECTION ICI : runtime fixe pour OTA
-  runtimeVersion: 'exposdk:54.0.0',
-
+  runtimeVersion: {
+    policy: 'sdkVersion',
+  },
   splash: {
     image: './assets/images/icon.png',
     resizeMode: 'contain',
     backgroundColor: '#87CEEB',
   },
-
   ios: {
     supportsTablet: true,
     bundleIdentifier: 'com.sunbim.app',
-    buildNumber: '5',
+    buildNumber: '4',
     infoPlist: {
-      NSCameraUsageDescription: "Sunbim a besoin d'accéder à la caméra pour capturer vos nuages quotidiens.",
-      NSPhotoLibraryUsageDescription: "Sunbim a besoin d'accéder à vos photos pour sauvegarder vos créations.",
-      NSPhotoLibraryAddUsageDescription: "Sunbim a besoin de sauvegarder vos dessins dans votre galerie.",
-      ITSAppUsesNonExemptEncryption: false
-    }
+      NSCameraUsageDescription: 'Sunbim a besoin d\'accéder à la caméra pour capturer vos nuages quotidiens.',
+      NSPhotoLibraryUsageDescription: 'Sunbim a besoin d\'accéder à vos photos pour sauvegarder vos créations.',
+      NSPhotoLibraryAddUsageDescription: 'Sunbim a besoin de sauvegarder vos dessins dans votre galerie.',
+      ITSAppUsesNonExemptEncryption: false,
+    },
   },
-
   android: {
     adaptiveIcon: {
       foregroundImage: './assets/images/icon.png',
@@ -44,13 +41,11 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       'POST_NOTIFICATIONS',
     ],
   },
-
   web: {
     bundler: 'metro',
     output: 'server',
-    favicon: './assets/images/favicon.png'
+    favicon: './assets/images/favicon.png',
   },
-
   plugins: [
     'expo-router',
     'expo-font',
@@ -58,29 +53,27 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     [
       'expo-camera',
       {
-        cameraPermission: "Sunbim a besoin d'accéder à la caméra pour capturer vos nuages quotidiens."
-      }
+        cameraPermission: 'Sunbim a besoin d\'accéder à la caméra pour capturer vos nuages quotidiens.',
+      },
     ],
     [
       'expo-notifications',
       {
         icon: './assets/images/icon.png',
         color: '#87CEEB',
-        sounds: []
-      }
-    ]
+        sounds: [],
+      },
+    ],
   ],
-
   experiments: {
-    typedRoutes: true
+    typedRoutes: true,
   },
-
   extra: {
     router: {
-      origin: false
+      origin: false,
     },
     eas: {
-      projectId: '6ac7da66-fe81-4d00-b064-035f9535e691'
-    }
-  }
+      projectId: '6ac7da66-fe81-4d00-b064-035f9535e691',
+    },
+  },
 });

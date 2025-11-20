@@ -1,8 +1,6 @@
-import { View, Text, StyleSheet, Image, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, Image, ActivityIndicator } from 'react-native';
 import { useEffect, useState } from 'react';
 import { supabase } from '../src/lib/supabaseClient';
-import { DrawingCanvas } from '../components/DrawingCanvas';
-import { Pencil, Eraser, Palette, Sliders } from 'lucide-react-native';
 
 interface Cloud {
   id: string;
@@ -16,15 +14,6 @@ export default function DrawPage() {
   const [cloud, setCloud] = useState<Cloud | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  const [drawingEnabled, setDrawingEnabled] = useState(false);
-  const [selectedColor, setSelectedColor] = useState('#000000');
-  const [strokeWidth, setStrokeWidth] = useState(3);
-  const [showColorPicker, setShowColorPicker] = useState(false);
-  const [showStrokePicker, setShowStrokePicker] = useState(false);
-
-  const colors = ['#000000', '#FF0000', '#0000FF'];
-  const strokeWidths = [2, 3, 5, 8, 12];
 
   useEffect(() => {
     fetchTodaysCloud();
@@ -84,102 +73,11 @@ export default function DrawPage() {
       <View style={styles.header}>
         <Text style={styles.headerText}>sunbim</Text>
       </View>
-
       <Image
         source={{ uri: cloud.image_url }}
         style={styles.cloudImage}
         resizeMode="cover"
       />
-
-      <DrawingCanvas
-        enabled={drawingEnabled}
-        color={selectedColor}
-        strokeWidth={strokeWidth}
-      />
-
-      <View style={styles.toolbarContainer}>
-        <View style={styles.toolbar}>
-          <TouchableOpacity
-            style={[styles.toolButton, drawingEnabled && styles.toolButtonActive]}
-            onPress={() => setDrawingEnabled(!drawingEnabled)}
-          >
-            <Pencil color={drawingEnabled ? '#FF0000' : '#fff'} size={24} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.toolButton}
-            onPress={() => {}}
-          >
-            <Eraser color="#fff" size={24} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.toolButton, showColorPicker && styles.toolButtonActive]}
-            onPress={() => {
-              setShowColorPicker(!showColorPicker);
-              setShowStrokePicker(false);
-            }}
-          >
-            <Palette color={showColorPicker ? '#FF0000' : '#fff'} size={24} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.toolButton, showStrokePicker && styles.toolButtonActive]}
-            onPress={() => {
-              setShowStrokePicker(!showStrokePicker);
-              setShowColorPicker(false);
-            }}
-          >
-            <Sliders color={showStrokePicker ? '#FF0000' : '#fff'} size={24} />
-          </TouchableOpacity>
-        </View>
-
-        {showColorPicker && (
-          <View style={styles.pickerContainer}>
-            {colors.map((color) => (
-              <TouchableOpacity
-                key={color}
-                style={[
-                  styles.colorButton,
-                  { backgroundColor: color },
-                  selectedColor === color && styles.colorButtonSelected,
-                ]}
-                onPress={() => {
-                  setSelectedColor(color);
-                  setShowColorPicker(false);
-                }}
-              />
-            ))}
-          </View>
-        )}
-
-        {showStrokePicker && (
-          <View style={styles.pickerContainer}>
-            {strokeWidths.map((width) => (
-              <TouchableOpacity
-                key={width}
-                style={[
-                  styles.strokeButton,
-                  strokeWidth === width && styles.strokeButtonSelected,
-                ]}
-                onPress={() => {
-                  setStrokeWidth(width);
-                  setShowStrokePicker(false);
-                }}
-              >
-                <View
-                  style={{
-                    width: width * 2,
-                    height: width * 2,
-                    borderRadius: width,
-                    backgroundColor: '#fff',
-                  }}
-                />
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
-      </View>
     </View>
   );
 }
@@ -204,7 +102,7 @@ const styles = StyleSheet.create({
   headerText: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#000000',
+    color: '#FF0000',
   },
   cloudImage: {
     width: '100%',
@@ -219,63 +117,5 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: '#666',
     textAlign: 'center',
-  },
-  toolbarContainer: {
-    position: 'absolute',
-    bottom: 40,
-    left: 20,
-    right: 20,
-    zIndex: 100,
-  },
-  toolbar: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    borderRadius: 25,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-  },
-  toolButton: {
-    padding: 10,
-    borderRadius: 20,
-  },
-  toolButtonActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-  },
-  pickerContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    borderRadius: 25,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    marginTop: 10,
-    gap: 15,
-  },
-  colorButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  colorButtonSelected: {
-    borderColor: '#fff',
-    borderWidth: 3,
-  },
-  strokeButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  strokeButtonSelected: {
-    borderColor: '#fff',
-    borderWidth: 2,
   },
 });
