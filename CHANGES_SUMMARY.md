@@ -206,9 +206,17 @@ Si l'app crashe après un update OTA :
 npm run ota:publish "Fix crash with ErrorBoundary"
 ```
 
+**Si erreur "export failed --non-interactive"**, utilisez directement :
+```bash
+npx eas-cli update --branch sunbim --message "Fix crash with ErrorBoundary"
+```
+
+Consultez `OTA_PUBLISH_FIX.md` pour plus de détails.
+
 ---
 
 **Documentation complète disponible dans :**
 - `OTA_SETUP_GUIDE.md` - Guide OTA complet
 - `SUPABASE_FIX.md` - Détails correction Supabase
 - `OTA_CRASH_FIX.md` - Diagnostiquer les crashs OTA
+- `OTA_PUBLISH_FIX.md` - Corriger l'erreur "export failed"
