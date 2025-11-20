@@ -1,5 +1,5 @@
-import { View, Text, StyleSheet, Image, ActivityIndicator, TouchableOpacity, ScrollView } from 'react-native';
-import { useEffect, useState, useRef } from 'react';
+import { View, Text, StyleSheet, Image, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { useEffect, useState } from 'react';
 import { supabase } from '../src/lib/supabaseClient';
 import { DrawingCanvas } from '../components/DrawingCanvas';
 import { Pencil, Eraser, Palette, Sliders } from 'lucide-react-native';
@@ -12,12 +12,6 @@ interface Cloud {
   published_for: string;
 }
 
-interface DrawingPath {
-  path: any;
-  color: string;
-  strokeWidth: number;
-}
-
 export default function DrawPage() {
   const [cloud, setCloud] = useState<Cloud | null>(null);
   const [loading, setLoading] = useState(true);
@@ -28,7 +22,6 @@ export default function DrawPage() {
   const [strokeWidth, setStrokeWidth] = useState(3);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showStrokePicker, setShowStrokePicker] = useState(false);
-  const [paths, setPaths] = useState<DrawingPath[]>([]);
 
   const colors = ['#000000', '#FF0000', '#0000FF'];
   const strokeWidths = [2, 3, 5, 8, 12];
@@ -60,10 +53,6 @@ export default function DrawPage() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleClear = () => {
-    setPaths([]);
   };
 
   if (loading) {
@@ -106,7 +95,6 @@ export default function DrawPage() {
         enabled={drawingEnabled}
         color={selectedColor}
         strokeWidth={strokeWidth}
-        onClear={handleClear}
       />
 
       <View style={styles.toolbarContainer}>
@@ -120,7 +108,7 @@ export default function DrawPage() {
 
           <TouchableOpacity
             style={styles.toolButton}
-            onPress={handleClear}
+            onPress={() => {}}
           >
             <Eraser color="#fff" size={24} />
           </TouchableOpacity>
@@ -216,7 +204,7 @@ const styles = StyleSheet.create({
   headerText: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#FF0000',
+    color: '#000000',
   },
   cloudImage: {
     width: '100%',

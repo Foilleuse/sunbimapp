@@ -1,15 +1,10 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Dimensions } from 'react-native';
+import { StyleSheet, Dimensions, Platform } from 'react-native';
 import { Canvas, Path, Skia, SkPath, TouchInfo, useTouchHandler } from '@shopify/react-native-skia';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import Animated, { useSharedValue, useAnimatedStyle } from 'react-native-reanimated';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-
-interface Point {
-  x: number;
-  y: number;
-}
 
 interface DrawingPath {
   path: SkPath;
@@ -21,7 +16,6 @@ interface DrawingCanvasProps {
   enabled: boolean;
   color: string;
   strokeWidth: number;
-  onClear: () => void;
 }
 
 export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
@@ -29,6 +23,10 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   color,
   strokeWidth,
 }) => {
+  if (Platform.OS === 'web') {
+    return null;
+  }
+
   const [paths, setPaths] = useState<DrawingPath[]>([]);
   const [currentPath, setCurrentPath] = useState<SkPath | null>(null);
 
@@ -138,12 +136,6 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       </Animated.View>
     </GestureDetector>
   );
-};
-
-export const clearCanvas = (
-  setPaths: React.Dispatch<React.SetStateAction<DrawingPath[]>>
-) => {
-  setPaths([]);
 };
 
 const styles = StyleSheet.create({
