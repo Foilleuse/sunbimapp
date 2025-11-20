@@ -96,7 +96,7 @@ export default function DrawPage() {
     <View style={styles.container}>
       <OTADebugPanel />
       <View style={styles.header}>
-        <Text style={styles.headerText}>sunbim</Text>
+        <Text style={styles.headerText}>sunbim OTA</Text>
       </View>
       <Image
         source={{ uri: cloud.image_url }}
