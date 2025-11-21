@@ -1,38 +1,22 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import Constants from 'expo-constants';
+import { createClient } from '@supabase/supabase-js';
 import 'react-native-url-polyfill/auto';
 
-const supabaseUrl =
-  process.env.EXPO_PUBLIC_SUPABASE_URL ||
-  Constants.expoConfig?.extra?.EXPO_PUBLIC_SUPABASE_URL ||
-  '';
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
-const supabaseAnonKey =
-  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
-  Constants.expoConfig?.extra?.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
-  '';
-
-let supabaseInstance: SupabaseClient | null = null;
+let supabase: ReturnType<typeof createClient> | null = null;
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('❌ Supabase config missing!');
-  console.error('URL:', supabaseUrl ? 'OK' : 'MISSING');
-  console.error('Key:', supabaseAnonKey ? 'OK' : 'MISSING');
-  console.error('⚠️ Supabase client will be NULL. App will show error in UI.');
+  console.error('Supabase is not configured correctly (missing URL or anon key).');
 } else {
-  try {
-    supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
-      auth: {
-        storage: undefined,
-        autoRefreshToken: true,
-        persistSession: true,
-        detectSessionInUrl: false,
-      },
-    });
-    console.log('✅ Supabase client initialized successfully');
-  } catch (error) {
-    console.error('❌ Failed to create Supabase client:', error);
-  }
+  supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      storage: undefined,
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: false,
+    },
+  });
 }
 
-export const supabase = supabaseInstance;
+export { supabase };

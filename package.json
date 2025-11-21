@@ -6,8 +6,7 @@
   "scripts": {
     "dev": "EXPO_NO_TELEMETRY=1 expo start",
     "build:web": "expo export --platform web",
-    "lint": "expo lint",
-    "ota:publish": "EXPO_NO_TELEMETRY=1 CI=1 npx eas-cli update --branch sunbim --message"
+    "lint": "expo lint"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
