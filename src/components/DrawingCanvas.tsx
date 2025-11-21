@@ -1,11 +1,10 @@
 import React, { useState, forwardRef, useImperativeHandle } from 'react';
 import { View, StyleSheet, Dimensions } from 'react-native';
-import { Canvas, Path, Skia, TouchInfo, SkPath } from '@shopify/react-native-skia';
+import { Canvas, Path, Skia, SkPath } from '@shopify/react-native-skia';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
-  withSpring,
 } from 'react-native-reanimated';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -34,6 +33,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(({
 }, ref) => {
   const [paths, setPaths] = useState<DrawingPath[]>([]);
   const [currentPath, setCurrentPath] = useState<SkPath | null>(null);
+  const [, forceUpdate] = useState(0);
 
   const scale = useSharedValue(1);
   const savedScale = useSharedValue(1);
@@ -72,15 +72,16 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(({
     .onUpdate((e) => {
       if (currentPath) {
         currentPath.lineTo(e.x, e.y);
-        setCurrentPath(Skia.Path.MakeFromSVGString(currentPath.toSVGString())!);
+        forceUpdate((v) => v + 1);
       }
     })
     .onEnd(() => {
       if (currentPath) {
+        const pathCopy = currentPath.copy();
         setPaths((prev) => [
           ...prev,
           {
-            path: currentPath,
+            path: pathCopy,
             color: strokeColor,
             strokeWidth: strokeWidth,
           },
