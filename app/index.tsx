@@ -1,8 +1,10 @@
-import { View, Text, StyleSheet, Image, ActivityIndicator, TouchableOpacity } from 'react-native';
-import { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, Image, ActivityIndicator } from 'react-native';
+import { useEffect, useState, useRef } from 'react';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { supabase } from '../src/lib/supabaseClient';
-import { DrawingCanvas } from '../components/DrawingCanvas';
-import { Pencil, Eraser, Palette, Sliders } from 'lucide-react-native';
+import { OTADebugPanel } from '../src/components/OTADebugPanel';
+import { DrawingCanvas } from '../src/components/DrawingCanvas';
+import { DrawingControls } from '../src/components/DrawingControls';
 
 interface Cloud {
   id: string;
@@ -16,15 +18,10 @@ export default function DrawPage() {
   const [cloud, setCloud] = useState<Cloud | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  const [drawingEnabled, setDrawingEnabled] = useState(false);
-  const [selectedColor, setSelectedColor] = useState('#000000');
-  const [strokeWidth, setStrokeWidth] = useState(3);
-  const [showColorPicker, setShowColorPicker] = useState(false);
-  const [showStrokePicker, setShowStrokePicker] = useState(false);
-
-  const colors = ['#000000', '#FF0000', '#0000FF'];
-  const strokeWidths = [2, 3, 5, 8, 12];
+  const [isDrawingEnabled, setIsDrawingEnabled] = useState(false);
+  const [strokeColor, setStrokeColor] = useState('#000000');
+  const [strokeWidth, setStrokeWidth] = useState(6);
+  const canvasRef = useRef<any>(null);
 
   useEffect(() => {
     fetchTodaysCloud();
@@ -35,7 +32,17 @@ export default function DrawPage() {
       setLoading(true);
       setError(null);
 
+      console.log('🔍 Supabase client check:', supabase ? 'OK' : 'NULL');
+      console.log('🔍 Supabase URL:', process.env.EXPO_PUBLIC_SUPABASE_URL ? 'OK' : 'MISSING');
+      console.log('🔍 Supabase Key:', process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ? 'OK' : 'MISSING');
+
+      if (!supabase) {
+        throw new Error('Supabase client is not initialized. Check environment variables.');
+      }
+
       const today = new Date().toISOString().split('T')[0];
+
+      console.log('🔍 Fetching cloud for:', today);
 
       const { data, error: fetchError } = await supabase
         .from('clouds')
@@ -44,12 +51,16 @@ export default function DrawPage() {
         .maybeSingle();
 
       if (fetchError) {
+        console.error('❌ Supabase error:', fetchError);
         throw fetchError;
       }
 
+      console.log('✅ Cloud data:', data ? 'Found' : 'None for today');
       setCloud(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load cloud');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load cloud';
+      console.error('❌ Error loading cloud:', errorMessage);
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -58,7 +69,10 @@ export default function DrawPage() {
   if (loading) {
     return (
       <View style={styles.container}>
-        <ActivityIndicator size="large" color="#87CEEB" />
+        <OTADebugPanel />
+        <View style={styles.centerContent}>
+          <ActivityIndicator size="large" color="#87CEEB" />
+        </View>
       </View>
     );
   }
@@ -66,7 +80,10 @@ export default function DrawPage() {
   if (error) {
     return (
       <View style={styles.container}>
-        <Text style={styles.errorText}>Error: {error}</Text>
+        <OTADebugPanel />
+        <View style={styles.centerContent}>
+          <Text style={styles.errorText}>Error: {error}</Text>
+        </View>
       </View>
     );
   }
@@ -74,113 +91,52 @@ export default function DrawPage() {
   if (!cloud) {
     return (
       <View style={styles.container}>
-        <Text style={styles.noCloudText}>No cloud published for today</Text>
+        <OTADebugPanel />
+        <View style={styles.centerContent}>
+          <Text style={styles.noCloudText}>No cloud published for today</Text>
+        </View>
       </View>
     );
   }
 
+  const handleClear = () => {
+    if (canvasRef.current) {
+      canvasRef.current.clearCanvas();
+    }
+  };
+
+  const toggleDrawing = () => {
+    setIsDrawingEnabled((prev) => !prev);
+  };
+
   return (
-    <View style={styles.container}>
+    <GestureHandlerRootView style={styles.container}>
+      <OTADebugPanel />
       <View style={styles.header}>
         <Text style={styles.headerText}>sunbim</Text>
       </View>
-
       <Image
         source={{ uri: cloud.image_url }}
         style={styles.cloudImage}
         resizeMode="cover"
       />
-
       <DrawingCanvas
-        enabled={drawingEnabled}
-        color={selectedColor}
+        ref={canvasRef}
+        isDrawingEnabled={isDrawingEnabled}
+        strokeColor={strokeColor}
         strokeWidth={strokeWidth}
+        onClear={handleClear}
       />
-
-      <View style={styles.toolbarContainer}>
-        <View style={styles.toolbar}>
-          <TouchableOpacity
-            style={[styles.toolButton, drawingEnabled && styles.toolButtonActive]}
-            onPress={() => setDrawingEnabled(!drawingEnabled)}
-          >
-            <Pencil color={drawingEnabled ? '#FF0000' : '#fff'} size={24} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.toolButton}
-            onPress={() => {}}
-          >
-            <Eraser color="#fff" size={24} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.toolButton, showColorPicker && styles.toolButtonActive]}
-            onPress={() => {
-              setShowColorPicker(!showColorPicker);
-              setShowStrokePicker(false);
-            }}
-          >
-            <Palette color={showColorPicker ? '#FF0000' : '#fff'} size={24} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.toolButton, showStrokePicker && styles.toolButtonActive]}
-            onPress={() => {
-              setShowStrokePicker(!showStrokePicker);
-              setShowColorPicker(false);
-            }}
-          >
-            <Sliders color={showStrokePicker ? '#FF0000' : '#fff'} size={24} />
-          </TouchableOpacity>
-        </View>
-
-        {showColorPicker && (
-          <View style={styles.pickerContainer}>
-            {colors.map((color) => (
-              <TouchableOpacity
-                key={color}
-                style={[
-                  styles.colorButton,
-                  { backgroundColor: color },
-                  selectedColor === color && styles.colorButtonSelected,
-                ]}
-                onPress={() => {
-                  setSelectedColor(color);
-                  setShowColorPicker(false);
-                }}
-              />
-            ))}
-          </View>
-        )}
-
-        {showStrokePicker && (
-          <View style={styles.pickerContainer}>
-            {strokeWidths.map((width) => (
-              <TouchableOpacity
-                key={width}
-                style={[
-                  styles.strokeButton,
-                  strokeWidth === width && styles.strokeButtonSelected,
-                ]}
-                onPress={() => {
-                  setStrokeWidth(width);
-                  setShowStrokePicker(false);
-                }}
-              >
-                <View
-                  style={{
-                    width: width * 2,
-                    height: width * 2,
-                    borderRadius: width,
-                    backgroundColor: '#fff',
-                  }}
-                />
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
-      </View>
-    </View>
+      <DrawingControls
+        isDrawingEnabled={isDrawingEnabled}
+        onToggleDrawing={toggleDrawing}
+        onClear={handleClear}
+        strokeColor={strokeColor}
+        onColorChange={setStrokeColor}
+        strokeWidth={strokeWidth}
+        onStrokeWidthChange={setStrokeWidth}
+      />
+    </GestureHandlerRootView>
   );
 }
 
@@ -188,6 +144,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000',
+  },
+  centerContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   header: {
     position: 'absolute',
@@ -209,6 +170,7 @@ const styles = StyleSheet.create({
   cloudImage: {
     width: '100%',
     height: '100%',
+    zIndex: 1,
   },
   errorText: {
     fontSize: 16,
@@ -219,63 +181,5 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: '#666',
     textAlign: 'center',
-  },
-  toolbarContainer: {
-    position: 'absolute',
-    bottom: 40,
-    left: 20,
-    right: 20,
-    zIndex: 100,
-  },
-  toolbar: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    borderRadius: 25,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-  },
-  toolButton: {
-    padding: 10,
-    borderRadius: 20,
-  },
-  toolButtonActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-  },
-  pickerContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    borderRadius: 25,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    marginTop: 10,
-    gap: 15,
-  },
-  colorButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  colorButtonSelected: {
-    borderColor: '#fff',
-    borderWidth: 3,
-  },
-  strokeButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  strokeButtonSelected: {
-    borderColor: '#fff',
-    borderWidth: 2,
   },
 });
