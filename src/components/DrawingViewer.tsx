@@ -29,12 +29,11 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
         try { data = JSON.parse(canvasData); } catch (e) { data = []; }
     }
 
-    // Debug : Affiche combien de traits on a trouvé et la couleur du premier trait
+    // Debug : Affiche combien de traits on a trouvé
     if (data.length > 0) {
         console.log(`🔍 Viewer: ${data.length} traits chargés.`);
-        if (typeof data[0].color === 'string') {
-            console.log(`🎨 Viewer: Premier trait couleur: ${data[0].color}, Largeur: ${data[0].width}`);
-        }
+    } else {
+        console.log("⚠️ Viewer: Aucune donnée de dessin trouvée.");
     }
     
     return data;
@@ -69,7 +68,7 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
       { scale: transform.scale }
   ];
 
-  return ( // <--- LE DÉBUT DU RETURN EST ICI
+  return (
     <View style={[styles.container, {width: viewerSize, height: viewerSize}]}>
       <Canvas style={{ flex: 1 }}>
         <Group transform={matrix}>
@@ -85,6 +84,7 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
           
           <Group layer={true}> 
           {safePaths.map((p: any, index: number) => {
+             // PROTECTION ANTI-CRASH : Vérifie que le chemin SVG est une string
              if (!Skia || !Skia.Path) return null;
              if (!p || !p.svgPath || typeof p.svgPath !== 'string') return null;
 
@@ -92,11 +92,11 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
                  const path = Skia.Path.MakeFromSVGString(p.svgPath);
                  if (!path) return null;
                  
-                 // CORRECTION : COMPENSATION DE L'ÉCHELLE (pour que le trait ait la bonne épaisseur)
+                 // CORRECTION : COMPENSATION DE L'ÉPAISSEUR
                  const baseWidth = p.width || 6;
                  const adjustedWidth = baseWidth / transform.scale;
                  
-                 return ( // <--- C'EST LE RETURN À L'INTÉRIEUR DU MAP QUI DESSINE UN TRAIT
+                 return (
                    <Path
                      key={index}
                      path={path}
