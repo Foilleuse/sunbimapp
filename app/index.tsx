@@ -6,9 +6,9 @@ import { DrawingViewer } from '../src/components/DrawingViewer';
 import { DrawingControls } from '../src/components/DrawingControls';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '../src/contexts/AuthContext';
-import { Mail, Lock, X } from 'lucide-react-native'; // <--- NOUVEAUX IMPORTS
 import * as Updates from 'expo-updates';
 import React from 'react';
+import { Mail, Lock, X } from 'lucide-react-native'; // Icons pour le login
 
 interface Cloud {
   id: string;
@@ -28,7 +28,6 @@ export default function DrawPage() {
   const [cloud, setCloud] = useState<Cloud | null>(null);
   const [loading, setLoading] = useState(true);
   
-  // Outils
   const [strokeColor, setStrokeColor] = useState('#000000');
   const [strokeWidth, setStrokeWidth] = useState(6);
   const [isEraserMode, setIsEraserMode] = useState(false);
@@ -37,15 +36,15 @@ export default function DrawPage() {
   const [modalVisible, setModalVisible] = useState(false); // Tag
   const [loginVisible, setLoginVisible] = useState(false); // Login
   
-  const [tagText, setTagText] = useState('');
-  const [isUploading, setIsUploading] = useState(false);
-  
-  // Etats Auth Locale
+  // Formulaire Auth
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
 
+  const [tagText, setTagText] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
+  
   const [replayPaths, setReplayPaths] = useState<any[] | null>(null);
   
   const fadeWhiteAnim = useRef(new Animated.Value(0)).current; 
@@ -55,13 +54,9 @@ export default function DrawPage() {
   const canvasRef = useRef<DrawingCanvasRef>(null);
   const updateLabel = (Updates && Updates.updateId) ? `v.${Updates.updateId.substring(0, 6)}` : '';
 
-  // On ferme la modale de login automatiquement si l'user se connecte
+  // Fermer le login si connecté
   useEffect(() => {
-      if (user && loginVisible) {
-          setLoginVisible(false);
-          // Optionnel : On pourrait ouvrir directement le Tag ici
-          // setModalVisible(true);
-      }
+      if (user && loginVisible) setLoginVisible(false);
   }, [user]);
 
   useFocusEffect(
@@ -74,13 +69,10 @@ export default function DrawPage() {
     try {
         if (!supabase) throw new Error("No Supabase");
         const today = new Date().toISOString().split('T')[0];
-        
         const { data: cloudData, error: cloudError } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();   
         if (cloudError) throw cloudError;
         const currentCloud = cloudData || FALLBACK_CLOUD;
         
-        // On ne redirige QUE si on n'est pas en train de dessiner (pour éviter de couper l'herbe sous le pied)
-        // Mais ici la logique est simple : Si déjà joué -> Feed
         if (user && cloudData) {
             const { data: existingDrawing } = await supabase
                 .from('drawings').select('id')
@@ -106,17 +98,12 @@ export default function DrawPage() {
           if (isSignUp) {
               const { error } = await supabase.auth.signUp({ email: authEmail, password: authPassword });
               if (error) throw error;
-              Alert.alert("Email envoyé", "Vérifie ta boîte mail !");
+              Alert.alert("Vérifie tes emails !", "Lien envoyé.");
           } else {
               const { error } = await supabase.auth.signInWithPassword({ email: authEmail, password: authPassword });
               if (error) throw error;
-              // Succès : Le useEffect va fermer la modale tout seul
           }
-      } catch (e: any) {
-          Alert.alert("Erreur", e.message);
-      } finally {
-          setAuthLoading(false);
-      }
+      } catch (e: any) { Alert.alert("Erreur", e.message); } finally { setAuthLoading(false); }
   };
 
   const handleClear = () => canvasRef.current?.clearCanvas();
@@ -127,17 +114,12 @@ export default function DrawPage() {
   const handleSharePress = () => {
     if (!canvasRef.current) return;
     const paths = canvasRef.current.getPaths();
-    if (!paths || paths.length === 0) {
-        Alert.alert("Oups", "Dessine quelque chose !");
-        return;
-    }
+    if (!paths || paths.length === 0) { Alert.alert("Oups", "Dessine quelque chose !"); return; }
     
-    // SI PAS CONNECTÉ -> MODALE LOGIN (On reste sur la page)
     if (!user) {
-        setLoginVisible(true);
+        setLoginVisible(true); // Ouvre la modale de login locale
         return;
     }
-    
     setModalVisible(true);
   };
 
@@ -210,25 +192,28 @@ export default function DrawPage() {
           </View>
       )}
 
-      {/* --- MODALE LOGIN (SUR PLACE) --- */}
+      {/* MODALE LOGIN */}
       <Modal animationType="slide" transparent={true} visible={loginVisible} onRequestClose={() => setLoginVisible(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
             <View style={styles.modalContent}>
-                
-                <TouchableOpacity style={{position:'absolute', top:15, left:15, padding:5}} onPress={() => setLoginVisible(false)}>
+                <TouchableOpacity style={{position:'absolute', top:15, right:15, padding:5}} onPress={() => setLoginVisible(false)}>
                     <X color="#000" size={24}/>
                 </TouchableOpacity>
-
                 <Text style={styles.modalTitle}>{isSignUp ? "Créer un compte" : "Connexion"}</Text>
                 <Text style={styles.modalSubtitle}>Pour sauvegarder ton œuvre</Text>
                 
-                <View style={styles.inputWrapper}><Mail size={20} color="#999" style={styles.inputIcon}/><TextInput placeholder="Email" value={authEmail} onChangeText={setAuthEmail} autoCapitalize="none" style={styles.input} /></View>
-                <View style={styles.inputWrapper}><Lock size={20} color="#999" style={styles.inputIcon}/><TextInput placeholder="Mot de passe" value={authPassword} onChangeText={setAuthPassword} secureTextEntry style={styles.input} /></View>
+                <View style={styles.inputWrapper}>
+                    <Mail size={20} color="#999" style={styles.inputIcon}/>
+                    <TextInput placeholder="Email" value={authEmail} onChangeText={setAuthEmail} autoCapitalize="none" style={styles.input} placeholderTextColor="#BBB" />
+                </View>
+                <View style={styles.inputWrapper}>
+                    <Lock size={20} color="#999" style={styles.inputIcon}/>
+                    <TextInput placeholder="Mot de passe" value={authPassword} onChangeText={setAuthPassword} secureTextEntry style={styles.input} placeholderTextColor="#BBB" />
+                </View>
                 
                 <TouchableOpacity style={styles.authBtn} onPress={handleAuth} disabled={authLoading}>
                     {authLoading ? <ActivityIndicator color="#FFF"/> : <Text style={styles.authBtnText}>{isSignUp ? "S'inscrire" : "Se connecter"}</Text>}
                 </TouchableOpacity>
-                
                 <TouchableOpacity onPress={() => setIsSignUp(!isSignUp)}><Text style={styles.switchText}>{isSignUp ? "Déjà un compte ?" : "Pas de compte ?"}</Text></TouchableOpacity>
             </View>
         </KeyboardAvoidingView>
@@ -239,7 +224,7 @@ export default function DrawPage() {
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
             <View style={styles.modalContent}>
                 <Text style={styles.modalTitle}>Qu'as-tu vu ?</Text>
-                <TextInput style={styles.input} placeholder="Ex: Un dragon..." value={tagText} onChangeText={setTagText} autoFocus={true} maxLength={30} onSubmitEditing={confirmShare}/>
+                <TextInput style={styles.input} placeholder="Ex: Un dragon..." placeholderTextColor="#BBB" value={tagText} onChangeText={setTagText} autoFocus={true} maxLength={30} onSubmitEditing={confirmShare}/>
                 <TouchableOpacity style={styles.validateBtn} onPress={confirmShare} disabled={isUploading}>
                     {isUploading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.validateText}>Publier</Text>}
                 </TouchableOpacity>
@@ -272,26 +257,30 @@ const styles = StyleSheet.create({
   versionText: { fontSize: 10, color: 'rgba(255,255,255,0.5)', marginTop: 2, textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 1 },
   noCloudText: { fontSize: 18, color: '#666', textAlign: 'center' },
   errorText: { color: 'red', textAlign: 'center' },
-  
-  // MODALES (Style unifié pour Tag et Login)
+
+  // MODALE COMMUNE
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' },
   modalContent: { width: '85%', backgroundColor: '#FFF', borderRadius: 20, padding: 25, alignItems: 'center', shadowColor: "#000", shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.25, shadowRadius: 10 },
   modalTitle: { fontSize: 22, fontWeight: '800', color: '#000', marginBottom: 5 },
   modalSubtitle: { fontSize: 14, color: '#666', marginBottom: 20 },
-  input: { width: '100%', height: 50, borderWidth: 1, borderColor: '#EEE', borderRadius: 12, paddingHorizontal: 15, fontSize: 16, marginBottom: 20, backgroundColor: '#F9F9F9' },
   
-  // BOUTONS
+  // INPUTS ALIGNÉS
+  inputWrapper: { 
+      flexDirection: 'row', alignItems: 'center', 
+      backgroundColor: '#F5F5F5', borderRadius: 12, 
+      paddingHorizontal: 15, marginBottom: 15, height: 50, width: '100%' 
+  },
+  inputIcon: { marginRight: 10 },
+  input: { flex: 1, height: '100%', fontSize: 16, color: '#000' }, // Hauteur 100% pour centrer le texte
+
   validateBtn: { width: '100%', height: 50, backgroundColor: '#000', borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
   validateText: { color: '#FFF', fontWeight: '700', fontSize: 16 },
   cancelBtn: { padding: 10 },
   cancelText: { color: '#999', fontWeight: '600' },
-
-  // AUTH SPECIFIC
+  
   authBtn: { backgroundColor: '#000', height: 50, borderRadius: 12, width: '100%', justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
   authBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
   switchText: { textAlign: 'center', marginTop: 15, color: '#666', fontSize: 14, textDecorationLine: 'underline' },
-  inputWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F5F5F5', borderRadius: 12, paddingHorizontal: 15, marginBottom: 15, height: 50, width: '100%' },
-  inputIcon: { marginRight: 10 },
 
   finalTitle: { fontSize: 32, fontWeight: '900', color: '#000', textAlign: 'center', letterSpacing: -1 },
 });
