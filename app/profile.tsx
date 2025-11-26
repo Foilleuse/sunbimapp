@@ -3,22 +3,23 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { supabase } from '../src/lib/supabaseClient';
 import { useAuth } from '../src/contexts/AuthContext';
-import { User, Mail, Lock, LogOut, ChevronLeft, Settings, Heart, MessageCircle, Share2, X } from 'lucide-react-native'; 
+import { User, Mail, Lock, LogOut, ChevronLeft, Settings, Heart, MessageCircle, X } from 'lucide-react-native'; 
 import { DrawingViewer } from '../src/components/DrawingViewer';
-import { CommentsModal } from '../src/components/CommentsModal'; // <--- AJOUT
+// IMPORTANT : On réimporte la modale de commentaires
+import { CommentsModal } from '../src/components/CommentsModal'; 
 
 export default function ProfilePage() {
   const router = useRouter();
   const { user, profile, signOut, loading: authLoading } = useAuth();
   
-  // Données
   const [userDrawings, setUserDrawings] = useState<any[]>([]);
   const [loadingDrawings, setLoadingDrawings] = useState(true);
   
-  // UI States
+  // --- ETATS D'INTERACTION ---
   const [selectedDrawing, setSelectedDrawing] = useState<any | null>(null);
   const [isHolding, setIsHolding] = useState(false);
-  const [showComments, setShowComments] = useState(false);
+  const [showComments, setShowComments] = useState(false); // <--- Il manquait ça
+  const [isLiked, setIsLiked] = useState(false); // <--- Pour savoir si on a liké le dessin ouvert
 
   // Formulaire
   const [email, setEmail] = useState('');
@@ -34,6 +35,13 @@ export default function ProfilePage() {
     if (user) fetchUserDrawings();
   }, [user]);
 
+  // Quand on ouvre un dessin, on vérifie si on l'a déjà liké
+  useEffect(() => {
+      if (selectedDrawing && user) {
+          checkLikeStatus();
+      }
+  }, [selectedDrawing]);
+
   const fetchUserDrawings = async () => {
     try {
         const { data, error } = await supabase
@@ -44,14 +52,48 @@ export default function ProfilePage() {
 
         if (error) throw error;
         setUserDrawings(data || []);
-    } catch (e) {
-        console.error("Erreur profil:", e);
-    } finally {
-        setLoadingDrawings(false);
-    }
+    } catch (e) { console.error("Erreur profil:", e); } finally { setLoadingDrawings(false); }
   };
 
-  // Calcul sécurisé des likes totaux (Anti-Crash)
+  const checkLikeStatus = async () => {
+    try {
+        const { data } = await supabase
+            .from('likes')
+            .select('id')
+            .eq('user_id', user?.id)
+            .eq('drawing_id', selectedDrawing.id)
+            .maybeSingle();
+        setIsLiked(!!data);
+    } catch (e) { console.error(e); }
+  };
+
+  // --- LOGIQUE DU LIKE (RÉTABLIE) ---
+  const handleLike = async () => {
+      if (!selectedDrawing || !user) return;
+
+      const newLikedState = !isLiked;
+      setIsLiked(newLikedState);
+      
+      // Mise à jour optimiste du compteur local
+      const newCount = (selectedDrawing.likes_count || 0) + (newLikedState ? 1 : -1);
+      setSelectedDrawing({...selectedDrawing, likes_count: newCount});
+
+      // Mise à jour dans la liste globale pour que la grille soit à jour aussi
+      setUserDrawings(prev => prev.map(d => d.id === selectedDrawing.id ? {...d, likes_count: newCount} : d));
+
+      try {
+          if (newLiked) {
+              await supabase.from('likes').insert({ user_id: user.id, drawing_id: selectedDrawing.id });
+          } else {
+              await supabase.from('likes').delete().eq('user_id', user.id).eq('drawing_id', selectedDrawing.id);
+          }
+      } catch (e) {
+          console.error("Erreur like", e);
+          // Rollback si erreur
+          setIsLiked(!newLiked);
+      }
+  };
+
   const totalLikes = userDrawings.reduce((acc, curr) => acc + (curr.likes_count || 0), 0);
 
   const handleEmailAuth = async () => {
@@ -71,7 +113,6 @@ export default function ProfilePage() {
   const handleSignOut = async () => { await signOut(); router.replace('/'); };
   const handleEditProfile = () => Alert.alert("Bientôt", "Édition profil à venir");
 
-  // Rendu Vignette
   const renderItem = ({ item }: { item: any }) => (
     <TouchableOpacity 
         activeOpacity={0.9}
@@ -79,12 +120,8 @@ export default function ProfilePage() {
         style={{ width: ITEM_SIZE, height: ITEM_SIZE, marginBottom: SPACING, backgroundColor: '#F9F9F9', overflow: 'hidden' }}
     >
         <DrawingViewer
-            imageUri={item.cloud_image_url}
-            canvasData={item.canvas_data}
-            viewerSize={ITEM_SIZE}
-            transparentMode={false} 
-            startVisible={true}
-            animated={false}
+            imageUri={item.cloud_image_url} canvasData={item.canvas_data} viewerSize={ITEM_SIZE}
+            transparentMode={false} startVisible={true} animated={false}
         />
     </TouchableOpacity>
   );
@@ -94,27 +131,20 @@ export default function ProfilePage() {
   return (
     <View style={styles.container}>
        
-       {/* HEADER NAV */}
        <View style={styles.navHeader}>
             <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}>
                 <ChevronLeft color="#000" size={32} />
             </TouchableOpacity>
-            
             {user && (
                 <View style={styles.topRightActions}>
-                    <TouchableOpacity onPress={handleEditProfile} style={styles.iconBtn}>
-                        <Settings color="#000" size={24} />
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={handleSignOut} style={styles.iconBtn}>
-                        <LogOut color="#000" size={24} />
-                    </TouchableOpacity>
+                    <TouchableOpacity onPress={handleEditProfile} style={styles.iconBtn}><Settings color="#000" size={24} /></TouchableOpacity>
+                    <TouchableOpacity onPress={handleSignOut} style={styles.iconBtn}><LogOut color="#000" size={24} /></TouchableOpacity>
                 </View>
             )}
        </View>
 
        {user ? (
             <View style={{flex: 1}}>
-                {/* HEADER PROFIL */}
                 <View style={styles.profileCard}>
                     <View style={styles.profileRow}>
                         <View style={styles.avatarContainer}>
@@ -137,7 +167,6 @@ export default function ProfilePage() {
                     <View style={styles.divider} />
                 </View>
 
-                {/* GALERIE */}
                 <FlatList
                     data={userDrawings}
                     renderItem={renderItem}
@@ -146,13 +175,10 @@ export default function ProfilePage() {
                     columnWrapperStyle={{ gap: SPACING }}
                     contentContainerStyle={{ paddingBottom: 50 }}
                     showsVerticalScrollIndicator={false}
-                    ListEmptyComponent={
-                        <View style={styles.emptyState}><Text style={styles.emptyText}>Aucun dessin pour l'instant.</Text></View>
-                    }
+                    ListEmptyComponent={<View style={styles.emptyState}><Text style={styles.emptyText}>Aucun dessin pour l'instant.</Text></View>}
                 />
             </View>
        ) : (
-            // FORMULAIRE
             <View style={styles.formContainer}>
                 <Text style={styles.welcomeText}>Connecte-toi.</Text>
                 <View style={styles.inputWrapper}><Mail size={20} color="#999" style={styles.inputIcon}/><TextInput placeholder="Email" value={email} onChangeText={setEmail} autoCapitalize="none" style={styles.input} /></View>
@@ -164,64 +190,51 @@ export default function ProfilePage() {
             </View>
        )}
 
-       {/* --- MODALE ZOOM INTERACTIVE --- */}
-       {selectedDrawing && (
-            <View style={styles.fullScreenOverlay}>
-                 {/* Header Modale */}
-                 <View style={styles.modalHeader}>
-                    <TouchableOpacity onPress={() => setSelectedDrawing(null)} style={styles.closeModalBtn}>
-                        <X color="#000" size={32} />
-                    </TouchableOpacity>
-                </View>
+       {/* MODALE ZOOM INTERACTIVE */}
+       <Modal animationType="slide" transparent={false} visible={selectedDrawing !== null} onRequestClose={() => setSelectedDrawing(null)}>
+            {selectedDrawing && (
+                <View style={styles.modalContainer}>
+                    <View style={styles.modalHeader}>
+                        <TouchableOpacity onPress={() => setSelectedDrawing(null)} style={styles.closeModalBtn}><X color="#000" size={32} /></TouchableOpacity>
+                    </View>
+                    <Pressable onPressIn={() => setIsHolding(true)} onPressOut={() => setIsHolding(false)} style={{ width: screenWidth, height: screenWidth, backgroundColor: '#F0F0F0' }}>
+                        <DrawingViewer
+                            imageUri={selectedDrawing.cloud_image_url}
+                            canvasData={isHolding ? [] : selectedDrawing.canvas_data}
+                            viewerSize={screenWidth}
+                            transparentMode={false} startVisible={false} animated={true}
+                        />
+                    </Pressable>
+                    <View style={styles.modalFooter}>
+                        <View>
+                            <Text style={styles.drawingLabel}>{selectedDrawing.label}</Text>
+                            <Text style={styles.dateText}>Le {new Date(selectedDrawing.created_at).toLocaleDateString()}</Text>
+                        </View>
+                        
+                        <View style={styles.statsRowSmall}>
+                             {/* BOUTON LIKE ACTIF */}
+                             <TouchableOpacity onPress={handleLike} style={{flexDirection:'row', alignItems:'center', gap:5, marginRight:15}}>
+                                <Heart color={isLiked ? "#FF3B30" : "#000"} fill={isLiked ? "#FF3B30" : "transparent"} size={24} />
+                                <Text style={styles.statTextSmall}>{selectedDrawing.likes_count || 0}</Text>
+                             </TouchableOpacity>
 
-                {/* Image */}
-                <Pressable 
-                    onPressIn={() => setIsHolding(true)} onPressOut={() => setIsHolding(false)}
-                    style={{ width: screenWidth, height: screenWidth, backgroundColor: '#F0F0F0' }}
-                >
-                    <DrawingViewer
-                        imageUri={selectedDrawing.cloud_image_url}
-                        canvasData={isHolding ? [] : selectedDrawing.canvas_data}
-                        viewerSize={screenWidth}
-                        transparentMode={false}
-                        startVisible={false} animated={true}
-                    />
-                    <Text style={styles.hintText}>Maintenir pour voir l'original</Text>
-                </Pressable>
-
-                {/* Footer Actions */}
-                <View style={styles.detailsFooter}>
-                    <View>
-                        <Text style={styles.drawingLabel}>{selectedDrawing.label || "Sans titre"}</Text>
-                        <Text style={styles.dateText}>Le {new Date(selectedDrawing.created_at).toLocaleDateString()}</Text>
+                             {/* BOUTON COMMENTAIRE ACTIF */}
+                             <TouchableOpacity onPress={() => setShowComments(true)} style={{flexDirection:'row', alignItems:'center', gap:5}}>
+                                <MessageCircle color="#000" size={24} />
+                                <Text style={styles.statTextSmall}>{selectedDrawing.comments_count || 0}</Text>
+                             </TouchableOpacity>
+                        </View>
                     </View>
                     
-                    <View style={styles.statsRowSmall}>
-                         {/* Bouton Like (visuel uniquement ici, pas d'action sur son propre profil pour l'instant) */}
-                         <View style={{flexDirection:'row', alignItems:'center', gap:5, marginRight:15}}>
-                            <Heart color="#000" size={24} />
-                            <Text style={styles.statTextSmall}>{selectedDrawing.likes_count || 0}</Text>
-                         </View>
-
-                         {/* Bouton Commentaire */}
-                         <TouchableOpacity onPress={() => setShowComments(true)} style={{flexDirection:'row', alignItems:'center', gap:5}}>
-                            <MessageCircle color="#000" size={24} />
-                            <Text style={styles.statTextSmall}>{selectedDrawing.comments_count || 0}</Text>
-                         </TouchableOpacity>
-                    </View>
+                    {/* LA MODALE DE COMMENTAIRES EST ICI ! */}
+                    <CommentsModal 
+                        visible={showComments} 
+                        onClose={() => setShowComments(false)} 
+                        drawingId={selectedDrawing.id} 
+                    />
                 </View>
-            </View>
-       )}
-
-       {/* MODALE COMMENTAIRES */}
-       {selectedDrawing && (
-           <CommentsModal 
-             visible={showComments} 
-             onClose={() => setShowComments(false)} 
-             drawingId={selectedDrawing.id} 
-           />
-       )}
-
+            )}
+       </Modal>
     </View>
   );
 }
@@ -252,13 +265,10 @@ const styles = StyleSheet.create({
   switchText: { textAlign: 'center', marginTop: 20, color: '#666', fontSize: 14 },
   emptyState: { marginTop: 50, alignItems: 'center' },
   emptyText: { color: '#999' },
-  
-  // OVERLAY STYLE
-  fullScreenOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#FFFFFF', zIndex: 50 },
+  modalContainer: { flex: 1, backgroundColor: '#FFF' },
   modalHeader: { width: '100%', height: 100, justifyContent: 'flex-end', alignItems: 'flex-end', paddingRight: 20, paddingBottom: 10, backgroundColor: '#FFF', zIndex: 20 },
   closeModalBtn: { padding: 5 },
-  hintText: { position: 'absolute', bottom: 10, alignSelf: 'center', color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width:1, height:1}, textShadowRadius: 1 },
-  detailsFooter: { padding: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#F0F0F0', marginTop: 10 },
+  modalFooter: { padding: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#F0F0F0', marginTop: 10 },
   drawingLabel: { fontSize: 20, fontWeight: '800', color: '#000' },
   dateText: { fontSize: 14, color: '#999' },
   statsRowSmall: { flexDirection: 'row', alignItems: 'center', gap: 15 },
