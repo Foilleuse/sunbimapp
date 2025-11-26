@@ -25,7 +25,7 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
   
   const image = useImage(imageUri || "https://via.placeholder.com/1000"); 
 
-  // --- MOTEUR D'ANIMATION ---
+  // --- ANIMATION ---
   const progress = useSharedValue(startVisible ? 1 : 0);
 
   useEffect(() => {
@@ -37,9 +37,9 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
     } else {
         progress.value = 1;
     }
-  }, [animated, startVisible]);
+  }, [animated, startVisible, imageUri]);
 
-  // 1. PARSING
+  // 1. Parsing
   const safePaths = useMemo(() => {
     let data = [];
     if (Array.isArray(canvasData)) data = canvasData;
@@ -49,15 +49,16 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
     return data;
   }, [canvasData]);
 
-  // 2. CALCUL DE LA MATRICE UNIFIÉE
-  const matrix = useMemo(() => {
+  // 2. LOGIQUE D'AFFICHAGE (C'est ici la correction)
+  const displayLogic = useMemo(() => {
       const m = Skia.Matrix();
-      if (!image) return m;
-      const NATIVE_H = image.height();
-      const NATIVE_W = image.width();
-      if (NATIVE_H === 0) return m;
+      if (!image) return { matrix: m, fit: "cover" as const, scale: 1, useMatrix: false };
+      
+      const NATIVE_SIZE = image.height();
+      if (NATIVE_SIZE === 0) return { matrix: m, fit: "cover" as const, scale: 1, useMatrix: false };
 
-      // --- CAS A : ANIMATION ZOOMÉE (Centrage sur le dessin) ---
+      // --- CAS A : ZOOM AUTOMATIQUE (Animation Fin Index) ---
+      // Ici on calcule une matrice complexe pour centrer le dessin
       if (autoCenter && safePaths.length > 0) {
           try {
               const combinedPath = Skia.Path.Make();
@@ -74,37 +75,30 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
                   if (bounds.width > 10 && bounds.height > 10) {
                       const padding = 40;
                       const targetSize = viewerSize - padding;
-                      const focusScale = Math.min(targetSize / Math.max(bounds.width, bounds.height), 3); // Max zoom x3
+                      const focusScale = Math.min(targetSize / Math.max(bounds.width, bounds.height), 3);
 
                       const translateX = (viewerSize - bounds.width * focusScale) / 2 - bounds.x * focusScale;
                       const translateY = (viewerSize - bounds.height * focusScale) / 2 - bounds.y * focusScale;
 
                       m.translate(translateX, translateY);
                       m.scale(focusScale, focusScale);
-                      return m;
+                      
+                      // En mode AutoCenter, on applique la matrice et on ignore l'image (souvent transparente)
+                      return { matrix: m, fit: "none" as const, scale: focusScale, useMatrix: true };
                   }
               }
           } catch (e) {}
       }
 
-      // --- CAS B : MODE STANDARD (Feed / Galerie) ---
-      // On veut afficher un carré centré de l'image (H x H)
+      // --- CAS B : AFFICHAGE STANDARD (Feed / Galerie) ---
+      // C'est le retour à la méthode simple qui marche :
+      // 1. On utilise fit="cover" pour l'image (Skia gère le centrage)
+      // 2. On utilise un scale simple pour les traits. Pas de translation.
       
-      // 1. Facteur de zoom pour que la Hauteur Native devienne la Hauteur Écran
-      const fitScale = viewerSize / NATIVE_H;
+      const simpleScale = viewerSize / NATIVE_SIZE;
+      m.scale(simpleScale, simpleScale);
       
-      // 2. Calcul du décalage pour centrer horizontalement
-      // On veut que le centre de l'image native soit au centre de l'écran
-      // offset = (LargeurNative - HauteurNative) / 2
-      const cropOffsetX = (NATIVE_W - NATIVE_H) / 2;
-
-      // 3. Application de la matrice (Ordre inverse des opérations mathématiques)
-      // On scale tout
-      m.scale(fitScale, fitScale);
-      // On décale vers la gauche pour centrer le crop
-      m.translate(-cropOffsetX, 0);
-      
-      return m;
+      return { matrix: m, fit: "cover" as const, scale: simpleScale, useMatrix: false };
 
   }, [image, viewerSize, autoCenter, safePaths]);
 
@@ -113,57 +107,75 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
     return <View style={styles.loading}><ActivityIndicator color="#fff" /></View>;
   }
 
-  // Facteur d'échelle actuel (approximatif pour l'épaisseur)
-  const currentScale = matrix.get()[0] || 1;
+  // On force le carré basé sur la hauteur
+  const SQUARE_SIZE = image.height();
 
   return (
     <View style={[styles.container, {width: viewerSize, height: viewerSize, overflow: 'hidden'}]}>
       <Canvas style={{ flex: 1 }}>
-        {/* TOUT LE MONDE DANS LE MÊME GROUPE -> SYNCHRO PARFAITE */}
-        <Group matrix={matrix}>
-          
-          {/* IMAGE DE FOND */}
-          {!transparentMode && (
-              <SkiaImage
-                image={image}
-                x={0} y={0}
-                width={image.width()} height={image.height()}
-                fit="none" // On laisse la matrice gérer le placement
-              />
-          )}
-          
-          {/* DESSINS */}
-          <Group layer={true}> 
-          {safePaths.map((p: any, index: number) => {
-             if (!p || !p.svgPath) return null;
-             try {
-                 const path = Skia.Path.MakeFromSVGString(p.svgPath);
-                 if (!path) return null;
-                 
-                 const baseWidth = p.width || 6;
-                 const adjustedWidth = (baseWidth / currentScale) * 0.65; 
-                 
-                 return (
-                   <Path
-                     key={index}
-                     path={path}
-                     color={p.isEraser ? "#000000" : (p.color || "#000000")}
-                     style="stroke"
-                     strokeWidth={adjustedWidth} 
-                     strokeCap="round"
-                     strokeJoin="round"
-                     blendMode={p.isEraser ? "clear" : "srcOver"}
-                     start={0}
-                     end={progress} 
-                   />
-                 );
-             } catch (e) { return null; }
-          })}
-          </Group>
-        </Group>
+        
+        {/* CAS 1 : GROUPE MATRICIEL (Pour l'animation zoomée) */}
+        {displayLogic.useMatrix ? (
+            <Group matrix={displayLogic.matrix}>
+                 {/* On n'affiche généralement pas l'image en mode AutoCenter (fond blanc) */}
+                 <Group layer={true}> 
+                    {renderPaths(safePaths, displayLogic.scale, progress)}
+                 </Group>
+            </Group>
+        ) : (
+            // CAS 2 : GROUPE STANDARD (Feed/Galerie - Positionnement parfait)
+            <>
+                {/* L'IMAGE (Gérée par Skia Cover) */}
+                {!transparentMode && (
+                    <SkiaImage
+                        image={image}
+                        x={0} y={0}
+                        width={SQUARE_SIZE} height={SQUARE_SIZE}
+                        fit="cover"
+                    />
+                )}
+                
+                {/* LES TRAITS (Juste Scalés, pas décalés) */}
+                <Group transform={[{ scale: displayLogic.scale }]}>
+                    <Group layer={true}>
+                        {renderPaths(safePaths, displayLogic.scale, progress)}
+                    </Group>
+                </Group>
+            </>
+        )}
+
       </Canvas>
     </View>
   );
+};
+
+// Helper pour dessiner les traits
+const renderPaths = (paths: any[], currentScale: number, progress: any) => {
+    return paths.map((p: any, index: number) => {
+        if (!p || !p.svgPath) return null;
+        try {
+            const path = Skia.Path.MakeFromSVGString(p.svgPath);
+            if (!path) return null;
+            
+            const baseWidth = p.width || 6;
+            const adjustedWidth = (baseWidth / currentScale) * 0.65; 
+            
+            return (
+            <Path
+                key={index}
+                path={path}
+                color={p.isEraser ? "#000000" : (p.color || "#000000")}
+                style="stroke"
+                strokeWidth={adjustedWidth} 
+                strokeCap="round"
+                strokeJoin="round"
+                blendMode={p.isEraser ? "clear" : "srcOver"}
+                start={0}
+                end={progress} 
+            />
+            );
+        } catch (e) { return null; }
+    });
 };
 
 const styles = StyleSheet.create({
