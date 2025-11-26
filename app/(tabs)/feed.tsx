@@ -11,27 +11,26 @@ if (Platform.OS !== 'web') {
     try { PagerView = require('react-native-pager-view').default; } catch (e) { PagerView = View; }
 } else { PagerView = View; }
 
-// --- SOUS-COMPOSANT : UNE CARTE DU FEED (Dessin + Infos) ---
-// Cela permet de gérer l'état "Like" pour chaque carte individuellement
+// --- SOUS-COMPOSANT : CARTE FEED ---
 const FeedCard = ({ drawing, canvasSize, isActive }: { drawing: any, canvasSize: number, isActive: boolean }) => {
     const [isLiked, setIsLiked] = useState(false);
 
     return (
         <View style={styles.cardContainer}>
             
-            {/* PARTIE HAUTE : LE DESSIN (Transparent) */}
+            {/* DESSIN (Haut) */}
             <View style={{ width: canvasSize, height: canvasSize }}>
                 <DrawingViewer
                     imageUri={drawing.cloud_image_url}
                     canvasData={drawing.canvas_data}
                     viewerSize={canvasSize}
-                    transparentMode={true} // Juste les traits
+                    transparentMode={true} 
                     animated={isActive}
                     startVisible={false} 
                 />
             </View>
 
-            {/* PARTIE BASSE : LES INFOS (Qui swipent avec le dessin) */}
+            {/* INFOS (Bas) - Rectangulaire et épuré */}
             <View style={styles.cardInfo}>
                 
                 {/* Titre & Auteur */}
@@ -62,7 +61,7 @@ const FeedCard = ({ drawing, canvasSize, isActive }: { drawing: any, canvasSize:
                         <Text style={styles.actionText}>{drawing.comments_count || 0}</Text>
                     </TouchableOpacity>
 
-                    {/* Espace flexible pour pousser le share à droite */}
+                    {/* Espace */}
                     <View style={{flex: 1}} /> 
 
                     <TouchableOpacity>
@@ -70,16 +69,13 @@ const FeedCard = ({ drawing, canvasSize, isActive }: { drawing: any, canvasSize:
                     </TouchableOpacity>
                 </View>
 
-                {/* Description ou Tag supplémentaire (Optionnel) */}
-                <Text style={styles.cloudRef}>
-                    Nuage #{drawing.cloud_id?.substring(0, 6)}
-                </Text>
+                {/* SUPPRESSION DU TEXTE NUAGE # ICI */}
             </View>
         </View>
     );
 };
 
-// --- PAGE PRINCIPALE ---
+// --- PAGE ---
 export default function FeedPage() {
     const [drawings, setDrawings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -95,10 +91,10 @@ export default function FeedPage() {
     const fetchTodaysFeed = async () => {
         try {
             const today = new Date().toISOString().split('T')[0];
-            const { data: cloudData } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();
+            const { data: cloudData, error: cloudError } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();
             
             if (cloudData) {
-                const { data: drawingsData } = await supabase
+                const { data: drawingsData, error: drawingsError } = await supabase
                     .from('drawings')
                     .select('*')
                     .eq('cloud_id', cloudData.id)
@@ -111,19 +107,16 @@ export default function FeedPage() {
 
     if (loading) return <View style={styles.loadingContainer}><ActivityIndicator color="#000" size="large" /></View>;
     
-    // Image de fond fixe (Le nuage du jour)
     const backgroundUrl = drawings.length > 0 ? drawings[0].cloud_image_url : null;
 
     return (
         <View style={styles.container}>
             
-            {/* HEADER FIXE */}
             <SunbimHeader showCloseButton={false} />
 
-            {/* CONTENEUR GLOBAL */}
             <View style={{ flex: 1, position: 'relative' }}>
                 
-                {/* COUCHE 0 : FOND FIXE (Juste l'image, immobile) */}
+                {/* FOND FIXE */}
                 {backgroundUrl && (
                     <View style={{ position: 'absolute', top: 0, width: canvasSize, height: canvasSize, zIndex: -1 }}>
                         <DrawingViewer
@@ -135,7 +128,7 @@ export default function FeedPage() {
                     </View>
                 )}
 
-                {/* COUCHE 1 : SWIPE (Dessins + Infos) */}
+                {/* SWIPE */}
                 {drawings.length > 0 ? (
                     <PagerView 
                         style={{ flex: 1 }} 
@@ -167,49 +160,28 @@ const styles = StyleSheet.create({
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     text: { color: '#666', fontSize: 16 },
 
-    // --- STYLE DE LA CARTE ---
+    // --- CARD STYLES ---
     cardContainer: {
         flex: 1,
-        // Pas de background ici pour laisser voir le nuage derrière la partie haute
     },
-    // La partie infos en bas (Fond Blanc opaque pour cacher le bas du nuage si besoin, ou juste propre)
     cardInfo: {
         flex: 1,
         backgroundColor: '#FFFFFF',
-        borderTopLeftRadius: 20,
-        borderTopRightRadius: 20,
-        marginTop: -20, // Effet "Carte qui remonte sur l'image"
+        // PLUS DE BORDURE ARRONDIE
+        marginTop: -20, // On garde le léger chevauchement pour l'esthétique "Carte"
         paddingHorizontal: 20,
         paddingTop: 25,
-        // Ombre pour détacher les infos de l'image
-        shadowColor: "#000", shadowOffset: {width: 0, height: -2}, shadowOpacity: 0.05, shadowRadius: 10, elevation: 5
+        // Ombre plus subtile
+        shadowColor: "#000", shadowOffset: {width: 0, height: -4}, shadowOpacity: 0.05, shadowRadius: 4, elevation: 5
     },
-    headerInfo: {
-        marginBottom: 20,
-    },
-    drawingTitle: {
-        fontSize: 28, fontWeight: '900', color: '#000', letterSpacing: -0.5, marginBottom: 8
-    },
-    userInfo: {
-        flexDirection: 'row', alignItems: 'center', gap: 8
-    },
-    avatar: {
-        width: 24, height: 24, borderRadius: 12, backgroundColor: '#F0F0F0', justifyContent: 'center', alignItems: 'center'
-    },
+    headerInfo: { marginBottom: 20 },
+    drawingTitle: { fontSize: 28, fontWeight: '900', color: '#000', letterSpacing: -0.5, marginBottom: 8 },
+    userInfo: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    avatar: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#F0F0F0', justifyContent: 'center', alignItems: 'center' },
     userName: { fontSize: 14, fontWeight: '600', color: '#333' },
     dateText: { fontSize: 14, color: '#999' },
 
-    // Actions
-    actionBar: {
-        flexDirection: 'row', alignItems: 'center', gap: 25, marginBottom: 20
-    },
-    actionBtn: {
-        flexDirection: 'row', alignItems: 'center', gap: 8
-    },
-    actionText: {
-        fontSize: 16, fontWeight: '600', color: '#000'
-    },
-    cloudRef: {
-        fontSize: 12, color: '#CCC', marginTop: 'auto', marginBottom: 20 // Tout en bas
-    }
+    actionBar: { flexDirection: 'row', alignItems: 'center', gap: 25 },
+    actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    actionText: { fontSize: 16, fontWeight: '600', color: '#000' },
 });
