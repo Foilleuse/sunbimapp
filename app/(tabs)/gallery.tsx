@@ -1,9 +1,10 @@
-import { View, Text, StyleSheet, FlatList, Dimensions, TouchableOpacity, ActivityIndicator, RefreshControl, TextInput, Keyboard, Modal, Image } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Dimensions, TouchableOpacity, ActivityIndicator, RefreshControl, TextInput, Keyboard } from 'react-native';
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
+import { SunbimHeader } from '../../src/components/SunbimHeader'; // <--- Import du Header Unique
 import { useFocusEffect } from 'expo-router';
-import { Search, Heart, Cloud, CloudOff, XCircle, X, MessageCircle, User } from 'lucide-react-native';
+import { Search, Heart, Cloud, CloudOff, XCircle, User, MessageCircle } from 'lucide-react-native';
 
 export default function GalleryPage() {
     const [drawings, setDrawings] = useState<any[]>([]);
@@ -22,24 +23,12 @@ export default function GalleryPage() {
 
     const fetchGallery = async (searchQuery = searchText) => {
         try {
-            let query = supabase
-                .from('drawings')
-                .select('*')
-                .order('created_at', { ascending: false })
-                .limit(50);
-
-            if (searchQuery.trim().length > 0) {
-                query = query.ilike('label', `%${searchQuery.trim()}%`);
-            }
-
+            let query = supabase.from('drawings').select('*').order('created_at', { ascending: false }).limit(50);
+            if (searchQuery.trim().length > 0) query = query.ilike('label', `%${searchQuery.trim()}%`);
             const { data, error } = await query;
             if (error) throw error;
             setDrawings(data || []);
-        } catch (e) {
-            console.error("Erreur galerie:", e);
-        } finally {
-            setLoading(false); setRefreshing(false);
-        }
+        } catch (e) { console.error(e); } finally { setLoading(false); setRefreshing(false); }
     };
 
     useEffect(() => { fetchGallery(); }, []);
@@ -49,24 +38,21 @@ export default function GalleryPage() {
     const handleSearchSubmit = () => { setLoading(true); fetchGallery(); Keyboard.dismiss(); };
     const clearSearch = () => { setSearchText(''); setLoading(true); fetchGallery(''); Keyboard.dismiss(); };
 
-    const openModal = (drawing: any) => setSelectedDrawing(drawing);
-    const closeModal = () => setSelectedDrawing(null);
+    const openViewer = (drawing: any) => setSelectedDrawing(drawing);
+    const closeViewer = () => setSelectedDrawing(null);
 
     const renderItem = ({ item }: { item: any }) => (
         <TouchableOpacity 
             activeOpacity={0.9}
-            onPress={() => openModal(item)}
-            style={{ 
-                width: ITEM_SIZE, height: ITEM_SIZE, marginBottom: SPACING,
-                backgroundColor: '#F9F9F9', overflow: 'hidden'
-            }}
+            onPress={() => openViewer(item)}
+            style={{ width: ITEM_SIZE, height: ITEM_SIZE, marginBottom: SPACING, backgroundColor: '#F9F9F9', overflow: 'hidden' }}
         >
             <DrawingViewer
                 imageUri={item.cloud_image_url}
                 canvasData={item.canvas_data}
                 viewerSize={ITEM_SIZE}
                 transparentMode={!showClouds} 
-                startVisible={true} // Miniature : toujours visible direct
+                startVisible={true}
                 animated={false}
             />
         </TouchableOpacity>
@@ -75,66 +61,52 @@ export default function GalleryPage() {
     return (
         <View style={styles.container}>
             
-            {/* HEADER PRINCIPAL */}
-            <View style={styles.headerBar}>
-                <Text style={styles.headerText}>sunbim</Text>
-            </View>
+            {/* 1. HEADER FIXE (Il ne bougera JAMAIS) */}
+            {/* Si un dessin est ouvert, on affiche la croix pour fermer. Sinon rien. */}
+            <SunbimHeader 
+                showCloseButton={selectedDrawing !== null} 
+                onClose={closeViewer} 
+            />
 
-            {/* BARRE D'OUTILS */}
-            <View style={styles.toolsContainer}>
-                <View style={styles.searchBar}>
-                    <Search color="#999" size={18} />
-                    <TextInput 
-                        placeholder="Rechercher..." placeholderTextColor="#999"
-                        style={styles.searchInput} value={searchText} onChangeText={setSearchText}
-                        onSubmitEditing={handleSearchSubmit} returnKeyType="search"
+            {/* 2. CONTENU PRINCIPAL */}
+            <View style={styles.contentContainer}>
+                
+                {/* A. La Grille (Toujours là, en dessous) */}
+                <View style={styles.toolsContainer}>
+                    <View style={styles.searchBar}>
+                        <Search color="#999" size={18} />
+                        <TextInput 
+                            placeholder="Rechercher..." placeholderTextColor="#999"
+                            style={styles.searchInput} value={searchText} onChangeText={setSearchText}
+                            onSubmitEditing={handleSearchSubmit} returnKeyType="search"
+                        />
+                        {searchText.length > 0 && <TouchableOpacity onPress={clearSearch}><XCircle color="#CCC" size={18} /></TouchableOpacity>}
+                    </View>
+                    <View style={styles.actionsRow}>
+                        <TouchableOpacity style={[styles.actionBtn, onlyLiked && styles.activeBtn]} onPress={() => setOnlyLiked(!onlyLiked)}>
+                            <Heart color={onlyLiked ? "#FFF" : "#000"} size={20} fill={onlyLiked ? "#FFF" : "transparent"}/>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={[styles.actionBtn, !showClouds && styles.activeBtn]} onPress={() => setShowClouds(!showClouds)}>
+                            {showClouds ? (<Cloud color="#000" size={20} />) : (<CloudOff color="#FFF" size={20} />)}
+                        </TouchableOpacity>
+                    </View>
+                </View>
+
+                {loading && !refreshing ? (
+                    <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#000" /></View>
+                ) : (
+                    <FlatList
+                        data={drawings} renderItem={renderItem} keyExtractor={(item) => item.id}
+                        numColumns={2} columnWrapperStyle={{ gap: SPACING }} contentContainerStyle={{ paddingBottom: 100 }}
+                        showsVerticalScrollIndicator={false}
+                        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#000"/>}
+                        ListEmptyComponent={<View style={styles.emptyState}><Text style={styles.emptyText}>{searchText ? `Aucun résultat` : "Galerie vide."}</Text></View>}
                     />
-                    {searchText.length > 0 && (
-                        <TouchableOpacity onPress={clearSearch}><XCircle color="#CCC" size={18} /></TouchableOpacity>
-                    )}
-                </View>
-                <View style={styles.actionsRow}>
-                    <TouchableOpacity style={[styles.actionBtn, onlyLiked && styles.activeBtn]} onPress={() => setOnlyLiked(!onlyLiked)}>
-                        <Heart color={onlyLiked ? "#FFF" : "#000"} size={20} fill={onlyLiked ? "#FFF" : "transparent"}/>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={[styles.actionBtn, !showClouds && styles.activeBtn]} onPress={() => setShowClouds(!showClouds)}>
-                        {showClouds ? (<Cloud color="#000" size={20} />) : (<CloudOff color="#FFF" size={20} />)}
-                    </TouchableOpacity>
-                </View>
-            </View>
+                )}
 
-            {/* GRILLE */}
-            {loading && !refreshing ? (
-                <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#000" /></View>
-            ) : (
-                <FlatList
-                    data={drawings} renderItem={renderItem} keyExtractor={(item) => item.id}
-                    numColumns={2} columnWrapperStyle={{ gap: SPACING }} contentContainerStyle={{ paddingBottom: 100 }}
-                    showsVerticalScrollIndicator={false}
-                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#000"/>}
-                    ListEmptyComponent={<View style={styles.emptyState}><Text style={styles.emptyText}>{searchText ? `Aucun résultat` : "Galerie vide."}</Text></View>}
-                />
-            )}
-
-            {/* --- MODALE POP-UP --- */}
-            <Modal
-                animationType="slide"
-                transparent={false}
-                visible={selectedDrawing !== null}
-                onRequestClose={closeModal}
-            >
+                {/* B. Le "Popup" (Un calque absolu qui vient se poser PAR DESSUS la grille, mais SOUS le header) */}
                 {selectedDrawing && (
-                    <View style={styles.modalContainer}>
-                        
-                        {/* HEADER MODALE (Même style que l'accueil) */}
-                        <View style={styles.headerBar}>
-                            <Text style={styles.headerText}>sunbim</Text>
-                            {/* Croix de fermeture */}
-                            <TouchableOpacity style={styles.closeBtn} onPress={closeModal}>
-                                <X color="#000" size={28} />
-                            </TouchableOpacity>
-                        </View>
-
+                    <View style={styles.fullScreenOverlay}>
                         {/* Image en grand */}
                         <View style={{ width: screenWidth, height: screenWidth, backgroundColor: '#F0F0F0' }}>
                             <DrawingViewer
@@ -142,14 +114,13 @@ export default function GalleryPage() {
                                 canvasData={selectedDrawing.canvas_data}
                                 viewerSize={screenWidth}
                                 transparentMode={!showClouds}
-                                // --- ANIMATION ACTIVÉE ---
-                                startVisible={false} // On part de zéro
-                                animated={true}      // On lance le tracé
+                                startVisible={false} // Animation !
+                                animated={true}
                             />
                         </View>
 
-                        {/* Infos */}
-                        <View style={styles.modalFooter}>
+                        {/* Footer Infos */}
+                        <View style={styles.detailsFooter}>
                             <View style={styles.userInfoRow}>
                                 <View style={styles.profilePlaceholder}><User color="#FFF" size={20} /></View>
                                 <View>
@@ -164,44 +135,17 @@ export default function GalleryPage() {
                         </View>
                     </View>
                 )}
-            </Modal>
 
+            </View>
         </View>
     );
 }
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#FFFFFF' },
+    contentContainer: { flex: 1, position: 'relative' }, // Important pour l'overlay
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     
-    // HEADER (Utilisé en haut et dans la modale)
-    headerBar: { 
-        width: '100%', 
-        backgroundColor: '#FFFFFF', 
-        paddingTop: 60, 
-        paddingBottom: 15, 
-        alignItems: 'center', 
-        justifyContent: 'center', 
-        zIndex: 10,
-        // Petit trait de séparation
-        borderBottomWidth: 1,
-        borderBottomColor: '#F9F9F9'
-    },
-    headerText: { 
-        fontSize: 32, 
-        fontWeight: '900', 
-        color: '#FFFFFF', 
-        textShadowColor: 'rgba(0, 0, 0, 0.5)', 
-        textShadowOffset: { width: 2, height: 2 }, 
-        textShadowRadius: 0, 
-        letterSpacing: -1 
-    },
-    closeBtn: {
-        position: 'absolute',
-        right: 20,
-        bottom: 15, // Aligné verticalement avec le texte
-    },
-
     // TOOLS
     toolsContainer: { flexDirection: 'row', paddingHorizontal: 15, paddingBottom: 15, paddingTop: 10, alignItems: 'center', gap: 10, borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
     searchBar: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#F5F5F5', borderRadius: 20, paddingHorizontal: 12, height: 40, gap: 8 },
@@ -212,9 +156,17 @@ const styles = StyleSheet.create({
     emptyState: { marginTop: 100, alignItems: 'center' },
     emptyText: { color: '#999' },
 
-    // MODALE
-    modalContainer: { flex: 1, backgroundColor: '#FFF' },
-    modalFooter: { padding: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#F0F0F0', marginTop: 10 },
+    // OVERLAY (Remplace la Modale)
+    fullScreenOverlay: {
+        position: 'absolute', // Vient se poser sur la grille
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: '#FFFFFF', // Fond blanc opaque
+        zIndex: 50, // Au dessus de la liste, mais le Header est zIndex 100 (hors de cette vue)
+    },
+    detailsFooter: { padding: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#F0F0F0', marginTop: 10 },
     userInfoRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
     profilePlaceholder: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#CCC', justifyContent: 'center', alignItems: 'center' },
     userName: { fontWeight: '700', fontSize: 14 },
