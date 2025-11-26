@@ -1,8 +1,8 @@
-import { View, Text, StyleSheet, FlatList, Dimensions, TouchableOpacity, ActivityIndicator, RefreshControl, TextInput, Keyboard } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Dimensions, TouchableOpacity, ActivityIndicator, RefreshControl, TextInput, Keyboard, Pressable } from 'react-native';
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
-import { SunbimHeader } from '../../src/components/SunbimHeader'; // <--- Import du Header Unique
+import { SunbimHeader } from '../../src/components/SunbimHeader';
 import { useFocusEffect } from 'expo-router';
 import { Search, Heart, Cloud, CloudOff, XCircle, User, MessageCircle } from 'lucide-react-native';
 
@@ -15,7 +15,10 @@ export default function GalleryPage() {
     const [onlyLiked, setOnlyLiked] = useState(false);
     const [searchText, setSearchText] = useState('');
 
+    // État pour le popup
     const [selectedDrawing, setSelectedDrawing] = useState<any | null>(null);
+    // État pour l'interaction "Maintenir pour voir l'original"
+    const [isHolding, setIsHolding] = useState(false);
 
     const { width: screenWidth } = Dimensions.get('window');
     const SPACING = 1; 
@@ -61,63 +64,73 @@ export default function GalleryPage() {
     return (
         <View style={styles.container}>
             
-            {/* 1. HEADER FIXE (Il ne bougera JAMAIS) */}
-            {/* Si un dessin est ouvert, on affiche la croix pour fermer. Sinon rien. */}
+            {/* HEADER FIXE (Z-Index élevé pour rester au dessus du popup) */}
+            {/* On passe la fonction de fermeture au header si un dessin est ouvert */}
             <SunbimHeader 
                 showCloseButton={selectedDrawing !== null} 
                 onClose={closeViewer} 
             />
 
-            {/* 2. CONTENU PRINCIPAL */}
-            <View style={styles.contentContainer}>
+            {/* CONTENU PRINCIPAL */}
+            <View style={{flex: 1, position: 'relative'}}>
                 
-                {/* A. La Grille (Toujours là, en dessous) */}
-                <View style={styles.toolsContainer}>
-                    <View style={styles.searchBar}>
-                        <Search color="#999" size={18} />
-                        <TextInput 
-                            placeholder="Rechercher..." placeholderTextColor="#999"
-                            style={styles.searchInput} value={searchText} onChangeText={setSearchText}
-                            onSubmitEditing={handleSearchSubmit} returnKeyType="search"
+                {/* A. La Grille (En dessous) */}
+                <View style={{flex: 1}}>
+                    <View style={styles.toolsContainer}>
+                        <View style={styles.searchBar}>
+                            <Search color="#999" size={18} />
+                            <TextInput 
+                                placeholder="Rechercher..." placeholderTextColor="#999"
+                                style={styles.searchInput} value={searchText} onChangeText={setSearchText}
+                                onSubmitEditing={handleSearchSubmit} returnKeyType="search"
+                            />
+                            {searchText.length > 0 && <TouchableOpacity onPress={clearSearch}><XCircle color="#CCC" size={18} /></TouchableOpacity>}
+                        </View>
+                        <View style={styles.actionsRow}>
+                            <TouchableOpacity style={[styles.actionBtn, onlyLiked && styles.activeBtn]} onPress={() => setOnlyLiked(!onlyLiked)}>
+                                <Heart color={onlyLiked ? "#FFF" : "#000"} size={20} fill={onlyLiked ? "#FFF" : "transparent"}/>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={[styles.actionBtn, !showClouds && styles.activeBtn]} onPress={() => setShowClouds(!showClouds)}>
+                                {showClouds ? (<Cloud color="#000" size={20} />) : (<CloudOff color="#FFF" size={20} />)}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+
+                    {loading && !refreshing ? (
+                        <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#000" /></View>
+                    ) : (
+                        <FlatList
+                            data={drawings} renderItem={renderItem} keyExtractor={(item) => item.id}
+                            numColumns={2} columnWrapperStyle={{ gap: SPACING }} contentContainerStyle={{ paddingBottom: 100 }}
+                            showsVerticalScrollIndicator={false}
+                            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#000"/>}
+                            ListEmptyComponent={<View style={styles.emptyState}><Text style={styles.emptyText}>Galerie vide.</Text></View>}
                         />
-                        {searchText.length > 0 && <TouchableOpacity onPress={clearSearch}><XCircle color="#CCC" size={18} /></TouchableOpacity>}
-                    </View>
-                    <View style={styles.actionsRow}>
-                        <TouchableOpacity style={[styles.actionBtn, onlyLiked && styles.activeBtn]} onPress={() => setOnlyLiked(!onlyLiked)}>
-                            <Heart color={onlyLiked ? "#FFF" : "#000"} size={20} fill={onlyLiked ? "#FFF" : "transparent"}/>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={[styles.actionBtn, !showClouds && styles.activeBtn]} onPress={() => setShowClouds(!showClouds)}>
-                            {showClouds ? (<Cloud color="#000" size={20} />) : (<CloudOff color="#FFF" size={20} />)}
-                        </TouchableOpacity>
-                    </View>
+                    )}
                 </View>
 
-                {loading && !refreshing ? (
-                    <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#000" /></View>
-                ) : (
-                    <FlatList
-                        data={drawings} renderItem={renderItem} keyExtractor={(item) => item.id}
-                        numColumns={2} columnWrapperStyle={{ gap: SPACING }} contentContainerStyle={{ paddingBottom: 100 }}
-                        showsVerticalScrollIndicator={false}
-                        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#000"/>}
-                        ListEmptyComponent={<View style={styles.emptyState}><Text style={styles.emptyText}>{searchText ? `Aucun résultat` : "Galerie vide."}</Text></View>}
-                    />
-                )}
-
-                {/* B. Le "Popup" (Un calque absolu qui vient se poser PAR DESSUS la grille, mais SOUS le header) */}
+                {/* B. LE POP-UP (Overlay qui couvre la grille mais PAS le header) */}
                 {selectedDrawing && (
                     <View style={styles.fullScreenOverlay}>
-                        {/* Image en grand */}
-                        <View style={{ width: screenWidth, height: screenWidth, backgroundColor: '#F0F0F0' }}>
+                        
+                        {/* Zone Image avec Interaction Press-to-Hide */}
+                        <Pressable 
+                            onPressIn={() => setIsHolding(true)}  // Doigt posé -> On cache le dessin
+                            onPressOut={() => setIsHolding(false)} // Doigt levé -> On remet le dessin
+                            style={{ width: screenWidth, height: screenWidth, backgroundColor: '#F0F0F0' }}
+                        >
                             <DrawingViewer
                                 imageUri={selectedDrawing.cloud_image_url}
-                                canvasData={selectedDrawing.canvas_data}
+                                // Si on appuie (isHolding), on envoie des données vides [] pour effacer le dessin
+                                canvasData={isHolding ? [] : selectedDrawing.canvas_data}
                                 viewerSize={screenWidth}
-                                transparentMode={!showClouds}
-                                startVisible={false} // Animation !
+                                transparentMode={!showClouds} // Respecte le filtre global
+                                startVisible={false} // Animation
                                 animated={true}
                             />
-                        </View>
+                            {/* Petit indice visuel */}
+                            <Text style={styles.hintText}>Maintenir pour voir l'original</Text>
+                        </Pressable>
 
                         {/* Footer Infos */}
                         <View style={styles.detailsFooter}>
@@ -143,7 +156,6 @@ export default function GalleryPage() {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#FFFFFF' },
-    contentContainer: { flex: 1, position: 'relative' }, // Important pour l'overlay
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     
     // TOOLS
@@ -156,15 +168,17 @@ const styles = StyleSheet.create({
     emptyState: { marginTop: 100, alignItems: 'center' },
     emptyText: { color: '#999' },
 
-    // OVERLAY (Remplace la Modale)
+    // OVERLAY
     fullScreenOverlay: {
         position: 'absolute', // Vient se poser sur la grille
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: '#FFFFFF', // Fond blanc opaque
-        zIndex: 50, // Au dessus de la liste, mais le Header est zIndex 100 (hors de cette vue)
+        top: 0, left: 0, right: 0, bottom: 0,
+        backgroundColor: '#FFFFFF', 
+        zIndex: 50,
+    },
+    hintText: {
+        position: 'absolute', bottom: 10, alignSelf: 'center',
+        color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600',
+        textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width:1, height:1}, textShadowRadius: 1
     },
     detailsFooter: { padding: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#F0F0F0', marginTop: 10 },
     userInfoRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
