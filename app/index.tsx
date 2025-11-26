@@ -32,17 +32,14 @@ export default function DrawPage() {
   const [strokeWidth, setStrokeWidth] = useState(6);
   const [isEraserMode, setIsEraserMode] = useState(false);
   
-  // Modales
   const [modalVisible, setModalVisible] = useState(false);
   const [loginVisible, setLoginVisible] = useState(false);
   
-  // Auth
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
 
-  // Tag
   const [tagText, setTagText] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   
@@ -133,6 +130,7 @@ export default function DrawPage() {
         if (dbError) throw dbError;
 
         setModalVisible(false);
+
         Animated.timing(fadeWhiteAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start(() => {
             setReplayPaths(pathsData); 
             setTimeout(() => {
@@ -186,11 +184,9 @@ export default function DrawPage() {
           </View>
       )}
 
-      {/* --- MODALE LOGIN FIXÉE --- */}
+      {/* LOGIN MODAL - POSITIONNÉE PLUS HAUT */}
       <Modal animationType="slide" transparent={true} visible={loginVisible} onRequestClose={() => setLoginVisible(false)}>
-        {/* FOND FIXE */}
         <View style={styles.modalOverlay}>
-            {/* CLAVIER QUI POUSSE JUSTE LA BOÎTE */}
             <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{width:'100%', alignItems:'center'}}>
                 <View style={styles.modalContent}>
                     <TouchableOpacity style={{position:'absolute', top:15, right:15, padding:5}} onPress={() => setLoginVisible(false)}>
@@ -211,7 +207,7 @@ export default function DrawPage() {
         </View>
       </Modal>
 
-      {/* --- MODALE TAG FIXÉE --- */}
+      {/* TAG MODAL - POSITIONNÉE PLUS HAUT */}
       <Modal animationType="fade" transparent={true} visible={modalVisible} onRequestClose={() => setModalVisible(false)}>
         <View style={styles.modalOverlay}>
             <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{width:'100%', alignItems:'center'}}>
@@ -252,16 +248,21 @@ const styles = StyleSheet.create({
   noCloudText: { fontSize: 18, color: '#666', textAlign: 'center' },
   errorText: { color: 'red', textAlign: 'center' },
 
-  // MODALES FIXES
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' },
+  // MODIFICATION ICI : Alignement en HAUT (flex-start) + Marge (paddingTop)
+  modalOverlay: { 
+      flex: 1, 
+      backgroundColor: 'rgba(0,0,0,0.8)', 
+      justifyContent: 'flex-start', // On remonte tout vers le haut
+      paddingTop: '35%', // On descend d'environ 1/3 pour que ce soit esthétique
+      alignItems: 'center' 
+  },
   modalContent: { width: '85%', backgroundColor: '#FFF', borderRadius: 20, padding: 25, alignItems: 'center', shadowColor: "#000", shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.25, shadowRadius: 10 },
   modalTitle: { fontSize: 22, fontWeight: '800', color: '#000', marginBottom: 5 },
   modalSubtitle: { fontSize: 14, color: '#666', marginBottom: 20 },
   
-  // INPUTS ALIGNÉS
   inputWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F5F5F5', borderRadius: 12, paddingHorizontal: 15, marginBottom: 15, height: 50, width: '100%' },
   inputIcon: { marginRight: 10 },
-  input: { flex: 1, height: '100%', fontSize: 16, color: '#000', paddingTop: 0, paddingBottom: 0 }, // Alignement vertical
+  input: { flex: 1, height: '100%', fontSize: 16, color: '#000', paddingTop: 0, paddingBottom: 0 },
 
   validateBtn: { width: '100%', height: 50, backgroundColor: '#000', borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
   validateText: { color: '#FFF', fontWeight: '700', fontSize: 16 },
