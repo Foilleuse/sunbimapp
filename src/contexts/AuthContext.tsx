@@ -27,27 +27,51 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 1. Vérifier si on est déjà connecté au lancement
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) fetchProfile(session.user.id);
-      setLoading(false);
-    });
+    let isMounted = true;
 
-    // 2. Écouter les changements (Connexion / Déconnexion)
+    // 1. SÉCURITÉ : Si dans 1.5s on n'a pas fini, on force l'affichage
+    const safetyTimer = setTimeout(() => {
+        if (isMounted && loading) {
+            console.log("⚠️ Timeout Supabase : On force l'affichage");
+            setLoading(false);
+        }
+    }, 1500);
+
+    // 2. La vérification réelle
+    const initAuth = async () => {
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (isMounted) {
+                setSession(session);
+                setUser(session?.user ?? null);
+                if (session?.user) {
+                    await fetchProfile(session.user.id);
+                }
+            }
+        } catch (e) {
+            console.error("Erreur Auth Init:", e);
+        } finally {
+            if (isMounted) setLoading(false);
+        }
+    };
+
+    initAuth();
+
+    // 3. Écouteur de changements
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchProfile(session.user.id);
-      } else {
-        setProfile(null);
+      if (isMounted) {
+        setSession(session);
+        setUser(session?.user ?? null);
+        if (session?.user) fetchProfile(session.user.id);
+        setLoading(false);
       }
-      setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+        isMounted = false;
+        clearTimeout(safetyTimer);
+        subscription.unsubscribe();
+    };
   }, []);
 
   const fetchProfile = async (userId: string) => {
@@ -58,17 +82,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         .eq('id', userId)
         .single();
       
-      if (!error && data) {
-        setProfile(data);
-      }
+      if (!error && data) setProfile(data);
     } catch (e) {
       console.error("Erreur profil:", e);
     }
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
-    // Le listener (onAuthStateChange) fera le reste
+    try {
+        await supabase.auth.signOut();
+    } catch (e) {
+        console.error("Erreur Logout:", e);
+    }
   };
 
   return (
