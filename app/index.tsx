@@ -4,6 +4,7 @@ import { supabase } from '../src/lib/supabaseClient';
 import { DrawingCanvas, DrawingCanvasRef } from '../src/components/DrawingCanvas';
 import { DrawingControls } from '../src/components/DrawingControls';
 import { useRouter } from 'expo-router';
+import * as Updates from 'expo-updates'; // <--- AJOUTÉ
 
 interface Cloud {
   id: string;
@@ -25,6 +26,9 @@ export default function DrawPage() {
   const [isEraserMode, setIsEraserMode] = useState(false);
   
   const canvasRef = useRef<DrawingCanvasRef>(null);
+
+  // Récupération de l'ID de mise à jour (ou 'DEV' si local)
+  const updateLabel = Updates.updateId ? `v.${Updates.updateId.substring(0, 6)}` : 'Dev Mode';
 
   useEffect(() => {
     fetchTodaysCloud();
@@ -129,8 +133,9 @@ export default function DrawPage() {
       
       {/* Header Fixe */}
       <View style={styles.header}>
-        {/* RETOUR AU BLANC ICI */}
         <Text style={styles.headerText}>sunbim</Text>
+        {/* PETIT TEXTE DE DEBUG */}
+        <Text style={styles.versionText}>{updateLabel}</Text>
       </View>
 
       <View style={styles.canvasContainer}>
@@ -198,6 +203,15 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0, 0, 0, 0.5)',
     textShadowOffset: { width: 2, height: 2 },
     textShadowRadius: 0,
+  },
+  // Style pour le petit texte discret
+  versionText: {
+    fontSize: 10,
+    color: 'rgba(255, 255, 255, 0.5)', // Semi-transparent
+    marginTop: 2,
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 1,
   },
   errorText: {
     fontSize: 16,
