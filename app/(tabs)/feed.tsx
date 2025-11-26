@@ -1,5 +1,5 @@
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform } from 'react-native';
-import { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform, Animated } from 'react-native';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'expo-router';
 import { Heart, MessageCircle, User, Share2 } from 'lucide-react-native';
 import { supabase } from '../../src/lib/supabaseClient';
@@ -11,7 +11,7 @@ if (Platform.OS !== 'web') {
     try { PagerView = require('react-native-pager-view').default; } catch (e) { PagerView = View; }
 } else { PagerView = View; }
 
-// --- SOUS-COMPOSANT : CARTE FEED ---
+// --- SOUS-COMPOSANT CARTE ---
 const FeedCard = ({ drawing, canvasSize, isActive }: { drawing: any, canvasSize: number, isActive: boolean }) => {
     const [isLiked, setIsLiked] = useState(false);
 
@@ -53,7 +53,7 @@ const FeedCard = ({ drawing, canvasSize, isActive }: { drawing: any, canvasSize:
     );
 };
 
-// --- PAGE ---
+// --- PAGE PRINCIPALE ---
 export default function FeedPage() {
     const [drawings, setDrawings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -62,12 +62,29 @@ export default function FeedPage() {
     const { width: screenWidth } = Dimensions.get('window');
     const canvasSize = screenWidth; 
 
-    useEffect(() => { fetchTodaysFeed(); }, []);
+    // --- ANIMATION D'OUVERTURE (Le Voile Blanc) ---
+    // On commence à 1 (Blanc total) pour faire la continuité avec l'index
+    const fadeAnim = useRef(new Animated.Value(1)).current;
+
+    useEffect(() => {
+        // 1. On charge les données
+        fetchTodaysFeed();
+
+        // 2. On lance le fondu d'ouverture (Le nuage se dissipe)
+        Animated.timing(fadeAnim, {
+            toValue: 0, // Devient transparent
+            duration: 1000, // 1 seconde de douceur
+            useNativeDriver: true,
+            delay: 200, // Petit délai pour laisser le temps aux données d'arriver
+        }).start();
+
+    }, []);
 
     const fetchTodaysFeed = async () => {
         try {
             const today = new Date().toISOString().split('T')[0];
             const { data: cloudData } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();
+            
             if (cloudData) {
                 const { data: drawingsData } = await supabase.from('drawings').select('*').eq('cloud_id', cloudData.id).order('created_at', { ascending: false }).limit(50); 
                 setDrawings(drawingsData || []);
@@ -82,18 +99,30 @@ export default function FeedPage() {
     return (
         <View style={styles.container}>
             
-            {/* HEADER AVEC PROFIL ACTIVÉ */}
-            <SunbimHeader 
-                showCloseButton={false} 
-                showProfileButton={true} // <--- ON L'ACTIVE ICI
+            {/* --- LE VOILE BLANC DE TRANSITION --- */}
+            {/* Il est par-dessus tout (zIndex infini) mais laisse passer les clics une fois transparent */}
+            <Animated.View 
+                pointerEvents="none"
+                style={[
+                    StyleSheet.absoluteFill, 
+                    { backgroundColor: 'white', opacity: fadeAnim, zIndex: 9999 }
+                ]} 
             />
 
+            {/* HEADER */}
+            <SunbimHeader showCloseButton={false} />
+
+            {/* CONTENU */}
             <View style={{ flex: 1, position: 'relative' }}>
+                
+                {/* FOND FIXE */}
                 {backgroundUrl && (
                     <View style={{ position: 'absolute', top: 0, width: canvasSize, height: canvasSize, zIndex: -1 }}>
                         <DrawingViewer imageUri={backgroundUrl} canvasData={[]} viewerSize={canvasSize} transparentMode={false} />
                     </View>
                 )}
+
+                {/* SWIPE */}
                 {drawings.length > 0 ? (
                     <PagerView 
                         style={{ flex: 1 }} 

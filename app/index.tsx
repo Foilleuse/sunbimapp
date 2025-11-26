@@ -1,9 +1,10 @@
-import { View, Text, StyleSheet, ActivityIndicator, Alert, Modal, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Animated } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, Alert, Modal, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Animated, Dimensions } from 'react-native';
 import { useEffect, useState, useRef } from 'react';
 import { supabase } from '../src/lib/supabaseClient';
 import { DrawingCanvas, DrawingCanvasRef } from '../src/components/DrawingCanvas';
+// On importe le lecteur pour faire le replay
+import { DrawingViewer } from '../src/components/DrawingViewer';
 import { DrawingControls } from '../src/components/DrawingControls';
-import { SunbimHeader } from '../src/components/SunbimHeader';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../src/contexts/AuthContext';
 
@@ -16,6 +17,8 @@ export default function DrawPage() {
   const router = useRouter(); 
   const { user } = useAuth(); 
   
+  const { width: screenWidth } = Dimensions.get('window');
+
   const [cloud, setCloud] = useState<Cloud | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -24,15 +27,17 @@ export default function DrawPage() {
   const [strokeWidth, setStrokeWidth] = useState(6);
   const [isEraserMode, setIsEraserMode] = useState(false);
   
-  // Tag & Upload
+  // Etats Tag & Upload
   const [modalVisible, setModalVisible] = useState(false);
   const [tagText, setTagText] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   
-  const canvasRef = useRef<DrawingCanvasRef>(null);
+  // --- NOUVEAU : ÉTAT POUR LE REPLAY ---
+  // Si ce tableau n'est pas null, on est en mode "Replay"
+  const [replayPaths, setReplayPaths] = useState<any[] | null>(null);
 
-  // --- MOTEUR D'ANIMATION (Le Voile Blanc) ---
-  const fadeAnim = useRef(new Animated.Value(0)).current; // 0 = Invisible
+  const canvasRef = useRef<DrawingCanvasRef>(null);
+  const fadeAnim = useRef(new Animated.Value(0)).current; 
 
   useEffect(() => {
     fetchTodaysCloud();
@@ -65,7 +70,7 @@ export default function DrawPage() {
         return;
     }
     if (!user) {
-        Alert.alert("Connexion requise", "Tu dois avoir un compte pour ajouter ton nuage.", [
+        Alert.alert("Connexion requise", "Connecte-toi pour participer.", [
             { text: "Annuler", style: "cancel" },
             { text: "Se connecter", onPress: () => router.push('/profile') }
         ]);
@@ -74,7 +79,7 @@ export default function DrawPage() {
     setModalVisible(true);
   };
 
-  // --- VALIDATION ET ANIMATION ---
+  // --- SÉQUENCE MAGIQUE ---
   const confirmShare = async () => {
     if (!canvasRef.current || !cloud || !user) return;
     
@@ -86,8 +91,10 @@ export default function DrawPage() {
     setIsUploading(true);
     
     try {
+        // 1. On récupère les données
         const pathsData = canvasRef.current.getPaths();
         
+        // 2. On Upload
         const { error: dbError } = await supabase
             .from('drawings')
             .insert({
@@ -101,25 +108,36 @@ export default function DrawPage() {
 
         if (dbError) throw dbError;
 
-        // 1. On ferme la modale (clavier etc)
+        // 3. SUCCÈS : On lance le spectacle
         setModalVisible(false);
         setTagText('');
         
-        // 2. On lance l'animation "Montée au ciel" (Fondu Blanc)
-        Animated.timing(fadeAnim, {
-            toValue: 1, // Devient tout blanc
-            duration: 1200, // Durée onirique (1.2s)
-            useNativeDriver: true,
-        }).start(() => {
-            // 3. Une fois l'écran blanc, on change de page
-            router.replace('/(tabs)/feed');
-            // On remet le fade à 0 pour la prochaine fois (après un petit délai)
-            setTimeout(() => fadeAnim.setValue(0), 1000);
-        });
+        // A. On active le mode Replay (Cela remplace le Canvas par le Viewer Animé)
+        setReplayPaths(pathsData);
+
+        // B. On attend la fin du tracé (1.5s d'animation + 0.5s de pause pour admirer)
+        setTimeout(() => {
+            // C. On lance le Fondu Blanc
+            Animated.timing(fadeAnim, {
+                toValue: 1, 
+                duration: 1000, 
+                useNativeDriver: true,
+            }).start(() => {
+                // D. Navigation vers le Feed
+                router.replace('/(tabs)/feed');
+                
+                // Reset pour le retour
+                setTimeout(() => {
+                    fadeAnim.setValue(0);
+                    setReplayPaths(null);
+                    handleClear();
+                }, 1000);
+            });
+        }, 2000); // 1500ms (anim) + 500ms (pause)
         
     } catch (e: any) {
         Alert.alert("Erreur", e.message);
-        setIsUploading(false);
+        setIsUploading(false); // On arrête le loading seulement si erreur
     }
   };
 
@@ -130,38 +148,58 @@ export default function DrawPage() {
   return (
     <View style={styles.container}>
       
+      {/* HEADER (Disparait pendant le fondu blanc grâce au zIndex du voile) */}
       <View style={styles.header}>
         <Text style={styles.headerText}>sunbim</Text>
       </View>
 
       <View style={styles.canvasContainer}>
-        <DrawingCanvas
-          ref={canvasRef}
-          imageUri={cloud.image_url}
-          strokeColor={strokeColor}
-          strokeWidth={strokeWidth}
-          isEraserMode={isEraserMode}
-          onClear={handleClear}
-        />
+        {/* ICI C'EST L'ASTUCE : 
+            Si replayPaths existe, on affiche le Viewer (Lecture seule animée).
+            Sinon, on affiche le Canvas (Outil de dessin).
+            Ils sont superposés exactement au même endroit.
+        */}
+        {replayPaths ? (
+            <DrawingViewer 
+                imageUri={cloud.image_url}
+                canvasData={replayPaths}
+                viewerSize={screenWidth} // Pleine largeur comme l'éditeur
+                transparentMode={false} // On garde le fond nuage
+                animated={true} // On lance l'animation !
+                startVisible={false} // On part de zéro
+            />
+        ) : (
+            <DrawingCanvas
+              ref={canvasRef}
+              imageUri={cloud.image_url}
+              strokeColor={strokeColor}
+              strokeWidth={strokeWidth}
+              isEraserMode={isEraserMode}
+              onClear={handleClear}
+            />
+        )}
       </View>
       
-      <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-        <View style={{flex: 1}} pointerEvents="none" /> 
-        <DrawingControls
-            onUndo={handleUndo} onRedo={handleRedo} onClear={handleClear}
-            strokeColor={strokeColor} onColorChange={setStrokeColor}
-            strokeWidth={strokeWidth} onStrokeWidthChange={setStrokeWidth}
-            isEraserMode={isEraserMode} toggleEraser={toggleEraser}
-            onShare={handleSharePress}
-         />
-      </View>
+      {/* Les contrôles disparaissent pendant le replay pour laisser la vue pure */}
+      {!replayPaths && (
+          <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+            <View style={{flex: 1}} pointerEvents="none" /> 
+            <DrawingControls
+                onUndo={handleUndo} onRedo={handleRedo} onClear={handleClear}
+                strokeColor={strokeColor} onColorChange={setStrokeColor}
+                strokeWidth={strokeWidth} onStrokeWidthChange={setStrokeWidth}
+                isEraserMode={isEraserMode} toggleEraser={toggleEraser}
+                onShare={handleSharePress}
+             />
+          </View>
+      )}
 
       {/* MODALE TAG */}
       <Modal
         animationType="fade"
         transparent={true}
         visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
+        onRequestClose={() => isUploading ? null : setModalVisible(false)}
       >
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
             <View style={styles.modalContent}>
@@ -174,24 +212,21 @@ export default function DrawPage() {
                 <TouchableOpacity style={[styles.validateBtn, isUploading && styles.disabledBtn]} onPress={confirmShare} disabled={isUploading}>
                     {isUploading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.validateText}>Publier</Text>}
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.cancelBtn} onPress={() => setModalVisible(false)} disabled={isUploading}>
-                    <Text style={styles.cancelText}>Annuler</Text>
-                </TouchableOpacity>
+                {!isUploading && (
+                    <TouchableOpacity style={styles.cancelBtn} onPress={() => setModalVisible(false)}>
+                        <Text style={styles.cancelText}>Annuler</Text>
+                    </TouchableOpacity>
+                )}
             </View>
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* --- LE VOILE BLANC (Animation) --- */}
-      {/* Il est en zIndex maximum pour tout recouvrir */}
+      {/* VOILE BLANC */}
       <Animated.View 
-        pointerEvents="none" // Laisse passer les clics quand il est transparent
+        pointerEvents="none"
         style={[
             StyleSheet.absoluteFill, 
-            { 
-                backgroundColor: 'white', 
-                opacity: fadeAnim, 
-                zIndex: 9999 
-            }
+            { backgroundColor: 'white', opacity: fadeAnim, zIndex: 9999 }
         ]} 
       />
 
@@ -206,7 +241,6 @@ const styles = StyleSheet.create({
   errorText: { fontSize: 16, color: 'red', textAlign: 'center' },
   noCloudText: { fontSize: 18, color: '#666', textAlign: 'center', marginTop: 100 },
 
-  // HEADER FLOTTANT
   header: {
     position: 'absolute', top: 0, left: 0, right: 0,
     paddingTop: 60, paddingBottom: 15,
