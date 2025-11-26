@@ -19,27 +19,20 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
   const { width: screenWidth } = Dimensions.get('window');
   const image = useImage(imageUri || ""); 
 
-  // 1. PARSING + DEBUG LOGS
+  // 1. Parsing des données
   const safePaths = useMemo(() => {
     let data = [];
-    
-    // Décodage
     if (Array.isArray(canvasData)) {
         data = canvasData;
     } else if (typeof canvasData === 'string') {
         try { data = JSON.parse(canvasData); } catch (e) { data = []; }
     }
-
-    // Log pour vérifier ce qu'on reçoit
-    if (data.length > 0) {
-        console.log(`🎨 DrawingViewer: Affichage de ${data.length} traits.`);
-    } else {
-        console.log("⚠️ DrawingViewer: Aucune donnée de dessin trouvée.");
-    }
-
+    // Debug : Affiche combien de traits on a trouvé
+    if (data.length > 0) console.log(`🔍 Viewer: ${data.length} traits chargés.`);
     return data;
   }, [canvasData]);
 
+  // 2. Calcul du Zoom (Scale)
   const transform = useMemo(() => {
     if (!image) return { scale: 1, translateX: 0, translateY: 0 };
     
@@ -91,18 +84,20 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
                  const path = Skia.Path.MakeFromSVGString(p.svgPath);
                  if (!path) return null;
                  
-                 // --- CORRECTION MAJEURE ICI ---
-                 // On utilise l'épaisseur brute stockée (car la matrice 'scale' va la réduire visuellement)
-                 // Si on divise encore, ça fait l'inverse (traits énormes).
-                 const width = p.width || 5; 
+                 // --- CORRECTION : COMPENSATION DE L'ÉCHELLE ---
+                 // On divise la largeur stockée par le facteur de zoom.
+                 // Exemple : Largeur 6 / Scale 0.1 = 60. 
+                 // Une fois réduit par la matrice, ça fera 6px à l'écran.
+                 const baseWidth = p.width || 6;
+                 const adjustedWidth = baseWidth / transform.scale;
                  
                  return (
                    <Path
                      key={index}
                      path={path}
-                     color={p.isEraser ? "#000000" : p.color}
+                     color={p.isEraser ? "#000000" : (p.color || "#000000")}
                      style="stroke"
-                     strokeWidth={width} // On utilise la largeur native directe
+                     strokeWidth={adjustedWidth} // <--- C'est ça qui rend le trait visible !
                      strokeCap="round"
                      strokeJoin="round"
                      blendMode={p.isEraser ? "clear" : "srcOver"}
