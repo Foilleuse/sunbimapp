@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { supabase } from '../src/lib/supabaseClient';
 import { useAuth } from '../src/contexts/AuthContext';
-import { User, Mail, Lock, LogOut, ChevronLeft, Settings, Heart } from 'lucide-react-native'; 
+import { User, Mail, Lock, LogOut, ChevronLeft, Settings } from 'lucide-react-native'; 
 import { DrawingViewer } from '../src/components/DrawingViewer';
 
 export default function ProfilePage() {
@@ -16,7 +16,7 @@ export default function ProfilePage() {
   const [selectedDrawing, setSelectedDrawing] = useState<any | null>(null);
   const [isHolding, setIsHolding] = useState(false);
 
-  // Etats Formulaire Connexion
+  // Formulaire
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [formLoading, setFormLoading] = useState(false);
@@ -47,7 +47,9 @@ export default function ProfilePage() {
     }
   };
 
-  // --- ACTIONS ---
+  // Calcul des likes totaux
+  const totalLikes = userDrawings.reduce((acc, curr) => acc + (curr.likes_count || 0), 0);
+
   const handleEmailAuth = async () => {
     setFormLoading(true);
     try {
@@ -58,19 +60,15 @@ export default function ProfilePage() {
         } else {
             const { error } = await supabase.auth.signInWithPassword({ email, password });
             if (error) throw error;
-            // Le AuthContext va détecter la connexion et recharger la page
+            // Auto-refresh via AuthContext
         }
     } catch (e: any) { Alert.alert("Erreur", e.message); } finally { setFormLoading(false); }
   };
 
   const handleSignOut = async () => { await signOut(); router.replace('/'); };
-  
-  const handleEditProfile = () => {
-      Alert.alert("Bientôt", "La modification du profil arrive dans la prochaine mise à jour !");
-      // TODO: Créer une modale pour update la table 'users' (avatar_url, bio, display_name)
-  };
+  const handleEditProfile = () => Alert.alert("Bientôt", "Édition profil à venir");
 
-  // --- RENDU GALERIE ---
+  // Rendu Vignette
   const renderItem = ({ item }: { item: any }) => (
     <TouchableOpacity 
         activeOpacity={0.9}
@@ -83,6 +81,7 @@ export default function ProfilePage() {
             viewerSize={ITEM_SIZE}
             transparentMode={false} 
             startVisible={true}
+            animated={false}
         />
     </TouchableOpacity>
   );
@@ -92,77 +91,69 @@ export default function ProfilePage() {
   return (
     <View style={styles.container}>
        
-       {/* --- 1. ZONE STATIQUE (HEADER + INFO PROFIL) --- */}
-       {/* Cette vue ne scrolle pas, elle reste en haut */}
-       
-       <View style={styles.staticHeader}>
+       {/* --- ZONE 1 : HEADER NAVIGATION (Fixe) --- */}
+       <View style={styles.navHeader}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}>
+                <ChevronLeft color="#000" size={32} />
+            </TouchableOpacity>
             
-            {/* Barre de navigation haute */}
-            <View style={styles.topNav}>
-                <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}>
-                    <ChevronLeft color="#000" size={32} />
-                </TouchableOpacity>
-                
-                {user && (
-                    <View style={styles.topRightActions}>
-                        <TouchableOpacity onPress={handleEditProfile} style={styles.iconBtn}>
-                            <Settings color="#000" size={24} />
-                        </TouchableOpacity>
-                        <TouchableOpacity onPress={handleSignOut} style={styles.iconBtn}>
-                            <LogOut color="#000" size={24} />
-                        </TouchableOpacity>
-                    </View>
-                )}
-            </View>
-
-            {/* Infos Profil (Si connecté) */}
             {user && (
-                <View style={styles.profileInfoContainer}>
-                    {/* Avatar à gauche */}
-                    <View style={styles.avatarContainer}>
-                        {profile?.avatar_url ? (
-                            <Image source={{uri: profile.avatar_url}} style={styles.avatar} />
-                        ) : (
-                            <View style={[styles.avatar, styles.avatarPlaceholder]}><User size={32} color="#666" /></View>
-                        )}
-                    </View>
-                    
-                    {/* Textes à droite */}
-                    <View style={styles.textsContainer}>
-                        <Text style={styles.displayName}>
-                            {profile?.display_name || "Anonyme"}
-                        </Text>
-                        {/* Bio ou Email par défaut */}
-                        <Text style={styles.bio}>
-                            {profile?.bio || "Passionné de nuages."}
-                        </Text>
-                    </View>
+                <View style={styles.topRightActions}>
+                    <TouchableOpacity onPress={handleEditProfile} style={styles.iconBtn}>
+                        <Settings color="#000" size={24} />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={handleSignOut} style={styles.iconBtn}>
+                        <LogOut color="#000" size={24} />
+                    </TouchableOpacity>
                 </View>
             )}
-            
-            {/* Petit trait de séparation */}
-            {user && <View style={styles.divider} />}
        </View>
 
-
-       {/* --- 2. ZONE DYNAMIQUE (SCROLL) --- */}
        {user ? (
-            <FlatList
-                data={userDrawings}
-                renderItem={renderItem}
-                keyExtractor={(item) => item.id}
-                numColumns={2}
-                columnWrapperStyle={{ gap: SPACING }}
-                contentContainerStyle={{ paddingBottom: 50 }}
-                showsVerticalScrollIndicator={false}
-                ListEmptyComponent={
-                    <View style={styles.emptyState}>
-                        <Text style={styles.emptyText}>Aucun dessin pour l'instant.</Text>
+            // --- ÉCRAN CONNECTÉ ---
+            <View style={{flex: 1}}>
+                
+                {/* --- ZONE 2 : CARTE D'IDENTITÉ (Fixe) --- */}
+                <View style={styles.profileCard}>
+                    <View style={styles.profileRow}>
+                        <View style={styles.avatarContainer}>
+                            {profile?.avatar_url ? (
+                                <Image source={{uri: profile.avatar_url}} style={styles.avatar} />
+                            ) : (
+                                <View style={[styles.avatar, styles.avatarPlaceholder]}><User size={32} color="#666" /></View>
+                            )}
+                        </View>
+                        <View style={styles.textsContainer}>
+                            <Text style={styles.displayName}>{profile?.display_name || "Anonyme"}</Text>
+                            <Text style={styles.bio}>{profile?.bio || "Chasseur de nuages."}</Text>
+                            
+                            {/* Stats intégrées */}
+                            <View style={styles.miniStats}>
+                                <Text style={styles.miniStatText}>{userDrawings.length} <Text style={styles.miniStatLabel}>dessins</Text></Text>
+                                <Text style={styles.miniStatText}>•</Text>
+                                <Text style={styles.miniStatText}>{totalLikes} <Text style={styles.miniStatLabel}>likes</Text></Text>
+                            </View>
+                        </View>
                     </View>
-                }
-            />
+                    <View style={styles.divider} />
+                </View>
+
+                {/* --- ZONE 3 : GALERIE (Scrollable) --- */}
+                <FlatList
+                    data={userDrawings}
+                    renderItem={renderItem}
+                    keyExtractor={(item) => item.id}
+                    numColumns={2}
+                    columnWrapperStyle={{ gap: SPACING }}
+                    contentContainerStyle={{ paddingBottom: 50 }}
+                    showsVerticalScrollIndicator={false}
+                    ListEmptyComponent={
+                        <View style={styles.emptyState}><Text style={styles.emptyText}>Aucun dessin pour l'instant.</Text></View>
+                    }
+                />
+            </View>
        ) : (
-            // --- FORMULAIRE DE CONNEXION ---
+            // --- ÉCRAN FORMULAIRE ---
             <View style={styles.formContainer}>
                 <Text style={styles.welcomeText}>Connecte-toi.</Text>
                 <View style={styles.inputWrapper}><Mail size={20} color="#999" style={styles.inputIcon}/><TextInput placeholder="Email" value={email} onChangeText={setEmail} autoCapitalize="none" style={styles.input} /></View>
@@ -174,18 +165,14 @@ export default function ProfilePage() {
             </View>
        )}
 
-
-       {/* --- MODALE VISUALISATION (Identique Galerie) --- */}
-       <Modal animationType="slide" transparent={false} visible={selectedDrawing !== null} onRequestClose={() => setSelectedDrawing(null)}>
+       {/* MODALE ZOOM */}
+       <Modal animationType="fade" transparent={false} visible={selectedDrawing !== null} onRequestClose={() => setSelectedDrawing(null)}>
             {selectedDrawing && (
                 <View style={styles.modalContainer}>
                     <View style={styles.modalHeader}>
                         <TouchableOpacity onPress={() => setSelectedDrawing(null)} style={styles.closeModalBtn}><X color="#000" size={32} /></TouchableOpacity>
                     </View>
-                    <Pressable 
-                        onPressIn={() => setIsHolding(true)} onPressOut={() => setIsHolding(false)}
-                        style={{ width: screenWidth, height: screenWidth, backgroundColor: '#F0F0F0' }}
-                    >
+                    <Pressable onPressIn={() => setIsHolding(true)} onPressOut={() => setIsHolding(false)} style={{ width: screenWidth, height: screenWidth, backgroundColor: '#F0F0F0' }}>
                         <DrawingViewer
                             imageUri={selectedDrawing.cloud_image_url}
                             canvasData={isHolding ? [] : selectedDrawing.canvas_data}
@@ -193,12 +180,6 @@ export default function ProfilePage() {
                             startVisible={false} animated={true}
                         />
                     </Pressable>
-                    <View style={styles.modalFooter}>
-                        <Text style={styles.drawingLabel}>{selectedDrawing.label}</Text>
-                        <View style={{flexDirection:'row', gap:5, alignItems:'center'}}>
-                             <Heart color="#000" size={20} /><Text style={{fontWeight:'600'}}>{selectedDrawing.likes_count || 0}</Text>
-                        </View>
-                    </View>
                 </View>
             )}
        </Modal>
@@ -208,52 +189,23 @@ export default function ProfilePage() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFF' },
+  navHeader: { paddingTop: 60, paddingBottom: 10, paddingHorizontal: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FFF', zIndex: 10 },
+  iconBtn: { padding: 5 },
+  topRightActions: { flexDirection: 'row', gap: 15 },
   
-  // --- ZONE STATIQUE ---
-  staticHeader: {
-      paddingTop: 50,
-      paddingBottom: 10,
-      backgroundColor: '#FFF',
-      paddingHorizontal: 20,
-      zIndex: 10,
-  },
-  topNav: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: 20,
-  },
-  topRightActions: {
-      flexDirection: 'row',
-      gap: 20,
-      alignItems: 'center',
-  },
-  iconBtn: {
-      padding: 5,
-  },
-  
-  // PROFIL INFO (Nouveau Layout)
-  profileInfoContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 20,
-  },
-  avatarContainer: { 
-      // Pas de margin ici, c'est géré par le gap du parent
-  },
+  // NOUVEAU STYLE PROFIL FIXE
+  profileCard: { paddingHorizontal: 20, paddingBottom: 10, backgroundColor: '#FFF' },
+  profileRow: { flexDirection: 'row', alignItems: 'center', gap: 20 },
   avatar: { width: 80, height: 80, borderRadius: 40 },
   avatarPlaceholder: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#F5F5F5', justifyContent: 'center', alignItems: 'center' },
-  
-  textsContainer: {
-      flex: 1,
-      justifyContent: 'center',
-  },
+  textsContainer: { flex: 1, justifyContent: 'center' },
   displayName: { fontSize: 22, fontWeight: '900', color: '#000', marginBottom: 4 },
-  bio: { fontSize: 14, color: '#666', lineHeight: 20 },
+  bio: { fontSize: 14, color: '#666', marginBottom: 8 },
+  miniStats: { flexDirection: 'row', gap: 10 },
+  miniStatText: { fontSize: 14, fontWeight: '700', color: '#000' },
+  miniStatLabel: { fontWeight: '400', color: '#999' },
+  divider: { width: '100%', height: 1, backgroundColor: '#F0F0F0', marginTop: 20, marginBottom: 10 },
 
-  divider: { width: '100%', height: 1, backgroundColor: '#F0F0F0', marginTop: 25 },
-
-  // FORMULAIRE
   formContainer: { flex: 1, paddingHorizontal: 30, justifyContent: 'center', marginTop: -50 },
   welcomeText: { fontSize: 24, fontWeight: '800', marginBottom: 30, textAlign: 'center' },
   inputWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F5F5F5', borderRadius: 12, paddingHorizontal: 15, marginBottom: 15, height: 50 },
@@ -264,11 +216,7 @@ const styles = StyleSheet.create({
   switchText: { textAlign: 'center', marginTop: 20, color: '#666', fontSize: 14 },
   emptyState: { marginTop: 50, alignItems: 'center' },
   emptyText: { color: '#999' },
-
-  // MODALE
   modalContainer: { flex: 1, backgroundColor: '#FFF' },
   modalHeader: { width: '100%', height: 100, justifyContent: 'flex-end', alignItems: 'flex-end', paddingRight: 20, paddingBottom: 10, backgroundColor: '#FFF', zIndex: 20 },
   closeModalBtn: { padding: 5 },
-  modalFooter: { padding: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#F0F0F0', marginTop: 10 },
-  drawingLabel: { fontSize: 20, fontWeight: '800', color: '#000' },
 });

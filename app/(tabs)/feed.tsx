@@ -1,12 +1,10 @@
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform, Image } from 'react-native';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'expo-router';
 import { Heart, MessageCircle, User, Share2 } from 'lucide-react-native';
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
-import { CommentsModal } from '../../src/components/CommentsModal'; // <--- Import Modal
-import { useAuth } from '../../src/contexts/AuthContext'; // <--- Import Auth
 
 let PagerView: any;
 if (Platform.OS !== 'web') {
@@ -14,77 +12,29 @@ if (Platform.OS !== 'web') {
 } else { PagerView = View; }
 
 const FeedCard = ({ drawing, canvasSize, isActive, forceStatic }: { drawing: any, canvasSize: number, isActive: boolean, forceStatic: boolean }) => {
-    const { user } = useAuth();
-    
-    // États sociaux
     const [isLiked, setIsLiked] = useState(false);
-    const [likesCount, setLikesCount] = useState(drawing.likes_count || 0);
-    const [showComments, setShowComments] = useState(false);
     
-    // Infos Auteur (Chargées depuis la relation users)
-    const author = drawing.users; 
-
-    // Vérifier si j'ai déjà liké ce dessin au chargement
-    useEffect(() => {
-        if (user && isActive) {
-            checkLikeStatus();
-        }
-    }, [user, isActive]);
-
-    const checkLikeStatus = async () => {
-        const { data } = await supabase
-            .from('likes')
-            .select('id')
-            .eq('user_id', user?.id)
-            .eq('drawing_id', drawing.id)
-            .maybeSingle();
-        setIsLiked(!!data);
-    };
-
-    const handleLike = async () => {
-        if (!user) return; // TODO: Rediriger vers login ?
-        
-        // Optimistic UI (On change tout de suite l'affichage)
-        const newLiked = !isLiked;
-        setIsLiked(newLiked);
-        setLikesCount((prev: number) => newLiked ? prev + 1 : prev - 1);
-
-        try {
-            if (newLiked) {
-                await supabase.from('likes').insert({ user_id: user.id, drawing_id: drawing.id });
-            } else {
-                await supabase.from('likes').delete().eq('user_id', user.id).eq('drawing_id', drawing.id);
-            }
-        } catch (e) {
-            // Rollback si erreur
-            console.error(e);
-            setIsLiked(!newLiked);
-            setLikesCount((prev: number) => newLiked ? prev - 1 : prev + 1);
-        }
-    };
-
-    const shouldAnimate = isActive && !forceStatic;
+    // Récupération sécurisée des données (avec valeurs par défaut)
+    const likesCount = drawing.likes_count || 0;
+    const commentsCount = drawing.comments_count || 0;
+    const author = drawing.users; // <--- L'objet utilisateur récupéré via la jointure
 
     return (
         <View style={styles.cardContainer}>
-            {/* Dessin */}
             <View style={{ width: canvasSize, height: canvasSize }}>
                 <DrawingViewer
                     imageUri={drawing.cloud_image_url}
                     canvasData={drawing.canvas_data}
                     viewerSize={canvasSize}
                     transparentMode={true} 
-                    animated={shouldAnimate}
-                    startVisible={!shouldAnimate} 
+                    animated={isActive && !forceStatic}
+                    startVisible={forceStatic} 
                 />
             </View>
-
-            {/* Infos */}
             <View style={styles.cardInfo}>
                 <View style={styles.headerInfo}>
                     <Text style={styles.drawingTitle}>{drawing.label || "Sans titre"}</Text>
                     <View style={styles.userInfo}>
-                         {/* Avatar Auteur */}
                          <View style={styles.avatar}>
                             {author?.avatar_url ? (
                                 <Image source={{uri: author.avatar_url}} style={{width:24, height:24, borderRadius:12}} />
@@ -96,35 +46,19 @@ const FeedCard = ({ drawing, canvasSize, isActive, forceStatic }: { drawing: any
                          <Text style={styles.dateText}>• {new Date(drawing.created_at).toLocaleDateString()}</Text>
                     </View>
                 </View>
-                
                 <View style={styles.actionBar}>
-                    {/* Bouton LIKE connecté */}
-                    <TouchableOpacity style={styles.actionBtn} onPress={handleLike}>
-                        <Heart 
-                            color={isLiked ? "#FF3B30" : "#000"} 
-                            fill={isLiked ? "#FF3B30" : "transparent"} 
-                            size={28} 
-                        />
+                    <TouchableOpacity style={styles.actionBtn} onPress={() => setIsLiked(!isLiked)}>
+                        <Heart color={isLiked ? "#FF3B30" : "#000"} fill={isLiked ? "#FF3B30" : "transparent"} size={28} />
                         <Text style={styles.actionText}>{likesCount}</Text>
                     </TouchableOpacity>
-
-                    {/* Bouton COMMENTAIRES connecté */}
-                    <TouchableOpacity style={styles.actionBtn} onPress={() => setShowComments(true)}>
+                    <TouchableOpacity style={styles.actionBtn}>
                         <MessageCircle color="#000" size={28} />
-                        <Text style={styles.actionText}>{drawing.comments_count || 0}</Text>
+                        <Text style={styles.actionText}>{commentsCount}</Text>
                     </TouchableOpacity>
-
                     <View style={{flex: 1}} /> 
                     <TouchableOpacity><Share2 color="#000" size={24} /></TouchableOpacity>
                 </View>
             </View>
-
-            {/* MODALE COMMENTAIRES */}
-            <CommentsModal 
-                visible={showComments} 
-                onClose={() => setShowComments(false)} 
-                drawingId={drawing.id} 
-            />
         </View>
     );
 };
@@ -143,13 +77,16 @@ export default function FeedPage() {
             const { data: cloudData } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();
             
             if (cloudData) {
-                // IMPORTANT : On fetch aussi les infos de l'user (auteur)
-                const { data: drawingsData } = await supabase
+                // LA REQUÊTE IMPORTANTE :
+                // on ajoute ", users(display_name, avatar_url)" pour récupérer l'auteur
+                const { data: drawingsData, error: drawingsError } = await supabase
                     .from('drawings')
-                    .select('*, users(display_name, avatar_url)') // <--- Jointure
+                    .select('*, users(display_name, avatar_url)') 
                     .eq('cloud_id', cloudData.id)
                     .order('created_at', { ascending: false })
                     .limit(50); 
+
+                if (drawingsError) throw drawingsError;
                 setDrawings(drawingsData || []);
             }
         } catch (e) { console.error(e); } finally { setLoading(false); }
@@ -172,11 +109,7 @@ export default function FeedPage() {
                     <PagerView style={{ flex: 1 }} initialPage={0} onPageSelected={(e) => setCurrentIndex(e.nativeEvent.position)}>
                         {drawings.map((drawing, index) => (
                             <View key={drawing.id} style={{ flex: 1 }}>
-                                <FeedCard 
-                                    drawing={drawing} canvasSize={screenWidth} 
-                                    isActive={index === currentIndex} 
-                                    forceStatic={false}
-                                />
+                                <FeedCard drawing={drawing} canvasSize={screenWidth} isActive={index === currentIndex} forceStatic={false} />
                             </View>
                         ))}
                     </PagerView>

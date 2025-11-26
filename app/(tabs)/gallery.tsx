@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, FlatList, Dimensions, TouchableOpacity, ActivityIndicator, RefreshControl, TextInput, Keyboard, Pressable } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Dimensions, TouchableOpacity, ActivityIndicator, RefreshControl, TextInput, Keyboard, Modal, Pressable, Image } from 'react-native';
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
@@ -22,7 +22,13 @@ export default function GalleryPage() {
 
     const fetchGallery = async (searchQuery = searchText) => {
         try {
-            let query = supabase.from('drawings').select('*').order('created_at', { ascending: false }).limit(50);
+            let query = supabase
+                .from('drawings')
+                // AJOUT DE LA JOINTURE ICI AUSSI
+                .select('*, users(display_name, avatar_url)') 
+                .order('created_at', { ascending: false })
+                .limit(50);
+
             if (searchQuery.trim().length > 0) query = query.ilike('label', `%${searchQuery.trim()}%`);
             const { data, error } = await query;
             if (error) throw error;
@@ -40,6 +46,9 @@ export default function GalleryPage() {
     const openViewer = (drawing: any) => setSelectedDrawing(drawing);
     const closeViewer = () => setSelectedDrawing(null);
 
+    // Variables pour l'affichage du détail
+    const author = selectedDrawing?.users;
+
     const renderItem = ({ item }: { item: any }) => (
         <TouchableOpacity 
             activeOpacity={0.9} onPress={() => openViewer(item)}
@@ -54,76 +63,61 @@ export default function GalleryPage() {
 
     return (
         <View style={styles.container}>
-            
-            {/* HEADER AVEC PROFIL ACTIVÉ */}
-            <SunbimHeader 
-                showCloseButton={selectedDrawing !== null} 
-                onClose={closeViewer}
-                showProfileButton={true} // <--- ON L'ACTIVE ICI
-            />
-
+            <SunbimHeader showCloseButton={selectedDrawing !== null} onClose={closeViewer} showProfileButton={true} />
             <View style={{flex: 1, position: 'relative'}}>
                 <View style={{flex: 1}}>
                     <View style={styles.toolsContainer}>
                         <View style={styles.searchBar}>
                             <Search color="#999" size={18} />
-                            <TextInput 
-                                placeholder="Rechercher..." placeholderTextColor="#999"
-                                style={styles.searchInput} value={searchText} onChangeText={setSearchText}
-                                onSubmitEditing={handleSearchSubmit} returnKeyType="search"
-                            />
+                            <TextInput placeholder="Rechercher..." placeholderTextColor="#999" style={styles.searchInput} value={searchText} onChangeText={setSearchText} onSubmitEditing={handleSearchSubmit} returnKeyType="search" />
                             {searchText.length > 0 && <TouchableOpacity onPress={clearSearch}><XCircle color="#CCC" size={18} /></TouchableOpacity>}
                         </View>
                         <View style={styles.actionsRow}>
-                            <TouchableOpacity style={[styles.actionBtn, onlyLiked && styles.activeBtn]} onPress={() => setOnlyLiked(!onlyLiked)}>
-                                <Heart color={onlyLiked ? "#FFF" : "#000"} size={20} fill={onlyLiked ? "#FFF" : "transparent"}/>
-                            </TouchableOpacity>
-                            <TouchableOpacity style={[styles.actionBtn, !showClouds && styles.activeBtn]} onPress={() => setShowClouds(!showClouds)}>
-                                {showClouds ? (<Cloud color="#000" size={20} />) : (<CloudOff color="#FFF" size={20} />)}
-                            </TouchableOpacity>
+                            <TouchableOpacity style={[styles.actionBtn, onlyLiked && styles.activeBtn]} onPress={() => setOnlyLiked(!onlyLiked)}><Heart color={onlyLiked ? "#FFF" : "#000"} size={20} fill={onlyLiked ? "#FFF" : "transparent"}/></TouchableOpacity>
+                            <TouchableOpacity style={[styles.actionBtn, !showClouds && styles.activeBtn]} onPress={() => setShowClouds(!showClouds)}>{showClouds ? (<Cloud color="#000" size={20} />) : (<CloudOff color="#FFF" size={20} />)}</TouchableOpacity>
                         </View>
                     </View>
-
-                    {loading && !refreshing ? (
-                        <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#000" /></View>
-                    ) : (
+                    {loading && !refreshing ? (<View style={styles.loadingContainer}><ActivityIndicator size="large" color="#000" /></View>) : (
                         <FlatList
                             data={drawings} renderItem={renderItem} keyExtractor={(item) => item.id}
                             numColumns={2} columnWrapperStyle={{ gap: SPACING }} contentContainerStyle={{ paddingBottom: 100 }}
                             showsVerticalScrollIndicator={false}
                             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#000"/>}
-                            ListEmptyComponent={<View style={styles.emptyState}><Text style={styles.emptyText}>{searchText ? `Aucun résultat` : "Galerie vide."}</Text></View>}
+                            ListEmptyComponent={<View style={styles.emptyState}><Text style={styles.emptyText}>Galerie vide.</Text></View>}
                         />
                     )}
                 </View>
 
                 {selectedDrawing && (
                     <View style={styles.fullScreenOverlay}>
-                        <Pressable 
-                            onPressIn={() => setIsHolding(true)} onPressOut={() => setIsHolding(false)}
-                            style={{ width: screenWidth, height: screenWidth, backgroundColor: '#F0F0F0' }}
-                        >
+                        <Pressable onPressIn={() => setIsHolding(true)} onPressOut={() => setIsHolding(false)} style={{ width: screenWidth, height: screenWidth, backgroundColor: '#F0F0F0' }}>
                             <DrawingViewer
-                                imageUri={selectedDrawing.cloud_image_url}
-                                canvasData={isHolding ? [] : selectedDrawing.canvas_data}
-                                viewerSize={screenWidth}
-                                transparentMode={!showClouds}
-                                startVisible={false} animated={true}
+                                imageUri={selectedDrawing.cloud_image_url} canvasData={isHolding ? [] : selectedDrawing.canvas_data}
+                                viewerSize={screenWidth} transparentMode={!showClouds} startVisible={false} animated={true}
                             />
                             <Text style={styles.hintText}>Maintenir pour voir l'original</Text>
                         </Pressable>
 
+                        {/* INFO FOOTER */}
                         <View style={styles.detailsFooter}>
+                            
                             <View style={styles.userInfoRow}>
-                                <View style={styles.profilePlaceholder}><User color="#FFF" size={20} /></View>
+                                <View style={styles.profilePlaceholder}>
+                                    {author?.avatar_url ? (
+                                        <Image source={{uri: author.avatar_url}} style={{width:40, height:40, borderRadius:20}} />
+                                    ) : (
+                                        <User color="#FFF" size={20} />
+                                    )}
+                                </View>
                                 <View>
-                                    <Text style={styles.userName}>Anonyme</Text>
+                                    <Text style={styles.userName}>{author?.display_name || "Anonyme"}</Text>
                                     {selectedDrawing.label && <Text style={styles.drawingLabel}>{selectedDrawing.label}</Text>}
                                 </View>
                             </View>
+
                             <View style={styles.statsRow}>
-                                <View style={styles.statItem}><Heart color="#000" size={24} /><Text style={styles.statText}>0</Text></View>
-                                <View style={styles.statItem}><MessageCircle color="#000" size={24} /><Text style={styles.statText}>0</Text></View>
+                                <View style={styles.statItem}><Heart color="#000" size={24} /><Text style={styles.statText}>{selectedDrawing.likes_count || 0}</Text></View>
+                                <View style={styles.statItem}><MessageCircle color="#000" size={24} /><Text style={styles.statText}>{selectedDrawing.comments_count || 0}</Text></View>
                             </View>
                         </View>
                     </View>
@@ -136,8 +130,6 @@ export default function GalleryPage() {
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#FFFFFF' },
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    // HEADER (Le composant SunbimHeader gère le style interne)
-    // TOOLS
     toolsContainer: { flexDirection: 'row', paddingHorizontal: 15, paddingBottom: 15, paddingTop: 10, alignItems: 'center', gap: 10, borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
     searchBar: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#F5F5F5', borderRadius: 20, paddingHorizontal: 12, height: 40, gap: 8 },
     searchInput: { flex: 1, fontSize: 14, color: '#000', height: '100%' },
@@ -146,12 +138,11 @@ const styles = StyleSheet.create({
     activeBtn: { backgroundColor: '#000', borderColor: '#000' },
     emptyState: { marginTop: 100, alignItems: 'center' },
     emptyText: { color: '#999' },
-    // OVERLAY
     fullScreenOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#FFFFFF', zIndex: 50 },
     hintText: { position: 'absolute', bottom: 10, alignSelf: 'center', color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width:1, height:1}, textShadowRadius: 1 },
     detailsFooter: { padding: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#F0F0F0', marginTop: 10 },
     userInfoRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-    profilePlaceholder: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#CCC', justifyContent: 'center', alignItems: 'center' },
+    profilePlaceholder: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#CCC', justifyContent: 'center', alignItems: 'center', overflow:'hidden' },
     userName: { fontWeight: '700', fontSize: 14 },
     drawingLabel: { color: '#666', fontSize: 12, marginTop: 2 },
     statsRow: { flexDirection: 'row', gap: 15 },
