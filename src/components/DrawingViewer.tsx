@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, StyleSheet, Dimensions, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, ActivityIndicator } from 'react-native';
 import { Canvas, Path, Image as SkiaImage, useImage, Group, Skia } from '@shopify/react-native-skia';
 
 interface DrawingViewerProps {
@@ -16,9 +16,7 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
   transparentMode = false 
 }) => {
   
-  const { width: screenWidth } = Dimensions.get('window');
-  // Protection contre URI vide
-  const image = useImage(imageUri || "https://via.placeholder.com/1000"); 
+  const image = useImage(imageUri || ""); 
 
   // 1. Parsing
   const safePaths = useMemo(() => {
@@ -30,26 +28,20 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
     return data;
   }, [canvasData]);
 
-  // 2. Calcul du Zoom (Scale)
+  // 2. Calcul du Zoom (ALIGNEMENT STRICT 0,0)
   const transform = useMemo(() => {
-    // Valeur par défaut safe
-    if (!image) return { scale: 1, translateX: 0, translateY: 0 };
+    if (!image) return { scale: 1 };
     
-    // On utilise la hauteur native comme référence du carré
-    const NATIVE_SIZE = image.height(); 
-    if (NATIVE_SIZE === 0) return { scale: 1, translateX: 0, translateY: 0 };
+    const CANVAS_SIZE = image.height(); // Référence carrée
+    if (CANVAS_SIZE === 0) return { scale: 1 };
 
-    const fitScale = viewerSize / NATIVE_SIZE;
-    
-    // On centre l'image si elle est plus large que haute
-    const imgW = image.width ? image.width() : NATIVE_SIZE;
-    const visualWidth = imgW * fitScale;
-    const centerTx = (viewerSize - visualWidth) / 2;
+    // On calcule juste l'échelle pour passer de "Taille Native" à "Taille Écran"
+    const fitScale = viewerSize / CANVAS_SIZE;
 
-    // Log pour comprendre l'échelle
-    // console.log(`📐 Scale: ${fitScale} (Native: ${NATIVE_SIZE} -> View: ${viewerSize})`);
-
-    return { scale: fitScale, translateX: centerTx, translateY: 0 };
+    // 🛑 STOP : On ne calcule plus de translateX/Y.
+    // Les données vectorielles sont déjà relatives au coin de l'image.
+    // On colle tout en haut à gauche (0,0).
+    return { scale: fitScale };
   }, [image, viewerSize]);
 
   if (!image) {
@@ -57,29 +49,27 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
     return <View style={styles.loading}><ActivityIndicator color="#fff" /></View>;
   }
 
-  const CANVAS_H = image.height();
-  const CANVAS_W = image.width();
+  const DISPLAY_SIZE = image.height();
   
-  const matrix = [
-      { translateX: transform.translateX },
-      { translateY: transform.translateY },
-      { scale: transform.scale }
-  ];
+  // Matrice simplifiée
+  const matrix = [{ scale: transform.scale }];
 
   return (
     <View style={[styles.container, {width: viewerSize, height: viewerSize, overflow: 'hidden'}]}>
       <Canvas style={{ flex: 1 }}>
         <Group transform={matrix}>
           
+          {/* IMAGE DE FOND */}
           {!transparentMode && (
               <SkiaImage
                 image={image}
-                x={0} y={0}
-                width={CANVAS_W} height={CANVAS_H}
+                x={0} y={0} // Toujours à 0,0
+                width={DISPLAY_SIZE} height={DISPLAY_SIZE}
                 fit="cover"
               />
           )}
           
+          {/* DESSINS */}
           <Group layer={true}> 
           {safePaths.map((p: any, index: number) => {
              if (!p || !p.svgPath) return null;
@@ -88,13 +78,9 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
                  const path = Skia.Path.MakeFromSVGString(p.svgPath);
                  if (!path) return null;
                  
-                 // --- CORRECTION ÉPAISSEUR ---
-                 // On récupère la largeur enregistrée ou on met 15 par défaut
-                 const recordedWidth = typeof p.width === 'number' ? p.width : 15;
-                 
-                 // On divise par le scale pour compenser le rétrécissement de l'image
-                 // Ex: Si l'image est réduite x0.1, on multiplie le trait par 10 pour qu'il garde sa taille visuelle.
-                 const adjustedWidth = recordedWidth / transform.scale;
+                 // Compensation épaisseur (pour garder le trait visible)
+                 const baseWidth = p.width || 6;
+                 const adjustedWidth = baseWidth / transform.scale;
                  
                  return (
                    <Path
@@ -102,7 +88,7 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
                      path={path}
                      color={p.isEraser ? "#000000" : (p.color || "#000000")}
                      style="stroke"
-                     strokeWidth={adjustedWidth} 
+                     strokeWidth={adjustedWidth}
                      strokeCap="round"
                      strokeJoin="round"
                      blendMode={p.isEraser ? "clear" : "srcOver"}
