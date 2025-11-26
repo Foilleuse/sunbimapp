@@ -3,14 +3,14 @@ import { StyleSheet, View, Platform, Text, Dimensions, PanResponder, ActivityInd
 import {
   Canvas, Path, useImage, Image as SkiaImage, Group, Skia, SkPath
 } from '@shopify/react-native-skia';
-// On enlève temporairement l'import qui pourrait causer des soucis si la lib n'est pas là
-// import { captureRef } from 'react-native-view-shot';
+// IMPORT RÉACTIVÉ POUR LE BUILD V15
+import { captureRef } from 'react-native-view-shot';
 
 // ---------------------------------------------------------
-// VERSION CORRIGÉE - SYNTAXE CLEAN
-// - Correction de l'erreur "Missing initializer"
-// - Moteur V14 (Stable)
-// - Fonctionnalités : Gomme + Export (Placeholder pour l'instant)
+// VERSION V17 (COMPLETE) - PRÊTE POUR LE BUILD V15
+// - Moteur : PanResponder (Stable)
+// - Capture : ViewShot (Activé)
+// - Dessin : Vectoriel + Lissage
 // ---------------------------------------------------------
 
 interface DrawingCanvasProps {
@@ -40,17 +40,15 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
   ({ imageUri, strokeColor, strokeWidth, isEraserMode }, ref) => {
     
     if (Platform.OS === 'web') {
-      return (
-        <View style={styles.webPlaceholder}>
-          <Text style={styles.webText}>Mobile Only</Text>
-        </View>
-      );
+      return <View style={styles.webPlaceholder}><Text style={styles.webText}>Mobile Only</Text></View>;
     }
 
     const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
     const image = useImage(imageUri);
     
-    // --- ETATS ---
+    // Ref pour la capture d'écran (ViewShot)
+    const viewShotRef = useRef<View>(null);
+
     const [paths, setPaths] = useState<DrawingPath[]>([]);
     const [redoStack, setRedoStack] = useState<DrawingPath[]>([]);
     const [currentPathObj, setCurrentPathObj] = useState<SkPath | null>(null);
@@ -68,13 +66,8 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
     const gestureStart = useRef<any>(null);
     const lastPoint = useRef<{x: number, y: number} | null>(null);
 
-    // --- API EXPOSÉE ---
     useImperativeHandle(ref, () => ({
-      clearCanvas: () => {
-        setPaths([]);
-        setRedoStack([]);
-        setCurrentPathObj(null);
-      },
+      clearCanvas: () => { setPaths([]); setRedoStack([]); setCurrentPathObj(null); },
       undo: () => {
         setPaths(prev => {
             if (prev.length === 0) return prev;
@@ -95,10 +88,20 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
       },
       getPaths: () => paths.map(p => p.svgPath),
       
-      // --- SNAPSHOT (SIMPLIFIÉ POUR ÉVITER CRASH) ---
+      // --- FONCTION DE CAPTURE ---
       getSnapshot: async () => {
-          console.log("⚠️ Snapshot désactivé temporairement");
-          return undefined;
+          try {
+              console.log("📸 Capture via ViewShot lancée...");
+              const result = await captureRef(viewShotRef, {
+                  format: "png",
+                  quality: 0.8,
+                  result: "base64"
+              });
+              return result;
+          } catch (error) {
+              console.error("❌ Erreur ViewShot", error);
+              return undefined;
+          }
       }
     }));
 
@@ -114,7 +117,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
         isInitialized.current = true;
     }
 
-    // --- LOGIQUE GESTUELLE ---
+    // --- GESTIONNAIRE TACTILE ---
     const getDistance = (t1: any, t2: any) => {
         const dx = t1.pageX - t2.pageX;
         const dy = t1.pageY - t2.pageY;
@@ -222,7 +225,8 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
     const DISPLAY_SIZE = squareSizeRef.current;
 
     return (
-      <View style={styles.container} {...panResponder.panHandlers}>
+      // REF VIEWSHOT ATTACHÉE ICI
+      <View ref={viewShotRef} collapsable={false} style={styles.container} {...panResponder.panHandlers}>
         <Canvas style={{ flex: 1 }} pointerEvents="none">
           <Group transform={skiaTransform}>
             <SkiaImage image={image} x={0} y={0} width={DISPLAY_SIZE} height={DISPLAY_SIZE} fit="cover" />
