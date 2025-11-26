@@ -5,7 +5,7 @@ import { Canvas, Path, Image as SkiaImage, useImage, Group, Skia } from '@shopif
 interface DrawingViewerProps {
   imageUri: string;
   canvasData: any; 
-  viewerSize: number;
+  viewerSize: number; // La taille du carré à l'écran (ex: 390px)
   transparentMode?: boolean;
 }
 
@@ -16,10 +16,9 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
   transparentMode = false 
 }) => {
   
-  const { width: screenWidth } = Dimensions.get('window');
   const image = useImage(imageUri || ""); 
 
-  // 1. Parsing
+  // 1. Parsing des données
   const safePaths = useMemo(() => {
     let data = [];
     if (Array.isArray(canvasData)) data = canvasData;
@@ -29,22 +28,25 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
     return data;
   }, [canvasData]);
 
-  // 2. Calcul du Zoom (1:1 Carré Strict)
+  // 2. Calcul du Zoom (Miroir exact du Créateur)
   const transform = useMemo(() => {
     if (!image) return { scale: 1, translateX: 0, translateY: 0 };
     
-    // On prend la plus petite dimension pour créer un carré central
-    // (Ou on se base sur la hauteur comme avant, mais on force le cover)
-    const NATIVE_SIZE = Math.min(image.width(), image.height()); 
-    if (NATIVE_SIZE === 0) return { scale: 1, translateX: 0, translateY: 0 };
+    // IMPORTANT : On reprend la logique "Carré basé sur la Hauteur" du créateur
+    const NATIVE_SQUARE_SIZE = image.height(); 
+    if (NATIVE_SQUARE_SIZE === 0) return { scale: 1, translateX: 0, translateY: 0 };
 
-    const fitScale = viewerSize / NATIVE_SIZE;
-    
-    // On centre l'image native dans notre viewer carré
-    const centerTx = (viewerSize - (image.width() * fitScale)) / 2;
-    const centerTy = (viewerSize - (image.height() * fitScale)) / 2;
+    // On calcule le ratio pour faire rentrer ce carré géant dans le petit carré du viewer
+    const fitScale = viewerSize / NATIVE_SQUARE_SIZE;
 
-    return { scale: fitScale, translateX: centerTx, translateY: centerTy };
+    // Pas besoin de centrage complexe ici car :
+    // Carré Natif (4000x4000) * Scale => Carré Viewer (390x390)
+    // Ça rentre pile poil.
+    return { 
+        scale: fitScale, 
+        translateX: 0, 
+        translateY: 0 
+    };
   }, [image, viewerSize]);
 
   if (!image) {
@@ -52,6 +54,10 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
     return <View style={styles.loading}><ActivityIndicator color="#fff" /></View>;
   }
 
+  // On force les dimensions natives à être un CARRÉ basé sur la hauteur
+  // C'est ce qui garantit que l'image est croppée exactement comme au moment du dessin.
+  const DISPLAY_SIZE = image.height();
+  
   const matrix = [
       { translateX: transform.translateX },
       { translateY: transform.translateY },
@@ -63,35 +69,36 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
       <Canvas style={{ flex: 1 }}>
         <Group transform={matrix}>
           
+          {/* IMAGE DE FOND */}
           {!transparentMode && (
               <SkiaImage
                 image={image}
                 x={0} y={0}
-                width={image.width()} height={image.height()}
-                fit="cover" // Remplit tout l'espace dispo
+                width={DISPLAY_SIZE} height={DISPLAY_SIZE} // <--- FORCE LE CARRÉ
+                fit="cover" // Rogne les bords qui dépassent, comme à la création
               />
           )}
           
+          {/* DESSINS */}
           <Group layer={true}> 
           {safePaths.map((p: any, index: number) => {
              if (!p || !p.svgPath) return null;
+
              try {
                  const path = Skia.Path.MakeFromSVGString(p.svgPath);
                  if (!path) return null;
                  
-                 // --- CORRECTION MAJEURE : Mode Proportionnel ---
-                 // On utilise p.width brut. Comme on est dans un <Group> qui a un scale,
-                 // l'épaisseur sera réduite automatiquement avec l'image.
-                 // C'est ce qui rend les miniatures nettes.
-                 const width = p.width || 6;
-
+                 // Compensation épaisseur
+                 const baseWidth = p.width || 6;
+                 const adjustedWidth = baseWidth / transform.scale;
+                 
                  return (
                    <Path
                      key={index}
                      path={path}
                      color={p.isEraser ? "#000000" : (p.color || "#000000")}
                      style="stroke"
-                     strokeWidth={width} 
+                     strokeWidth={adjustedWidth} 
                      strokeCap="round"
                      strokeJoin="round"
                      blendMode={p.isEraser ? "clear" : "srcOver"}
@@ -108,5 +115,5 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
 
 const styles = StyleSheet.create({
   container: { backgroundColor: 'transparent' },
-  loading: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F0F0F0' }
+  loading: { flex: 1, justifyContent: 'center', alignItems: 'center' }
 });
