@@ -13,6 +13,11 @@ interface Cloud {
   image_url: string;
 }
 
+const FALLBACK_CLOUD = {
+    id: 'fallback',
+    image_url: 'https://images.unsplash.com/photo-1506053420909-e828c43512bb?q=80&w=1000&auto=format&fit=crop'
+};
+
 export default function DrawPage() {
   const router = useRouter(); 
   const { user } = useAuth(); 
@@ -20,7 +25,6 @@ export default function DrawPage() {
   
   const [cloud, setCloud] = useState<Cloud | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   
   const [strokeColor, setStrokeColor] = useState('#000000');
   const [strokeWidth, setStrokeWidth] = useState(6);
@@ -30,7 +34,7 @@ export default function DrawPage() {
   const [tagText, setTagText] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   
-  // L'état pour déclencher le replay
+  // État pour le replay cinématique
   const [replayPaths, setReplayPaths] = useState<any[] | null>(null);
   
   // Animations
@@ -42,23 +46,33 @@ export default function DrawPage() {
   const updateLabel = (Updates && Updates.updateId) ? `v.${Updates.updateId.substring(0, 6)}` : '';
 
   useEffect(() => {
-    fetchTodaysCloud();
+    let isMounted = true;
+    // Sécurité chargement infini
+    const forceStopLoading = setTimeout(() => {
+        if (isMounted) {
+            setLoading(false);
+            setCloud(prev => prev || FALLBACK_CLOUD);
+        }
+    }, 2000);
+
+    const loadData = async () => {
+        try {
+            if (!supabase) throw new Error("No Supabase");
+            const today = new Date().toISOString().split('T')[0];
+            const { data } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();
+            if (isMounted) {
+                if (data) setCloud(data);
+                else setCloud(FALLBACK_CLOUD);
+            }
+        } catch (err) {
+            if (isMounted) setCloud(FALLBACK_CLOUD);
+        } finally {
+            if (isMounted) setLoading(false);
+        }
+    };
+    loadData();
+    return () => { isMounted = false; clearTimeout(forceStopLoading); };
   }, []);
-
-  const fetchTodaysCloud = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      if (!supabase) { setLoading(false); return; }
-
-      const today = new Date().toISOString().split('T')[0];
-      const { data, error: fetchError } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();
-      if (fetchError) throw fetchError;
-      setCloud(data);
-    } catch (err: any) {
-      setError(err.message);
-    } finally { setLoading(false); }
-  };
 
   const handleClear = () => canvasRef.current?.clearCanvas();
   const handleUndo = () => canvasRef.current?.undo();
@@ -82,7 +96,7 @@ export default function DrawPage() {
     setModalVisible(true);
   };
 
-  // --- LE SCÉNARIO CINÉMATIQUE ---
+  // --- SÉQUENCE CINÉMATIQUE ---
   const confirmShare = async () => {
     if (!canvasRef.current || !cloud || !user) return;
     const finalTag = tagText.trim();
@@ -93,7 +107,6 @@ export default function DrawPage() {
     try {
         const pathsData = canvasRef.current.getPaths();
         
-        // 1. Sauvegarde
         const { error: dbError } = await supabase
             .from('drawings')
             .insert({
@@ -105,31 +118,30 @@ export default function DrawPage() {
 
         setModalVisible(false);
 
-        // 2. Fondu au Blanc
+        // 1. Fondu au Blanc
         Animated.timing(fadeWhiteAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start(() => {
             
-            // 3. Lancement du Replay (Affiche le Viewer par dessus le Canvas)
+            // 2. Lancement Replay
             setReplayPaths(pathsData); 
             
-            // 4. Attente du tracé (1.5s) + Pause
+            // 3. Attente fin tracé (1.5s)
             setTimeout(() => {
-                
-                // 5. Apparition du Titre
+                // Apparition Titre
                 Animated.timing(textOpacityAnim, { toValue: 1, duration: 800, useNativeDriver: true }).start();
 
-                // 6. Admiration (2.5s)
+                // 4. Admiration (2.5s)
                 setTimeout(() => {
                     
-                    // 7. Tout s'efface vers le blanc
+                    // 5. Disparition
                     Animated.parallel([
                         Animated.timing(drawingOpacityAnim, { toValue: 0, duration: 800, useNativeDriver: true }),
                         Animated.timing(textOpacityAnim, { toValue: 0, duration: 800, useNativeDriver: true })
                     ]).start(() => {
                         
-                        // 8. Changement de page invisible
-                        router.replace('/(tabs)/feed');
+                        // 6. Navigation avec le signal "justPosted"
+                        router.replace({ pathname: '/(tabs)/feed', params: { justPosted: 'true' } });
                         
-                        // 9. Nettoyage
+                        // Reset
                         setTimeout(() => {
                             fadeWhiteAnim.setValue(0);
                             drawingOpacityAnim.setValue(1);
@@ -142,7 +154,6 @@ export default function DrawPage() {
                     });
 
                 }, 2500); 
-
             }, 1500); 
         });
         
@@ -152,27 +163,25 @@ export default function DrawPage() {
     }
   };
 
-  if (loading) return <View style={styles.container}><ActivityIndicator size="large" color="#87CEEB" style={{marginTop:100}} /></View>;
-  if (error) return <View style={styles.container}><Text style={styles.errorText}>Error: {error}</Text></View>;
-  if (!cloud) return <View style={styles.container}><Text style={styles.noCloudText}>No cloud today</Text></View>;
+  if (loading) return <View style={styles.container}><ActivityIndicator size="large" color="#87CEEB" /></View>;
+  if (!cloud) return <View style={styles.container}><Text style={styles.noCloudText}>Erreur chargement.</Text></View>;
 
   return (
     <View style={styles.container}>
       
+      {/* Header Flottant */}
       <View style={styles.header}>
         <Text style={styles.headerText}>sunbim</Text>
         {updateLabel ? <Text style={styles.versionText}>{updateLabel}</Text> : null}
       </View>
 
       <View style={styles.canvasContainer}>
-        {/* Si replay, on affiche le Viewer Animé, sinon le Canvas Interactif */}
         {replayPaths ? (
             <DrawingViewer 
                 imageUri={cloud.image_url}
                 canvasData={replayPaths}
                 viewerSize={screenWidth}
                 transparentMode={false} 
-                // C'est ici qu'on active la magie :
                 animated={true}
                 startVisible={false}
             />
@@ -214,37 +223,30 @@ export default function DrawPage() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* LE VOILE BLANC */}
+      {/* VOILE BLANC */}
       <Animated.View 
         pointerEvents="none"
         style={[
             StyleSheet.absoluteFill, 
-            { 
-                backgroundColor: 'white', 
-                opacity: fadeWhiteAnim, 
-                zIndex: 9999,
-                justifyContent: 'center',
-                alignItems: 'center'
-            }
+            { backgroundColor: 'white', opacity: fadeWhiteAnim, zIndex: 9999, justifyContent: 'center', alignItems: 'center' }
         ]} 
       >
           {replayPaths && (
               <Animated.View style={{ opacity: drawingOpacityAnim, width: screenWidth, alignItems: 'center' }}>
-                  {/* On affiche le viewer DANS le voile blanc pour l'effet "Papier" */}
                   <View style={{ height: screenWidth, width: screenWidth }}>
                     <DrawingViewer 
                         imageUri={cloud.image_url}
                         canvasData={replayPaths}
                         viewerSize={screenWidth}
-                        transparentMode={true} // Transparent = Fond Blanc du voile
+                        transparentMode={true} 
                         animated={true}
                         startVisible={false}
                     />
                   </View>
                   
+                  {/* TITRE FINAL ÉPURÉ */}
                   <Animated.View style={{ opacity: textOpacityAnim, marginTop: 40, alignItems: 'center' }}>
-                      <Text style={styles.finalTitle}>"{tagText}"</Text>
-                      <Text style={styles.finalSubtitle}>Envoyé au ciel</Text>
+                      <Text style={styles.finalTitle}>{tagText}</Text>
                   </Animated.View>
               </Animated.View>
           )}
@@ -258,9 +260,11 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
   canvasContainer: { flex: 1, backgroundColor: '#000' },
   centerContent: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  
   header: { position: 'absolute', top: 0, left: 0, right: 0, paddingTop: 60, paddingBottom: 15, alignItems: 'center', zIndex: 10, pointerEvents: 'none' },
   headerText: { fontSize: 32, fontWeight: '900', color: '#FFFFFF', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 0 },
   versionText: { fontSize: 10, color: 'rgba(255,255,255,0.5)', marginTop: 2, textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 1 },
+  
   noCloudText: { fontSize: 18, color: '#666', textAlign: 'center', marginTop: 100 },
   errorText: { color: 'red', textAlign: 'center' },
 
@@ -275,5 +279,4 @@ const styles = StyleSheet.create({
   cancelText: { color: '#999', fontWeight: '600' },
 
   finalTitle: { fontSize: 32, fontWeight: '900', color: '#000', textAlign: 'center', letterSpacing: -1 },
-  finalSubtitle: { fontSize: 16, fontWeight: '500', color: '#888', marginTop: 10, textTransform: 'uppercase', letterSpacing: 2 }
 });

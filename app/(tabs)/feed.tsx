@@ -1,6 +1,7 @@
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform, Animated } from 'react-native';
-import { useEffect, useState, useRef } from 'react';
-import { useRouter } from 'expo-router';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform } from 'react-native';
+import { useEffect, useState } from 'react';
+// AJOUT de useLocalSearchParams
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Heart, MessageCircle, User, Share2 } from 'lucide-react-native';
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
@@ -11,9 +12,11 @@ if (Platform.OS !== 'web') {
     try { PagerView = require('react-native-pager-view').default; } catch (e) { PagerView = View; }
 } else { PagerView = View; }
 
-// --- SOUS-COMPOSANT CARTE ---
-const FeedCard = ({ drawing, canvasSize, isActive }: { drawing: any, canvasSize: number, isActive: boolean }) => {
+const FeedCard = ({ drawing, canvasSize, isActive, forceStatic }: { drawing: any, canvasSize: number, isActive: boolean, forceStatic: boolean }) => {
     const [isLiked, setIsLiked] = useState(false);
+
+    // Si forceStatic est vrai, on coupe l'animation même si la carte est active
+    const shouldAnimate = isActive && !forceStatic;
 
     return (
         <View style={styles.cardContainer}>
@@ -23,8 +26,8 @@ const FeedCard = ({ drawing, canvasSize, isActive }: { drawing: any, canvasSize:
                     canvasData={drawing.canvas_data}
                     viewerSize={canvasSize}
                     transparentMode={true} 
-                    animated={isActive}
-                    startVisible={false} 
+                    animated={shouldAnimate} // <--- LOGIQUE MODIFIÉE
+                    startVisible={!shouldAnimate} // Si pas d'anim, on affiche direct
                 />
             </View>
             <View style={styles.cardInfo}>
@@ -53,8 +56,12 @@ const FeedCard = ({ drawing, canvasSize, isActive }: { drawing: any, canvasSize:
     );
 };
 
-// --- PAGE PRINCIPALE ---
 export default function FeedPage() {
+    const router = useRouter();
+    // RÉCUPÉRATION DU PARAMÈTRE
+    const params = useLocalSearchParams();
+    const justPosted = params.justPosted === 'true';
+
     const [drawings, setDrawings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [currentIndex, setCurrentIndex] = useState(0);
@@ -62,22 +69,8 @@ export default function FeedPage() {
     const { width: screenWidth } = Dimensions.get('window');
     const canvasSize = screenWidth; 
 
-    // --- ANIMATION D'OUVERTURE (Le Voile Blanc) ---
-    // On commence à 1 (Blanc total) pour faire la continuité avec l'index
-    const fadeAnim = useRef(new Animated.Value(1)).current;
-
     useEffect(() => {
-        // 1. On charge les données
         fetchTodaysFeed();
-
-        // 2. On lance le fondu d'ouverture (Le nuage se dissipe)
-        Animated.timing(fadeAnim, {
-            toValue: 0, // Devient transparent
-            duration: 1000, // 1 seconde de douceur
-            useNativeDriver: true,
-            delay: 200, // Petit délai pour laisser le temps aux données d'arriver
-        }).start();
-
     }, []);
 
     const fetchTodaysFeed = async () => {
@@ -86,7 +79,12 @@ export default function FeedPage() {
             const { data: cloudData } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();
             
             if (cloudData) {
-                const { data: drawingsData } = await supabase.from('drawings').select('*').eq('cloud_id', cloudData.id).order('created_at', { ascending: false }).limit(50); 
+                const { data: drawingsData } = await supabase
+                    .from('drawings')
+                    .select('*')
+                    .eq('cloud_id', cloudData.id)
+                    .order('created_at', { ascending: false })
+                    .limit(50); 
                 setDrawings(drawingsData || []);
             }
         } catch (e) { console.error(e); } finally { setLoading(false); }
@@ -94,35 +92,28 @@ export default function FeedPage() {
 
     if (loading) return <View style={styles.loadingContainer}><ActivityIndicator color="#000" size="large" /></View>;
     
+    const activeDrawing = drawings[currentIndex];
     const backgroundUrl = drawings.length > 0 ? drawings[0].cloud_image_url : null;
 
     return (
         <View style={styles.container}>
             
-            {/* --- LE VOILE BLANC DE TRANSITION --- */}
-            {/* Il est par-dessus tout (zIndex infini) mais laisse passer les clics une fois transparent */}
-            <Animated.View 
-                pointerEvents="none"
-                style={[
-                    StyleSheet.absoluteFill, 
-                    { backgroundColor: 'white', opacity: fadeAnim, zIndex: 9999 }
-                ]} 
-            />
-
-            {/* HEADER */}
             <SunbimHeader showCloseButton={false} />
 
-            {/* CONTENU */}
             <View style={{ flex: 1, position: 'relative' }}>
                 
-                {/* FOND FIXE */}
                 {backgroundUrl && (
                     <View style={{ position: 'absolute', top: 0, width: canvasSize, height: canvasSize, zIndex: -1 }}>
-                        <DrawingViewer imageUri={backgroundUrl} canvasData={[]} viewerSize={canvasSize} transparentMode={false} />
+                        <DrawingViewer
+                            imageUri={backgroundUrl}
+                            canvasData={[]} 
+                            viewerSize={canvasSize}
+                            transparentMode={false} 
+                            animated={false}
+                        />
                     </View>
                 )}
 
-                {/* SWIPE */}
                 {drawings.length > 0 ? (
                     <PagerView 
                         style={{ flex: 1 }} 
@@ -130,11 +121,26 @@ export default function FeedPage() {
                         orientation="horizontal"
                         onPageSelected={(e) => setCurrentIndex(e.nativeEvent.position)}
                     >
-                        {drawings.map((drawing, index) => (
-                            <View key={drawing.id || index} style={{ flex: 1 }}>
-                                <FeedCard drawing={drawing} canvasSize={canvasSize} isActive={index === currentIndex} />
-                            </View>
-                        ))}
+                        {drawings.map((drawing, index) => {
+                            const isActive = index === currentIndex;
+                            
+                            // LOGIQUE INTELLIGENTE :
+                            // Si on vient de poster (justPosted=true) ET que c'est le premier dessin (index=0)
+                            // ALORS on force le mode statique (forceStatic=true).
+                            // Pour tous les autres cas, on laisse l'animation normale.
+                            const isMyNewDrawing = justPosted && index === 0;
+
+                            return (
+                                <View key={drawing.id || index} style={{ flex: 1 }}>
+                                    <FeedCard 
+                                        drawing={drawing} 
+                                        canvasSize={canvasSize} 
+                                        isActive={isActive}
+                                        forceStatic={isMyNewDrawing} // <--- LE SECRET
+                                    />
+                                </View>
+                            );
+                        })}
                     </PagerView>
                 ) : (
                     <View style={styles.centerBox}><Text style={styles.text}>La galerie est vide.</Text></View>

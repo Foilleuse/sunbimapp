@@ -27,53 +27,42 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let isMounted = true;
-
-    // 1. LE TIMER DE SÉCURITÉ (L'Anti-Blocage)
-    // Si Supabase ne répond pas en 1.5 secondes, on force l'ouverture.
-    const safetyTimer = setTimeout(() => {
-        if (isMounted && loading) {
-            console.log("⚠️ Timeout Supabase : On force l'affichage (Mode Déconnecté)");
-            setLoading(false);
-        }
-    }, 1500);
-
-    // 2. La vérification réelle
+    // 1. Vérification initiale
     const initAuth = async () => {
         try {
+            // On demande à la mémoire si une session existe
             const { data: { session } } = await supabase.auth.getSession();
-            if (isMounted) {
+            
+            if (session) {
                 setSession(session);
-                setUser(session?.user ?? null);
-                if (session?.user) {
-                    await fetchProfile(session.user.id);
-                }
+                setUser(session.user);
+                await fetchProfile(session.user.id);
             }
         } catch (e) {
-            console.error("Erreur Auth Init:", e);
+            console.error("Erreur Auth:", e);
         } finally {
-            // Si ça répond vite, on arrête le chargement ici
-            if (isMounted) setLoading(false);
+            // Quoi qu'il arrive (trouvé ou pas), on arrête de charger
+            setLoading(false);
         }
     };
 
     initAuth();
 
-    // 3. Écouteur de changements
+    // 2. Écouteur temps réel (Connexion / Déconnexion)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (isMounted) {
-        setSession(session);
-        setUser(session?.user ?? null);
-        if (session?.user) fetchProfile(session.user.id);
-        setLoading(false);
+      setSession(session);
+      setUser(session?.user ?? null);
+      
+      if (session?.user) {
+          fetchProfile(session.user.id);
+      } else {
+          setProfile(null);
       }
+      // Si l'état change, on est sûr que le chargement est fini
+      setLoading(false);
     });
 
-    return () => {
-        isMounted = false;
-        clearTimeout(safetyTimer);
-        subscription.unsubscribe();
-    };
+    return () => subscription.unsubscribe();
   }, []);
 
   const fetchProfile = async (userId: string) => {
@@ -91,11 +80,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   const signOut = async () => {
-    try {
-        await supabase.auth.signOut();
-    } catch (e) {
-        console.error("Erreur Logout:", e);
-    }
+    await supabase.auth.signOut();
   };
 
   return (
