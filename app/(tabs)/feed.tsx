@@ -1,12 +1,13 @@
-import { View, Text, StyleSheet, ActivityIndicator, Dimensions } from 'react-native';
+// AJOUT DE 'TouchableOpacity' DANS LES IMPORTS 👇
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions } from 'react-native';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
-import { X, Heart, MessageCircle, User } from 'lucide-react-native';
+import { Heart, MessageCircle, User } from 'lucide-react-native';
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
 
-// NOUVEAU MOTEUR DE SWIPE "FUN"
+// LE CARROUSEL FUN
 import Carousel from 'react-native-reanimated-carousel';
 
 export default function FeedPage() {
@@ -14,8 +15,6 @@ export default function FeedPage() {
     const [loading, setLoading] = useState(true);
     
     const [currentIndex, setCurrentIndex] = useState(0);
-    
-    // État local pour le like visuel
     const [isLiked, setIsLiked] = useState(false);
 
     const { width: screenWidth } = Dimensions.get('window');
@@ -25,7 +24,6 @@ export default function FeedPage() {
         fetchTodaysFeed();
     }, []);
 
-    // Reset du like au changement de slide
     useEffect(() => { setIsLiked(false); }, [currentIndex]);
 
     const fetchTodaysFeed = async () => {
@@ -61,10 +59,10 @@ export default function FeedPage() {
             {/* HEADER */}
             <SunbimHeader showCloseButton={false} />
 
-            {/* ZONE SWIPE */}
+            {/* ZONE SWIPE FUN (PARALLAXE) */}
             <View style={{ width: canvasSize, height: canvasSize, backgroundColor: '#F0F0F0', position: 'relative' }}>
                 
-                {/* COUCHE 1 : FOND FIXE */}
+                {/* FOND FIXE */}
                 {backgroundUrl && (
                     <View style={StyleSheet.absoluteFill}>
                         <DrawingViewer
@@ -77,20 +75,20 @@ export default function FeedPage() {
                     </View>
                 )}
 
-                {/* COUCHE 2 : CARROUSEL ANIMÉ */}
+                {/* CARROUSEL ANIMÉ */}
                 {drawings.length > 0 ? (
                     <Carousel
-                        loop={false} // On ne tourne pas en rond à l'infini (choix UX)
+                        loop={false}
                         width={canvasSize}
                         height={canvasSize}
                         data={drawings}
-                        scrollAnimationDuration={800} // Vitesse de l'animation (ms)
+                        scrollAnimationDuration={800}
                         onSnapToItem={(index) => setCurrentIndex(index)}
-                        // --- EFFET "DEMI-CERCLE" / PROFONDEUR ---
+                        // Mode Parallaxe pour l'effet "3D / Demi-cercle"
                         mode="parallax"
                         modeConfig={{
-                            parallaxScrollingScale: 0.9, // L'image d'à côté est un peu plus petite
-                            parallaxScrollingOffset: 50, // Elle est un peu décalée
+                            parallaxScrollingScale: 0.9,
+                            parallaxScrollingOffset: 50,
                         }}
                         renderItem={({ item, index }) => {
                             const isActive = index === currentIndex;
@@ -101,7 +99,7 @@ export default function FeedPage() {
                                         canvasData={item.canvas_data}
                                         viewerSize={canvasSize}
                                         transparentMode={true}
-                                        animated={isActive} 
+                                        animated={isActive} // Animation au focus
                                         startVisible={false} 
                                     />
                                 </View>
@@ -113,7 +111,7 @@ export default function FeedPage() {
                 )}
             </View>
 
-            {/* INFOS SOCIALES (Sans le numéro) */}
+            {/* INFOS */}
             <View style={styles.socialContainer}>
                  
                  <View style={styles.titleRow}>
@@ -123,7 +121,6 @@ export default function FeedPage() {
                  </View>
 
                  <View style={styles.metaRow}>
-                    
                     <View style={styles.userProfile}>
                         <View style={styles.avatarPlaceholder}>
                             <User size={16} color="#666" />
@@ -147,8 +144,6 @@ export default function FeedPage() {
                         </TouchableOpacity>
                     </View>
                  </View>
-                 
-                 {/* J'ai supprimé le Text de pagination ici */}
             </View>
         </View>
     );
@@ -160,7 +155,6 @@ const styles = StyleSheet.create({
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     text: { color: '#666', fontSize: 16 },
 
-    // SOCIAL SECTION
     socialContainer: {
         flex: 1,
         paddingHorizontal: 20,
