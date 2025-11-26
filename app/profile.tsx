@@ -3,18 +3,24 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { supabase } from '../src/lib/supabaseClient';
 import { useAuth } from '../src/contexts/AuthContext';
-import { User, Mail, Lock, LogOut, Settings, Heart, X } from 'lucide-react-native'; 
+import { User, Mail, Lock, LogOut, ChevronLeft, Settings, Heart, MessageCircle, Share2, X } from 'lucide-react-native'; 
 import { DrawingViewer } from '../src/components/DrawingViewer';
+import { CommentsModal } from '../src/components/CommentsModal'; // <--- AJOUT
 
 export default function ProfilePage() {
   const router = useRouter();
   const { user, profile, signOut, loading: authLoading } = useAuth();
   
+  // Données
   const [userDrawings, setUserDrawings] = useState<any[]>([]);
   const [loadingDrawings, setLoadingDrawings] = useState(true);
+  
+  // UI States
   const [selectedDrawing, setSelectedDrawing] = useState<any | null>(null);
   const [isHolding, setIsHolding] = useState(false);
+  const [showComments, setShowComments] = useState(false);
 
+  // Formulaire
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [formLoading, setFormLoading] = useState(false);
@@ -45,6 +51,9 @@ export default function ProfilePage() {
     }
   };
 
+  // Calcul sécurisé des likes totaux (Anti-Crash)
+  const totalLikes = userDrawings.reduce((acc, curr) => acc + (curr.likes_count || 0), 0);
+
   const handleEmailAuth = async () => {
     setFormLoading(true);
     try {
@@ -62,6 +71,7 @@ export default function ProfilePage() {
   const handleSignOut = async () => { await signOut(); router.replace('/'); };
   const handleEditProfile = () => Alert.alert("Bientôt", "Édition profil à venir");
 
+  // Rendu Vignette
   const renderItem = ({ item }: { item: any }) => (
     <TouchableOpacity 
         activeOpacity={0.9}
@@ -84,39 +94,46 @@ export default function ProfilePage() {
   return (
     <View style={styles.container}>
        
+       {/* HEADER NAV */}
+       <View style={styles.navHeader}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}>
+                <ChevronLeft color="#000" size={32} />
+            </TouchableOpacity>
+            
+            {user && (
+                <View style={styles.topRightActions}>
+                    <TouchableOpacity onPress={handleEditProfile} style={styles.iconBtn}>
+                        <Settings color="#000" size={24} />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={handleSignOut} style={styles.iconBtn}>
+                        <LogOut color="#000" size={24} />
+                    </TouchableOpacity>
+                </View>
+            )}
+       </View>
+
        {user ? (
             <View style={{flex: 1}}>
-                
-                {/* HEADER ACTIONS (Aligné à droite) */}
-                <View style={styles.navHeader}>
-                    <View style={{flex: 1}} /> {/* Spacer pour pousser à droite */}
-                    <View style={styles.topRightActions}>
-                        <TouchableOpacity onPress={handleEditProfile} style={styles.iconBtn}>
-                            <Settings color="#000" size={24} />
-                        </TouchableOpacity>
-                        <TouchableOpacity onPress={handleSignOut} style={styles.iconBtn}>
-                            <LogOut color="#000" size={24} />
-                        </TouchableOpacity>
-                    </View>
-                </View>
-
-                {/* CARTE D'IDENTITÉ (Plus haute, aérée) */}
+                {/* HEADER PROFIL */}
                 <View style={styles.profileCard}>
                     <View style={styles.profileRow}>
                         <View style={styles.avatarContainer}>
                             {profile?.avatar_url ? (
                                 <Image source={{uri: profile.avatar_url}} style={styles.avatar} />
                             ) : (
-                                <View style={[styles.avatar, styles.avatarPlaceholder]}><User size={40} color="#666" /></View>
+                                <View style={[styles.avatar, styles.avatarPlaceholder]}><User size={32} color="#666" /></View>
                             )}
                         </View>
-                        
                         <View style={styles.textsContainer}>
                             <Text style={styles.displayName}>{profile?.display_name || "Anonyme"}</Text>
                             <Text style={styles.bio}>{profile?.bio || "Chasseur de nuages."}</Text>
+                            <View style={styles.miniStats}>
+                                <Text style={styles.miniStatText}>{userDrawings.length} <Text style={styles.miniStatLabel}>dessins</Text></Text>
+                                <Text style={styles.miniStatText}>•</Text>
+                                <Text style={styles.miniStatText}>{totalLikes} <Text style={styles.miniStatLabel}>likes</Text></Text>
+                            </View>
                         </View>
                     </View>
-                    {/* Ligne de séparation plus bas pour donner de l'espace */}
                     <View style={styles.divider} />
                 </View>
 
@@ -135,12 +152,8 @@ export default function ProfilePage() {
                 />
             </View>
        ) : (
-            // FORMULAIRE (Inchangé)
+            // FORMULAIRE
             <View style={styles.formContainer}>
-                <TouchableOpacity onPress={() => router.back()} style={styles.closeLoginBtn}>
-                     <X color="#000" size={28} />
-                </TouchableOpacity>
-                
                 <Text style={styles.welcomeText}>Connecte-toi.</Text>
                 <View style={styles.inputWrapper}><Mail size={20} color="#999" style={styles.inputIcon}/><TextInput placeholder="Email" value={email} onChangeText={setEmail} autoCapitalize="none" style={styles.input} /></View>
                 <View style={styles.inputWrapper}><Lock size={20} color="#999" style={styles.inputIcon}/><TextInput placeholder="Mot de passe" value={password} onChangeText={setPassword} secureTextEntry style={styles.input} /></View>
@@ -151,70 +164,85 @@ export default function ProfilePage() {
             </View>
        )}
 
-       {/* MODALE ZOOM */}
-       <Modal animationType="slide" transparent={false} visible={selectedDrawing !== null} onRequestClose={() => setSelectedDrawing(null)}>
-            {selectedDrawing && (
-                <View style={styles.modalContainer}>
-                    <View style={styles.modalHeader}>
-                        <TouchableOpacity onPress={() => setSelectedDrawing(null)} style={styles.closeModalBtn}><X color="#000" size={32} /></TouchableOpacity>
+       {/* --- MODALE ZOOM INTERACTIVE --- */}
+       {selectedDrawing && (
+            <View style={styles.fullScreenOverlay}>
+                 {/* Header Modale */}
+                 <View style={styles.modalHeader}>
+                    <TouchableOpacity onPress={() => setSelectedDrawing(null)} style={styles.closeModalBtn}>
+                        <X color="#000" size={32} />
+                    </TouchableOpacity>
+                </View>
+
+                {/* Image */}
+                <Pressable 
+                    onPressIn={() => setIsHolding(true)} onPressOut={() => setIsHolding(false)}
+                    style={{ width: screenWidth, height: screenWidth, backgroundColor: '#F0F0F0' }}
+                >
+                    <DrawingViewer
+                        imageUri={selectedDrawing.cloud_image_url}
+                        canvasData={isHolding ? [] : selectedDrawing.canvas_data}
+                        viewerSize={screenWidth}
+                        transparentMode={false}
+                        startVisible={false} animated={true}
+                    />
+                    <Text style={styles.hintText}>Maintenir pour voir l'original</Text>
+                </Pressable>
+
+                {/* Footer Actions */}
+                <View style={styles.detailsFooter}>
+                    <View>
+                        <Text style={styles.drawingLabel}>{selectedDrawing.label || "Sans titre"}</Text>
+                        <Text style={styles.dateText}>Le {new Date(selectedDrawing.created_at).toLocaleDateString()}</Text>
                     </View>
-                    <Pressable onPressIn={() => setIsHolding(true)} onPressOut={() => setIsHolding(false)} style={{ width: screenWidth, height: screenWidth, backgroundColor: '#F0F0F0' }}>
-                        <DrawingViewer
-                            imageUri={selectedDrawing.cloud_image_url}
-                            canvasData={isHolding ? [] : selectedDrawing.canvas_data}
-                            viewerSize={screenWidth}
-                            transparentMode={false} // On voit le fond
-                            startVisible={false} animated={true}
-                        />
-                    </Pressable>
-                    <View style={styles.modalFooter}>
-                        <Text style={styles.drawingLabel}>{selectedDrawing.label}</Text>
-                        <View style={{flexDirection:'row', gap:5, alignItems:'center'}}>
-                             <Heart color="#000" size={20} /><Text style={{fontWeight:'600'}}>{selectedDrawing.likes_count || 0}</Text>
-                        </View>
+                    
+                    <View style={styles.statsRowSmall}>
+                         {/* Bouton Like (visuel uniquement ici, pas d'action sur son propre profil pour l'instant) */}
+                         <View style={{flexDirection:'row', alignItems:'center', gap:5, marginRight:15}}>
+                            <Heart color="#000" size={24} />
+                            <Text style={styles.statTextSmall}>{selectedDrawing.likes_count || 0}</Text>
+                         </View>
+
+                         {/* Bouton Commentaire */}
+                         <TouchableOpacity onPress={() => setShowComments(true)} style={{flexDirection:'row', alignItems:'center', gap:5}}>
+                            <MessageCircle color="#000" size={24} />
+                            <Text style={styles.statTextSmall}>{selectedDrawing.comments_count || 0}</Text>
+                         </TouchableOpacity>
                     </View>
                 </View>
-            )}
-       </Modal>
+            </View>
+       )}
+
+       {/* MODALE COMMENTAIRES */}
+       {selectedDrawing && (
+           <CommentsModal 
+             visible={showComments} 
+             onClose={() => setShowComments(false)} 
+             drawingId={selectedDrawing.id} 
+           />
+       )}
+
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFF' },
-  
-  // NAV HEADER (Juste les actions à droite)
-  navHeader: { 
-      paddingTop: 20, // Moins de padding car dans une modale native, le header est déjà safe
-      paddingBottom: 10, 
-      paddingHorizontal: 20, 
-      flexDirection: 'row', 
-      alignItems: 'center', 
-      backgroundColor: '#FFF',
-  },
+  navHeader: { paddingTop: 60, paddingBottom: 10, paddingHorizontal: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FFF', zIndex: 10 },
   iconBtn: { padding: 5 },
   topRightActions: { flexDirection: 'row', gap: 15 },
-  
-  // PROFIL CARD (Plus haute et aérée)
-  profileCard: { 
-      paddingHorizontal: 25, 
-      paddingTop: 20, // Espace au dessus
-      paddingBottom: 10, 
-      backgroundColor: '#FFF' 
-  },
+  profileCard: { paddingHorizontal: 25, paddingTop: 20, paddingBottom: 10, backgroundColor: '#FFF' },
   profileRow: { flexDirection: 'row', alignItems: 'center', gap: 25 },
-  avatar: { width: 90, height: 90, borderRadius: 45 }, // Avatar un peu plus grand
+  avatar: { width: 90, height: 90, borderRadius: 45 },
   avatarPlaceholder: { width: 90, height: 90, borderRadius: 45, backgroundColor: '#F5F5F5', justifyContent: 'center', alignItems: 'center' },
-  
   textsContainer: { flex: 1, justifyContent: 'center' },
   displayName: { fontSize: 26, fontWeight: '900', color: '#000', marginBottom: 8 },
   bio: { fontSize: 15, color: '#666', lineHeight: 22 },
-
-  divider: { width: '100%', height: 1, backgroundColor: '#F0F0F0', marginTop: 35, marginBottom: 15 }, // Marge augmentée
-
-  // FORMULAIRE
+  miniStats: { flexDirection: 'row', gap: 10 },
+  miniStatText: { fontSize: 14, fontWeight: '700', color: '#000' },
+  miniStatLabel: { fontWeight: '400', color: '#999' },
+  divider: { width: '100%', height: 1, backgroundColor: '#F0F0F0', marginTop: 35, marginBottom: 15 },
   formContainer: { flex: 1, paddingHorizontal: 30, justifyContent: 'center', marginTop: -50 },
-  closeLoginBtn: { position: 'absolute', top: 60, left: 20, zIndex: 10 },
   welcomeText: { fontSize: 24, fontWeight: '800', marginBottom: 30, textAlign: 'center' },
   inputWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F5F5F5', borderRadius: 12, paddingHorizontal: 15, marginBottom: 15, height: 50 },
   inputIcon: { marginRight: 10 },
@@ -224,11 +252,15 @@ const styles = StyleSheet.create({
   switchText: { textAlign: 'center', marginTop: 20, color: '#666', fontSize: 14 },
   emptyState: { marginTop: 50, alignItems: 'center' },
   emptyText: { color: '#999' },
-
-  // MODALE
-  modalContainer: { flex: 1, backgroundColor: '#FFF' },
+  
+  // OVERLAY STYLE
+  fullScreenOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#FFFFFF', zIndex: 50 },
   modalHeader: { width: '100%', height: 100, justifyContent: 'flex-end', alignItems: 'flex-end', paddingRight: 20, paddingBottom: 10, backgroundColor: '#FFF', zIndex: 20 },
   closeModalBtn: { padding: 5 },
-  modalFooter: { padding: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#F0F0F0', marginTop: 10 },
+  hintText: { position: 'absolute', bottom: 10, alignSelf: 'center', color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width:1, height:1}, textShadowRadius: 1 },
+  detailsFooter: { padding: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#F0F0F0', marginTop: 10 },
   drawingLabel: { fontSize: 20, fontWeight: '800', color: '#000' },
+  dateText: { fontSize: 14, color: '#999' },
+  statsRowSmall: { flexDirection: 'row', alignItems: 'center', gap: 15 },
+  statTextSmall: { fontWeight: '600', fontSize: 16 },
 });
