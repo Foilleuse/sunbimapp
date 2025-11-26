@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, StyleSheet, Dimensions, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, Dimensions, ActivityIndicator, Text } from 'react-native';
 import { Canvas, Path, Image as SkiaImage, useImage, Group, Skia } from '@shopify/react-native-skia';
 
 interface DrawingViewerProps {
@@ -17,29 +17,22 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
 }) => {
   
   const { width: screenWidth } = Dimensions.get('window');
-  const image = useImage(imageUri || ""); 
+  // On charge l'image, ou une image de fallback si vide
+  const image = useImage(imageUri || "https://via.placeholder.com/1000"); 
 
-  // 1. Parsing des données
+  // 1. LOGS DE DONNÉES
   const safePaths = useMemo(() => {
     let data = [];
-    
     if (Array.isArray(canvasData)) {
         data = canvasData;
     } else if (typeof canvasData === 'string') {
         try { data = JSON.parse(canvasData); } catch (e) { data = []; }
     }
-
-    // Debug : Affiche combien de traits on a trouvé
-    if (data.length > 0) {
-        console.log(`🔍 Viewer: ${data.length} traits chargés.`);
-    } else {
-        console.log("⚠️ Viewer: Aucune donnée de dessin trouvée.");
-    }
-    
+    // DEBUG: Affiche la longueur
+    console.log(`🔍 [VIEWER] Mode: ${transparentMode ? 'Transparent' : 'Image'} | Traits: ${data.length}`);
     return data;
-  }, [canvasData]);
+  }, [canvasData, transparentMode]);
 
-  // 2. Calcul du Zoom (Scale)
   const transform = useMemo(() => {
     if (!image) return { scale: 1, translateX: 0, translateY: 0 };
     
@@ -51,12 +44,14 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
     const visualWidth = imgW * fitScale;
     const centerTx = (screenWidth - visualWidth) / 2;
 
+    console.log(`📐 [SCALE] Native: ${CANVAS_SIZE} -> Screen: ${viewerSize} (Scale: ${fitScale})`);
+
     return { scale: fitScale, translateX: centerTx, translateY: 0 };
   }, [image, screenWidth, viewerSize]);
 
   if (!image) {
-    if (transparentMode) return <View style={{width: viewerSize, height: viewerSize}} />;
-    return <View style={styles.loading}><ActivityIndicator color="#fff" /></View>;
+    if (transparentMode) return <View style={{width: viewerSize, height: viewerSize, borderColor: 'blue', borderWidth: 2}} />;
+    return <View style={styles.loading}><ActivityIndicator color="red" size="large" /></View>;
   }
 
   const CANVAS_H = image.height();
@@ -69,10 +64,18 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
   ];
 
   return (
-    <View style={[styles.container, {width: viewerSize, height: viewerSize}]}>
+    // AJOUT D'UNE BORDURE ROUGE AUTOUR DU CANVAS POUR VÉRIFIER QU'IL PREND DE LA PLACE
+    <View style={[styles.container, {width: viewerSize, height: viewerSize, borderColor: 'red', borderWidth: 2, zIndex: 999}]}>
+      
       <Canvas style={{ flex: 1 }}>
+        
+        {/* TEST 1 : UNE CROIX ROUGE FORCEE (Doit apparaître par dessus tout) */}
+        <Path path="M 0 0 L 500 500" color="red" style="stroke" strokeWidth={10} />
+        <Path path="M 500 0 L 0 500" color="red" style="stroke" strokeWidth={10} />
+
         <Group transform={matrix}>
           
+          {/* IMAGE */}
           {!transparentMode && (
               <SkiaImage
                 image={image}
@@ -82,9 +85,9 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
               />
           )}
           
+          {/* DESSINS SUPABASE */}
           <Group layer={true}> 
           {safePaths.map((p: any, index: number) => {
-             // PROTECTION ANTI-CRASH : Vérifie que le chemin SVG est une string
              if (!Skia || !Skia.Path) return null;
              if (!p || !p.svgPath || typeof p.svgPath !== 'string') return null;
 
@@ -92,21 +95,19 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
                  const path = Skia.Path.MakeFromSVGString(p.svgPath);
                  if (!path) return null;
                  
-                 // CORRECTION : COMPENSATION DE L'ÉPAISSEUR
-                 const baseWidth = p.width || 6;
-                 const adjustedWidth = baseWidth / transform.scale;
+                 const baseWidth = p.width || 10;
+                 // TEST 2 : ON FORCE UNE GROSSE ÉPAISSEUR POUR VOIR
+                 const adjustedWidth = (baseWidth / transform.scale) * 2; 
                  
                  return (
                    <Path
                      key={index}
                      path={path}
-                     // --- TEST FINAL : FORCÉ EN JAUNE VIF ---
-                     color={p.isEraser ? "#000000" : "#FFFF00"} 
+                     color="#FFFF00" // JAUNE VIF
                      style="stroke"
                      strokeWidth={adjustedWidth} 
                      strokeCap="round"
                      strokeJoin="round"
-                     blendMode={p.isEraser ? "clear" : "srcOver"}
                    />
                  );
              } catch (e) { return null; }
