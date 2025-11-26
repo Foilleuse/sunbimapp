@@ -1,22 +1,21 @@
 import { Stack } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { ErrorBoundary } from '../src/components/ErrorBoundary';
+// AJOUT
+import { AuthProvider } from '../src/contexts/AuthContext';
 
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ErrorBoundary>
-        <Stack screenOptions={{ headerShown: false }}>
-          
-          {/* 1. L'écran de dessin (Accueil) */}
-          <Stack.Screen name="index" /> 
-          
-          {/* 2. Le groupe d'onglets (Feed, Galerie, etc.) */}
-          {/* Le nom doit correspondre au nom du dossier : (tabs) */}
-          <Stack.Screen name="(tabs)" /> 
-          
-          <Stack.Screen name="+not-found" />
-        </Stack>
+        {/* AJOUT DU PROVIDER AUTOUR DE LA STACK */}
+        <AuthProvider>
+            <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="index" /> 
+            <Stack.Screen name="(tabs)" /> 
+            <Stack.Screen name="+not-found" />
+            </Stack>
+        </AuthProvider>
       </ErrorBoundary>
     </GestureHandlerRootView>
   );
