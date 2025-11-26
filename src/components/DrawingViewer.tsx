@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, Dimensions, ActivityIndicator } from 'react-native';
 import { Canvas, Path, Image as SkiaImage, useImage, Group, Skia } from '@shopify/react-native-skia';
 
 interface DrawingViewerProps {
@@ -16,6 +16,7 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
   transparentMode = false 
 }) => {
   
+  const { width: screenWidth } = Dimensions.get('window');
   const image = useImage(imageUri || ""); 
 
   // 1. Parsing
@@ -28,48 +29,49 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
     return data;
   }, [canvasData]);
 
-  // 2. Calcul du Zoom (ALIGNEMENT STRICT 0,0)
+  // 2. Calcul du Zoom
   const transform = useMemo(() => {
-    if (!image) return { scale: 1 };
+    if (!image) return { scale: 1, translateX: 0, translateY: 0 };
     
-    const CANVAS_SIZE = image.height(); // Référence carrée
-    if (CANVAS_SIZE === 0) return { scale: 1 };
+    const CANVAS_SIZE = image.height(); 
+    if (CANVAS_SIZE === 0) return { scale: 1, translateX: 0, translateY: 0 };
 
-    // On calcule juste l'échelle pour passer de "Taille Native" à "Taille Écran"
     const fitScale = viewerSize / CANVAS_SIZE;
+    const imgW = image.width ? image.width() : CANVAS_SIZE;
+    const visualWidth = imgW * fitScale;
+    const centerTx = (screenWidth - visualWidth) / 2;
 
-    // 🛑 STOP : On ne calcule plus de translateX/Y.
-    // Les données vectorielles sont déjà relatives au coin de l'image.
-    // On colle tout en haut à gauche (0,0).
-    return { scale: fitScale };
-  }, [image, viewerSize]);
+    return { scale: fitScale, translateX: centerTx, translateY: 0 };
+  }, [image, screenWidth, viewerSize]);
 
   if (!image) {
     if (transparentMode) return <View style={{width: viewerSize, height: viewerSize}} />;
     return <View style={styles.loading}><ActivityIndicator color="#fff" /></View>;
   }
 
-  const DISPLAY_SIZE = image.height();
+  const CANVAS_H = image.height();
+  const CANVAS_W = image.width();
   
-  // Matrice simplifiée
-  const matrix = [{ scale: transform.scale }];
+  const matrix = [
+      { translateX: transform.translateX },
+      { translateY: transform.translateY },
+      { scale: transform.scale }
+  ];
 
   return (
     <View style={[styles.container, {width: viewerSize, height: viewerSize, overflow: 'hidden'}]}>
       <Canvas style={{ flex: 1 }}>
         <Group transform={matrix}>
           
-          {/* IMAGE DE FOND */}
           {!transparentMode && (
               <SkiaImage
                 image={image}
-                x={0} y={0} // Toujours à 0,0
-                width={DISPLAY_SIZE} height={DISPLAY_SIZE}
+                x={0} y={0}
+                width={CANVAS_W} height={CANVAS_H}
                 fit="cover"
               />
           )}
           
-          {/* DESSINS */}
           <Group layer={true}> 
           {safePaths.map((p: any, index: number) => {
              if (!p || !p.svgPath) return null;
@@ -78,9 +80,12 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
                  const path = Skia.Path.MakeFromSVGString(p.svgPath);
                  if (!path) return null;
                  
-                 // Compensation épaisseur (pour garder le trait visible)
+                 // --- AJUSTEMENT FINESSE ---
                  const baseWidth = p.width || 6;
-                 const adjustedWidth = baseWidth / transform.scale;
+                 
+                 // 1. On compense le zoom (division par scale)
+                 // 2. On multiplie par 0.65 pour affiner le rendu visuel
+                 const adjustedWidth = (baseWidth / transform.scale) * 0.65; 
                  
                  return (
                    <Path
@@ -88,7 +93,7 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
                      path={path}
                      color={p.isEraser ? "#000000" : (p.color || "#000000")}
                      style="stroke"
-                     strokeWidth={adjustedWidth}
+                     strokeWidth={adjustedWidth} 
                      strokeCap="round"
                      strokeJoin="round"
                      blendMode={p.isEraser ? "clear" : "srcOver"}
