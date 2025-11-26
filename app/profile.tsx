@@ -3,24 +3,18 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { supabase } from '../src/lib/supabaseClient';
 import { useAuth } from '../src/contexts/AuthContext';
-import { User, Mail, Lock, LogOut, ChevronLeft, Settings, AlertCircle, Heart } from 'lucide-react-native'; 
+import { User, Mail, Lock, LogOut, Settings, Heart, X } from 'lucide-react-native'; 
 import { DrawingViewer } from '../src/components/DrawingViewer';
 
 export default function ProfilePage() {
   const router = useRouter();
   const { user, profile, signOut, loading: authLoading } = useAuth();
   
-  // --- ETATS ---
-  const [historyItems, setHistoryItems] = useState<any[]>([]); // La liste complète (Dessins + Ratés)
-  const [loadingHistory, setLoadingHistory] = useState(true);
-  
-  const [totalLikes, setTotalLikes] = useState(0);
-  const [drawingCount, setDrawingCount] = useState(0);
-
+  const [userDrawings, setUserDrawings] = useState<any[]>([]);
+  const [loadingDrawings, setLoadingDrawings] = useState(true);
   const [selectedDrawing, setSelectedDrawing] = useState<any | null>(null);
   const [isHolding, setIsHolding] = useState(false);
 
-  // Formulaire
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [formLoading, setFormLoading] = useState(false);
@@ -31,59 +25,23 @@ export default function ProfilePage() {
   const ITEM_SIZE = (screenWidth - SPACING) / 2;
 
   useEffect(() => {
-    if (user) fetchHistory();
+    if (user) fetchUserDrawings();
   }, [user]);
 
-  const fetchHistory = async () => {
+  const fetchUserDrawings = async () => {
     try {
-        const today = new Date().toISOString().split('T')[0];
-
-        // 1. Récupérer TOUS les nuages passés
-        const { data: clouds, error: cloudsError } = await supabase
-            .from('clouds')
-            .select('*')
-            .lte('published_for', today) 
-            .order('published_for', { ascending: false });
-
-        if (cloudsError) throw cloudsError;
-
-        // 2. Récupérer MES dessins
-        const { data: myDrawings, error: drawingsError } = await supabase
+        const { data, error } = await supabase
             .from('drawings')
             .select('*')
-            .eq('user_id', user?.id);
+            .eq('user_id', user?.id)
+            .order('created_at', { ascending: false });
 
-        if (drawingsError) throw drawingsError;
-
-        // 3. FUSION : On crée la liste unifiée
-        const history = clouds?.map(cloud => {
-            const drawing = myDrawings?.find(d => d.cloud_id === cloud.id);
-            
-            return {
-                id: cloud.id, // ID unique pour la liste
-                type: drawing ? 'drawing' : 'missed', // Type d'élément
-                date: cloud.published_for,
-                
-                // Données pour l'affichage
-                cloud_image_url: cloud.image_url,
-                canvas_data: drawing ? drawing.canvas_data : [], // Vide si raté
-                label: drawing ? drawing.label : null,
-                likes_count: drawing ? drawing.likes_count : 0,
-                created_at: drawing ? drawing.created_at : cloud.published_for
-            };
-        });
-
-        setHistoryItems(history || []);
-        
-        // Calculs Stats
-        const realDrawings = myDrawings || [];
-        setDrawingCount(realDrawings.length);
-        setTotalLikes(realDrawings.reduce((acc, curr) => acc + (curr.likes_count || 0), 0));
-
+        if (error) throw error;
+        setUserDrawings(data || []);
     } catch (e) {
         console.error("Erreur profil:", e);
     } finally {
-        setLoadingHistory(false);
+        setLoadingDrawings(false);
     }
   };
 
@@ -104,90 +62,67 @@ export default function ProfilePage() {
   const handleSignOut = async () => { await signOut(); router.replace('/'); };
   const handleEditProfile = () => Alert.alert("Bientôt", "Édition profil à venir");
 
-  // --- RENDU INTELLIGENT ---
-  const renderItem = ({ item }: { item: any }) => {
-    const isMissed = item.type === 'missed';
-
-    return (
-        <TouchableOpacity 
-            activeOpacity={isMissed ? 1 : 0.9} // Pas de clic si raté (ou alors juste pour voir le nuage vide)
-            onPress={() => !isMissed && setSelectedDrawing(item)}
-            style={{ 
-                width: ITEM_SIZE, height: ITEM_SIZE, 
-                marginBottom: SPACING, backgroundColor: '#F9F9F9', overflow: 'hidden',
-                opacity: isMissed ? 0.6 : 1 // On grise les jours ratés
-            }}
-        >
-            <DrawingViewer
-                imageUri={item.cloud_image_url}
-                canvasData={item.canvas_data}
-                viewerSize={ITEM_SIZE}
-                transparentMode={false} 
-                startVisible={true}
-                animated={false}
-            />
-
-            {/* Overlay "RATÉ" */}
-            {isMissed && (
-                <View style={styles.missedBadge}>
-                    <AlertCircle color="#FFF" size={24} />
-                    <Text style={styles.missedText}>
-                        {new Date(item.date).toLocaleDateString(undefined, {day:'numeric', month:'short'})}
-                    </Text>
-                </View>
-            )}
-        </TouchableOpacity>
-    );
-  };
+  const renderItem = ({ item }: { item: any }) => (
+    <TouchableOpacity 
+        activeOpacity={0.9}
+        onPress={() => setSelectedDrawing(item)}
+        style={{ width: ITEM_SIZE, height: ITEM_SIZE, marginBottom: SPACING, backgroundColor: '#F9F9F9', overflow: 'hidden' }}
+    >
+        <DrawingViewer
+            imageUri={item.cloud_image_url}
+            canvasData={item.canvas_data}
+            viewerSize={ITEM_SIZE}
+            transparentMode={false} 
+            startVisible={true}
+            animated={false}
+        />
+    </TouchableOpacity>
+  );
 
   if (authLoading) return <View style={styles.container}><ActivityIndicator color="#000"/></View>;
 
   return (
     <View style={styles.container}>
        
-       <View style={styles.navHeader}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}>
-                <ChevronLeft color="#000" size={32} />
-            </TouchableOpacity>
-            
-            {user && (
-                <View style={styles.topRightActions}>
-                    <TouchableOpacity onPress={handleEditProfile} style={styles.iconBtn}>
-                        <Settings color="#000" size={24} />
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={handleSignOut} style={styles.iconBtn}>
-                        <LogOut color="#000" size={24} />
-                    </TouchableOpacity>
-                </View>
-            )}
-       </View>
-
        {user ? (
             <View style={{flex: 1}}>
+                
+                {/* HEADER ACTIONS (Aligné à droite) */}
+                <View style={styles.navHeader}>
+                    <View style={{flex: 1}} /> {/* Spacer pour pousser à droite */}
+                    <View style={styles.topRightActions}>
+                        <TouchableOpacity onPress={handleEditProfile} style={styles.iconBtn}>
+                            <Settings color="#000" size={24} />
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={handleSignOut} style={styles.iconBtn}>
+                            <LogOut color="#000" size={24} />
+                        </TouchableOpacity>
+                    </View>
+                </View>
+
+                {/* CARTE D'IDENTITÉ (Plus haute, aérée) */}
                 <View style={styles.profileCard}>
                     <View style={styles.profileRow}>
                         <View style={styles.avatarContainer}>
                             {profile?.avatar_url ? (
                                 <Image source={{uri: profile.avatar_url}} style={styles.avatar} />
                             ) : (
-                                <View style={[styles.avatar, styles.avatarPlaceholder]}><User size={32} color="#666" /></View>
+                                <View style={[styles.avatar, styles.avatarPlaceholder]}><User size={40} color="#666" /></View>
                             )}
                         </View>
+                        
                         <View style={styles.textsContainer}>
                             <Text style={styles.displayName}>{profile?.display_name || "Anonyme"}</Text>
                             <Text style={styles.bio}>{profile?.bio || "Chasseur de nuages."}</Text>
-                            <View style={styles.miniStats}>
-                                <Text style={styles.miniStatText}>{drawingCount} <Text style={styles.miniStatLabel}>dessins</Text></Text>
-                                <Text style={styles.miniStatText}>•</Text>
-                                <Text style={styles.miniStatText}>{totalLikes} <Text style={styles.miniStatLabel}>likes</Text></Text>
-                            </View>
                         </View>
                     </View>
+                    {/* Ligne de séparation plus bas pour donner de l'espace */}
                     <View style={styles.divider} />
                 </View>
 
+                {/* GALERIE */}
                 <FlatList
-                    data={historyItems} // On utilise la liste fusionnée
+                    data={userDrawings}
                     renderItem={renderItem}
                     keyExtractor={(item) => item.id}
                     numColumns={2}
@@ -195,12 +130,17 @@ export default function ProfilePage() {
                     contentContainerStyle={{ paddingBottom: 50 }}
                     showsVerticalScrollIndicator={false}
                     ListEmptyComponent={
-                        <View style={styles.emptyState}><Text style={styles.emptyText}>Chargement de l'historique...</Text></View>
+                        <View style={styles.emptyState}><Text style={styles.emptyText}>Aucun dessin pour l'instant.</Text></View>
                     }
                 />
             </View>
        ) : (
+            // FORMULAIRE (Inchangé)
             <View style={styles.formContainer}>
+                <TouchableOpacity onPress={() => router.back()} style={styles.closeLoginBtn}>
+                     <X color="#000" size={28} />
+                </TouchableOpacity>
+                
                 <Text style={styles.welcomeText}>Connecte-toi.</Text>
                 <View style={styles.inputWrapper}><Mail size={20} color="#999" style={styles.inputIcon}/><TextInput placeholder="Email" value={email} onChangeText={setEmail} autoCapitalize="none" style={styles.input} /></View>
                 <View style={styles.inputWrapper}><Lock size={20} color="#999" style={styles.inputIcon}/><TextInput placeholder="Mot de passe" value={password} onChangeText={setPassword} secureTextEntry style={styles.input} /></View>
@@ -211,6 +151,7 @@ export default function ProfilePage() {
             </View>
        )}
 
+       {/* MODALE ZOOM */}
        <Modal animationType="slide" transparent={false} visible={selectedDrawing !== null} onRequestClose={() => setSelectedDrawing(null)}>
             {selectedDrawing && (
                 <View style={styles.modalContainer}>
@@ -222,6 +163,7 @@ export default function ProfilePage() {
                             imageUri={selectedDrawing.cloud_image_url}
                             canvasData={isHolding ? [] : selectedDrawing.canvas_data}
                             viewerSize={screenWidth}
+                            transparentMode={false} // On voit le fond
                             startVisible={false} animated={true}
                         />
                     </Pressable>
@@ -240,23 +182,39 @@ export default function ProfilePage() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFF' },
-  navHeader: { paddingTop: 60, paddingBottom: 10, paddingHorizontal: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FFF', zIndex: 10 },
+  
+  // NAV HEADER (Juste les actions à droite)
+  navHeader: { 
+      paddingTop: 20, // Moins de padding car dans une modale native, le header est déjà safe
+      paddingBottom: 10, 
+      paddingHorizontal: 20, 
+      flexDirection: 'row', 
+      alignItems: 'center', 
+      backgroundColor: '#FFF',
+  },
   iconBtn: { padding: 5 },
   topRightActions: { flexDirection: 'row', gap: 15 },
   
-  profileCard: { paddingHorizontal: 20, paddingBottom: 10, backgroundColor: '#FFF' },
-  profileRow: { flexDirection: 'row', alignItems: 'center', gap: 20 },
-  avatar: { width: 80, height: 80, borderRadius: 40 },
-  avatarPlaceholder: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#F5F5F5', justifyContent: 'center', alignItems: 'center' },
+  // PROFIL CARD (Plus haute et aérée)
+  profileCard: { 
+      paddingHorizontal: 25, 
+      paddingTop: 20, // Espace au dessus
+      paddingBottom: 10, 
+      backgroundColor: '#FFF' 
+  },
+  profileRow: { flexDirection: 'row', alignItems: 'center', gap: 25 },
+  avatar: { width: 90, height: 90, borderRadius: 45 }, // Avatar un peu plus grand
+  avatarPlaceholder: { width: 90, height: 90, borderRadius: 45, backgroundColor: '#F5F5F5', justifyContent: 'center', alignItems: 'center' },
+  
   textsContainer: { flex: 1, justifyContent: 'center' },
-  displayName: { fontSize: 22, fontWeight: '900', color: '#000', marginBottom: 4 },
-  bio: { fontSize: 14, color: '#666', marginBottom: 8 },
-  miniStats: { flexDirection: 'row', gap: 10 },
-  miniStatText: { fontSize: 14, fontWeight: '700', color: '#000' },
-  miniStatLabel: { fontWeight: '400', color: '#999' },
-  divider: { width: '100%', height: 1, backgroundColor: '#F0F0F0', marginTop: 20, marginBottom: 10 },
+  displayName: { fontSize: 26, fontWeight: '900', color: '#000', marginBottom: 8 },
+  bio: { fontSize: 15, color: '#666', lineHeight: 22 },
 
+  divider: { width: '100%', height: 1, backgroundColor: '#F0F0F0', marginTop: 35, marginBottom: 15 }, // Marge augmentée
+
+  // FORMULAIRE
   formContainer: { flex: 1, paddingHorizontal: 30, justifyContent: 'center', marginTop: -50 },
+  closeLoginBtn: { position: 'absolute', top: 60, left: 20, zIndex: 10 },
   welcomeText: { fontSize: 24, fontWeight: '800', marginBottom: 30, textAlign: 'center' },
   inputWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F5F5F5', borderRadius: 12, paddingHorizontal: 15, marginBottom: 15, height: 50 },
   inputIcon: { marginRight: 10 },
@@ -266,19 +224,11 @@ const styles = StyleSheet.create({
   switchText: { textAlign: 'center', marginTop: 20, color: '#666', fontSize: 14 },
   emptyState: { marginTop: 50, alignItems: 'center' },
   emptyText: { color: '#999' },
+
+  // MODALE
   modalContainer: { flex: 1, backgroundColor: '#FFF' },
   modalHeader: { width: '100%', height: 100, justifyContent: 'flex-end', alignItems: 'flex-end', paddingRight: 20, paddingBottom: 10, backgroundColor: '#FFF', zIndex: 20 },
   closeModalBtn: { padding: 5 },
   modalFooter: { padding: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#F0F0F0', marginTop: 10 },
   drawingLabel: { fontSize: 20, fontWeight: '800', color: '#000' },
-
-  // STYLE MISSED
-  missedBadge: {
-      position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-      backgroundColor: 'rgba(0,0,0,0.3)', // Voile sombre
-      justifyContent: 'center', alignItems: 'center',
-  },
-  missedText: {
-      color: '#FFF', fontWeight: '800', marginTop: 5, fontSize: 14
-  }
 });
