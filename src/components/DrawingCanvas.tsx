@@ -3,14 +3,11 @@ import { StyleSheet, View, Platform, Text, Dimensions, PanResponder, ActivityInd
 import {
   Canvas, Path, useImage, Image as SkiaImage, Group, Skia, SkPath
 } from '@shopify/react-native-skia';
-// IMPORT RÉACTIVÉ POUR LE BUILD V15
-import { captureRef } from 'react-native-view-shot';
 
 // ---------------------------------------------------------
-// VERSION V17 (COMPLETE) - PRÊTE POUR LE BUILD V15
-// - Moteur : PanResponder (Stable)
-// - Capture : ViewShot (Activé)
-// - Dessin : Vectoriel + Lissage
+// VERSION V19 - DATA FIX
+// - Correction critique : getPaths renvoie maintenant l'OBJET complet (Path + Couleur + Taille)
+// - Cela va réparer l'affichage invisible dans le Feed
 // ---------------------------------------------------------
 
 interface DrawingCanvasProps {
@@ -25,7 +22,7 @@ export interface DrawingCanvasRef {
   clearCanvas: () => void;
   undo: () => void;
   redo: () => void;
-  getPaths: () => string[];
+  getPaths: () => DrawingPath[]; // On renvoie des objets DrawingPath, pas des strings !
   getSnapshot: () => Promise<string | undefined>;
 }
 
@@ -39,15 +36,13 @@ interface DrawingPath {
 export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
   ({ imageUri, strokeColor, strokeWidth, isEraserMode }, ref) => {
     
-    if (Platform.OS === 'web') {
-      return <View style={styles.webPlaceholder}><Text style={styles.webText}>Mobile Only</Text></View>;
-    }
+    if (Platform.OS === 'web') return <View/>;
 
     const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
     const image = useImage(imageUri);
     
-    // Ref pour la capture d'écran (ViewShot)
-    const viewShotRef = useRef<View>(null);
+    // On retire la ref ViewShot pour l'instant (Plan C actif)
+    // const viewShotRef = useRef<View>(null);
 
     const [paths, setPaths] = useState<DrawingPath[]>([]);
     const [redoStack, setRedoStack] = useState<DrawingPath[]>([]);
@@ -86,24 +81,14 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
             return newStack;
         });
       },
-      getPaths: () => paths.map(p => p.svgPath),
       
-      // --- FONCTION DE CAPTURE ---
-      getSnapshot: async () => {
-          try {
-              console.log("📸 Capture via ViewShot lancée...");
-              const result = await captureRef(viewShotRef, {
-                  format: "png",
-                  quality: 0.8,
-                  result: "base64"
-              });
-              return result;
-          } catch (error) {
-              console.error("❌ Erreur ViewShot", error);
-              return undefined;
-          }
-      }
-    }));
+      // 👇 C'EST ICI LA CORRECTION MAJEURE 👇
+      // Avant : paths.map(p => p.svgPath) -> Renvoie ["M...", "M..."] (Perte de couleur)
+      // Après : paths -> Renvoie [{svgPath:"...", color:"red"}, ...] (Tout est là)
+      getPaths: () => paths,
+      
+      getSnapshot: async () => { return undefined; } // Désactivé pour Plan C
+    }), [paths]);
 
     // --- INITIALISATION ---
     if (image && !isInitialized.current) {
@@ -203,8 +188,8 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
             if(lastPoint.current) currentPathObj.lineTo(lastPoint.current.x, lastPoint.current.y);
             setPaths(prev => [...prev, {
                 svgPath: currentPathObj.toSVGString(),
-                color: strokeColor,
-                width: strokeWidth,
+                color: strokeColor, // On sauve la couleur !
+                width: strokeWidth, // On sauve l'épaisseur !
                 isEraser: isEraserMode
             }]);
             setRedoStack([]);
@@ -225,8 +210,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
     const DISPLAY_SIZE = squareSizeRef.current;
 
     return (
-      // REF VIEWSHOT ATTACHÉE ICI
-      <View ref={viewShotRef} collapsable={false} style={styles.container} {...panResponder.panHandlers}>
+      <View style={styles.container} {...panResponder.panHandlers}>
         <Canvas style={{ flex: 1 }} pointerEvents="none">
           <Group transform={skiaTransform}>
             <SkiaImage image={image} x={0} y={0} width={DISPLAY_SIZE} height={DISPLAY_SIZE} fit="cover" />
