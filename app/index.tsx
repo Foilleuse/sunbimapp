@@ -65,11 +65,21 @@ export default function DrawPage() {
   const handleRedo = () => canvasRef.current?.redo();
   const toggleEraser = () => setIsEraserMode((prev) => !prev);
 
-  const handleShare = async () => {
+ const handleShare = async () => {
     if (!canvasRef.current) return;
     
     try {
         const pathsData = canvasRef.current.getPaths();
+        
+        // --- DEBUG ---
+        if (pathsData.length > 0) {
+             console.log("🛑 ANALYSE DU DESSIN :");
+             const firstPath = pathsData[0].svgPath;
+             console.log("1. Exemple de trait (SVG):", firstPath.substring(0, 100) + "...");
+             // Si les chiffres dans le SVG sont petits (ex: "M 20 50"), c'est un problème d'échelle.
+             // Sur une photo, on attend des chiffres comme "M 500 1200".
+        }
+        // -------------
         
         if (!pathsData || pathsData.length === 0) {
             Alert.alert("Oups", "Dessine quelque chose avant de partager !");
@@ -90,11 +100,11 @@ export default function DrawPage() {
 
         if (dbError) throw dbError;
 
-        Alert.alert("Succès !", "Ton œuvre est sauvegardée dans le cloud ☁️");
+        Alert.alert("Succès !", "Sauvegardé avec succès");
         router.push('/feed');
         
     } catch (e: any) {
-        Alert.alert("Erreur", "Echec de la sauvegarde: " + e.message);
+        Alert.alert("Erreur", e.message);
     }
   };
 
