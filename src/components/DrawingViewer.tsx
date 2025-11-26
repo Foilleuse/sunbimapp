@@ -1,6 +1,6 @@
 import React, { useMemo, useEffect } from 'react';
 import { View, StyleSheet, Dimensions, ActivityIndicator } from 'react-native';
-import { Canvas, Path, Image as SkiaImage, useImage, Group, Skia, rect } from '@shopify/react-native-skia';
+import { Canvas, Path, Image as SkiaImage, useImage, Group, Skia } from '@shopify/react-native-skia';
 import { useSharedValue, withTiming, Easing } from 'react-native-reanimated';
 
 interface DrawingViewerProps {
@@ -10,7 +10,7 @@ interface DrawingViewerProps {
   transparentMode?: boolean;
   animated?: boolean;
   startVisible?: boolean;
-  autoCenter?: boolean; // <--- L'INTERRUPTEUR MAGIQUE
+  autoCenter?: boolean; 
 }
 
 export const DrawingViewer: React.FC<DrawingViewerProps> = ({ 
@@ -20,13 +20,12 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
   transparentMode = false,
   animated = false,
   startVisible = true,
-  autoCenter = false // Par défaut : NON (pour protéger le Feed/Galerie)
+  autoCenter = false
 }) => {
   
-  const { width: screenWidth } = Dimensions.get('window');
   const image = useImage(imageUri || "https://via.placeholder.com/1000"); 
 
-  // --- ANIMATION ---
+  // --- MOTEUR D'ANIMATION ---
   const progress = useSharedValue(startVisible ? 1 : 0);
 
   useEffect(() => {
@@ -38,9 +37,9 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
     } else {
         progress.value = 1;
     }
-  }, [animated, startVisible, imageUri]);
+  }, [animated, startVisible]);
 
-  // 1. Parsing
+  // 1. PARSING
   const safePaths = useMemo(() => {
     let data = [];
     if (Array.isArray(canvasData)) data = canvasData;
@@ -50,21 +49,17 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
     return data;
   }, [canvasData]);
 
-  // 2. Calcul de la Matrice (C'est là que tout se joue)
+  // 2. CALCUL DE LA MATRICE UNIFIÉE
   const matrix = useMemo(() => {
       const m = Skia.Matrix();
-      
       if (!image) return m;
-      const NATIVE_SIZE = image.height();
-      if (NATIVE_SIZE === 0) return m;
+      const NATIVE_H = image.height();
+      const NATIVE_W = image.width();
+      if (NATIVE_H === 0) return m;
 
-      // Échelle de base (Cadrage Image normal)
-      const baseScale = viewerSize / NATIVE_SIZE;
-
-      // --- CAS SPÉCIAL : ANIMATION CENTRÉE (Seulement si demandé) ---
+      // --- CAS A : ANIMATION ZOOMÉE (Centrage sur le dessin) ---
       if (autoCenter && safePaths.length > 0) {
           try {
-              // On crée un chemin virtuel qui combine tous les traits pour trouver les limites
               const combinedPath = Skia.Path.Make();
               let valid = false;
               safePaths.forEach(p => {
@@ -76,57 +71,55 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
 
               if (valid) {
                   const bounds = combinedPath.getBounds();
-                  // Sécurité : On ne zoome que si le dessin a une taille réelle (> 10px)
                   if (bounds.width > 10 && bounds.height > 10) {
-                      const padding = 40; // Marge pour faire joli
+                      const padding = 40;
                       const targetSize = viewerSize - padding;
-                      
-                      // On calcule le zoom pour que le DESSIN (pas l'image) remplisse l'écran
-                      const scaleX = targetSize / bounds.width;
-                      const scaleY = targetSize / bounds.height;
-                      const focusScale = Math.min(scaleX, scaleY, 3); // Max zoom x3 pour pas pixeliser
+                      const focusScale = Math.min(targetSize / Math.max(bounds.width, bounds.height), 3); // Max zoom x3
 
-                      // On centre le dessin
                       const translateX = (viewerSize - bounds.width * focusScale) / 2 - bounds.x * focusScale;
                       const translateY = (viewerSize - bounds.height * focusScale) / 2 - bounds.y * focusScale;
 
                       m.translate(translateX, translateY);
                       m.scale(focusScale, focusScale);
-                      return m; // ON RENVOIE LA MATRICE CENTRÉE
+                      return m;
                   }
               }
-          } catch (e) { console.log("Erreur AutoCenter", e); }
+          } catch (e) {}
       }
 
-      // --- CAS STANDARD : CADRAGE NUAGE (Feed / Galerie) ---
-      // On aligne strictement sur l'image native
-      // Calcul du décalage pour centrer l'image si elle est rectangulaire
-      const NATIVE_W = image.width();
-      const offsetX = (NATIVE_W - NATIVE_SIZE) / 2;
+      // --- CAS B : MODE STANDARD (Feed / Galerie) ---
+      // On veut afficher un carré centré de l'image (H x H)
       
-      // On applique : Scale d'abord, puis translation pour recaler
-      m.scale(baseScale, baseScale);
-      // Pour compenser le décalage natif, on translate en coordonnées natives
-      m.translate(-offsetX, 0);
+      // 1. Facteur de zoom pour que la Hauteur Native devienne la Hauteur Écran
+      const fitScale = viewerSize / NATIVE_H;
+      
+      // 2. Calcul du décalage pour centrer horizontalement
+      // On veut que le centre de l'image native soit au centre de l'écran
+      // offset = (LargeurNative - HauteurNative) / 2
+      const cropOffsetX = (NATIVE_W - NATIVE_H) / 2;
+
+      // 3. Application de la matrice (Ordre inverse des opérations mathématiques)
+      // On scale tout
+      m.scale(fitScale, fitScale);
+      // On décale vers la gauche pour centrer le crop
+      m.translate(-cropOffsetX, 0);
       
       return m;
 
   }, [image, viewerSize, autoCenter, safePaths]);
 
-  // --- RENDU ---
   if (!image) {
     if (transparentMode) return <View style={{width: viewerSize, height: viewerSize}} />;
     return <View style={styles.loading}><ActivityIndicator color="#fff" /></View>;
   }
 
-  // Récupération du scale actuel pour l'épaisseur
+  // Facteur d'échelle actuel (approximatif pour l'épaisseur)
   const currentScale = matrix.get()[0] || 1;
-  const NATIVE_W = image.width();
-  const NATIVE_H = image.height();
 
   return (
     <View style={[styles.container, {width: viewerSize, height: viewerSize, overflow: 'hidden'}]}>
       <Canvas style={{ flex: 1 }}>
+        {/* TOUT LE MONDE DANS LE MÊME GROUPE -> SYNCHRO PARFAITE */}
         <Group matrix={matrix}>
           
           {/* IMAGE DE FOND */}
@@ -134,8 +127,8 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
               <SkiaImage
                 image={image}
                 x={0} y={0}
-                width={NATIVE_W} height={NATIVE_H}
-                fit="none"
+                width={image.width()} height={image.height()}
+                fit="none" // On laisse la matrice gérer le placement
               />
           )}
           
