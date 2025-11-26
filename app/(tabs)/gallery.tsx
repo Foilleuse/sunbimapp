@@ -2,27 +2,25 @@ import { View, Text, StyleSheet, FlatList, Dimensions, TouchableOpacity, Activit
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
-import { useFocusEffect } from 'expo-router'; // Pour rafraîchir quand on arrive sur l'onglet
+import { useFocusEffect } from 'expo-router';
 
 export default function GalleryPage() {
     const [drawings, setDrawings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
 
-    // Calculs pour la grille (2 colonnes avec un petit espace)
+    // Calculs pour la grille (Carrés parfaits)
     const { width: screenWidth } = Dimensions.get('window');
-    const SPACING = 2; // Espace blanc entre les images
-    // La taille d'un carré = (Largeur écran - l'espace du milieu) / 2
-    const ITEM_SIZE = (screenWidth - SPACING) / 2;
+    const SPACING = 1; // Espace très fin pour effet mosaïque
+    const ITEM_SIZE = (screenWidth - SPACING) / 2; // 2 colonnes
 
-    // Fonction de chargement
     const fetchGallery = async () => {
         try {
             const { data, error } = await supabase
                 .from('drawings')
                 .select('*')
                 .order('created_at', { ascending: false })
-                .limit(50); // On charge les 50 derniers
+                .limit(50); 
 
             if (error) throw error;
             setDrawings(data || []);
@@ -34,16 +32,10 @@ export default function GalleryPage() {
         }
     };
 
-    // Charge au démarrage
-    useEffect(() => {
-        fetchGallery();
-    }, []);
+    useEffect(() => { fetchGallery(); }, []);
 
-    // Re-charge à chaque fois qu'on clique sur l'onglet Galerie (pour voir les nouveaux)
     useFocusEffect(
-        useCallback(() => {
-            fetchGallery();
-        }, [])
+        useCallback(() => { fetchGallery(); }, [])
     );
 
     const onRefresh = () => {
@@ -51,19 +43,21 @@ export default function GalleryPage() {
         fetchGallery();
     };
 
-    // Le rendu d'une seule tuile (Vignette)
     const renderItem = ({ item }: { item: any }) => (
         <TouchableOpacity 
-            style={{ width: ITEM_SIZE, height: ITEM_SIZE, marginBottom: SPACING }}
             activeOpacity={0.9}
-            // Plus tard: onPress={() => ouvrirDetail(item)}
+            style={{ 
+                width: ITEM_SIZE, 
+                height: ITEM_SIZE, // Carré strict
+                marginBottom: SPACING,
+                backgroundColor: '#EEE' // Fond gris le temps que ça charge
+            }}
         >
-            {/* On réutilise le viewer en mode 'miniature' */}
             <DrawingViewer
                 imageUri={item.cloud_image_url}
                 canvasData={item.canvas_data}
                 viewerSize={ITEM_SIZE}
-                transparentMode={false} // On veut voir le nuage en fond
+                transparentMode={false}
             />
         </TouchableOpacity>
     );
@@ -71,32 +65,28 @@ export default function GalleryPage() {
     return (
         <View style={styles.container}>
             
-            {/* HEADER (Style unifié) */}
+            {/* HEADER IDENTIQUE AU FEED (Sunbim) */}
             <View style={styles.headerBar}>
-                <Text style={styles.headerText}>galerie</Text>
+                <Text style={styles.headerText}>sunbim</Text>
             </View>
 
-            {/* GRILLE */}
             {loading && !refreshing ? (
-                <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color="#000" />
-                </View>
+                <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#000" /></View>
             ) : (
                 <FlatList
                     data={drawings}
                     renderItem={renderItem}
                     keyExtractor={(item) => item.id}
-                    numColumns={2} // LA CLÉ : 2 Colonnes
-                    columnWrapperStyle={{ gap: SPACING }} // Espace horizontal
-                    contentContainerStyle={{ paddingBottom: 100 }} // Espace pour scroller en bas
+                    numColumns={2}
+                    columnWrapperStyle={{ gap: SPACING }}
+                    contentContainerStyle={{ paddingBottom: 100, paddingTop: 0 }}
                     showsVerticalScrollIndicator={false}
                     refreshControl={
                         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#000"/>
                     }
                     ListEmptyComponent={
                         <View style={styles.emptyState}>
-                            <Text style={styles.emptyText}>La galerie est vide.</Text>
-                            <Text style={styles.emptySubText}>Poste le premier dessin !</Text>
+                            <Text style={styles.emptyText}>Galerie vide.</Text>
                         </View>
                     }
                 />
@@ -116,7 +106,7 @@ const styles = StyleSheet.create({
         alignItems: 'center'
     },
     
-    // HEADER
+    // --- HEADER STYLE FEED/INDEX ---
     headerBar: {
         width: '100%',
         backgroundColor: '#FFFFFF', 
@@ -124,31 +114,22 @@ const styles = StyleSheet.create({
         paddingBottom: 15,
         alignItems: 'center',
         justifyContent: 'center',
-        borderBottomWidth: 1,
-        borderBottomColor: '#F0F0F0',
         zIndex: 10,
+        // Pas de bordure pour garder le style épuré
     },
     headerText: {
-        fontSize: 24, // Un peu plus petit que l'accueil pour la hiérarchie
+        fontSize: 32, 
         fontWeight: '900',
-        color: '#000',
-        letterSpacing: -0.5,
+        // Blanc sur Blanc ? Non, le client veut "le même que le feed".
+        // Sur le feed on avait mis Blanc + Ombre. Ici le fond est blanc.
+        // Option A : Noir pur (plus lisible).
+        // Option B : Blanc avec ombre (style signature).
+        // Je mets NOIR ici pour la lisibilité sur fond blanc, sinon c'est invisible.
+        // Si tu veux vraiment blanc+ombre sur fond blanc, dis le moi.
+        color: '#000000', 
+        letterSpacing: -1,
     },
 
-    // EMPTY STATE
-    emptyState: {
-        marginTop: 100,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    emptyText: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#333'
-    },
-    emptySubText: {
-        fontSize: 14,
-        color: '#999',
-        marginTop: 5
-    }
+    emptyState: { marginTop: 100, alignItems: 'center' },
+    emptyText: { color: '#999' }
 });

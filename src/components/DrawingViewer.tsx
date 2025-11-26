@@ -19,42 +19,39 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
   const { width: screenWidth } = Dimensions.get('window');
   const image = useImage(imageUri || ""); 
 
-  // 1. Parsing sécurisé des données
+  // 1. Parsing
   const safePaths = useMemo(() => {
     let data = [];
-    if (Array.isArray(canvasData)) {
-        data = canvasData;
-    } else if (typeof canvasData === 'string') {
+    if (Array.isArray(canvasData)) data = canvasData;
+    else if (typeof canvasData === 'string') {
         try { data = JSON.parse(canvasData); } catch (e) { data = []; }
     }
     return data;
   }, [canvasData]);
 
-  // 2. Calcul du Zoom (1:1 Carré)
+  // 2. Calcul du Zoom (1:1 Carré Strict)
   const transform = useMemo(() => {
     if (!image) return { scale: 1, translateX: 0, translateY: 0 };
     
-    const CANVAS_SIZE = image.height(); // Référence : Hauteur native
-    if (CANVAS_SIZE === 0) return { scale: 1, translateX: 0, translateY: 0 };
+    // On prend la plus petite dimension pour créer un carré central
+    // (Ou on se base sur la hauteur comme avant, mais on force le cover)
+    const NATIVE_SIZE = Math.min(image.width(), image.height()); 
+    if (NATIVE_SIZE === 0) return { scale: 1, translateX: 0, translateY: 0 };
 
-    // On adapte l'image native pour qu'elle rentre dans le viewerSize
-    const fitScale = viewerSize / CANVAS_SIZE;
+    const fitScale = viewerSize / NATIVE_SIZE;
     
-    const imgW = image.width ? image.width() : CANVAS_SIZE;
-    const visualWidth = imgW * fitScale;
-    const centerTx = (screenWidth - visualWidth) / 2;
+    // On centre l'image native dans notre viewer carré
+    const centerTx = (viewerSize - (image.width() * fitScale)) / 2;
+    const centerTy = (viewerSize - (image.height() * fitScale)) / 2;
 
-    return { scale: fitScale, translateX: centerTx, translateY: 0 };
-  }, [image, screenWidth, viewerSize]);
+    return { scale: fitScale, translateX: centerTx, translateY: centerTy };
+  }, [image, viewerSize]);
 
   if (!image) {
     if (transparentMode) return <View style={{width: viewerSize, height: viewerSize}} />;
     return <View style={styles.loading}><ActivityIndicator color="#fff" /></View>;
   }
 
-  const CANVAS_H = image.height();
-  const CANVAS_W = image.width();
-  
   const matrix = [
       { translateX: transform.translateX },
       { translateY: transform.translateY },
@@ -62,42 +59,39 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
   ];
 
   return (
-    <View style={[styles.container, {width: viewerSize, height: viewerSize}]}>
+    <View style={[styles.container, {width: viewerSize, height: viewerSize, overflow: 'hidden'}]}>
       <Canvas style={{ flex: 1 }}>
         <Group transform={matrix}>
           
-          {/* A. IMAGE DE FOND (Si pas transparent) */}
           {!transparentMode && (
               <SkiaImage
                 image={image}
                 x={0} y={0}
-                width={CANVAS_W} height={CANVAS_H}
-                fit="cover"
+                width={image.width()} height={image.height()}
+                fit="cover" // Remplit tout l'espace dispo
               />
           )}
           
-          {/* B. DESSINS */}
           <Group layer={true}> 
           {safePaths.map((p: any, index: number) => {
              if (!p || !p.svgPath) return null;
-             
              try {
                  const path = Skia.Path.MakeFromSVGString(p.svgPath);
                  if (!path) return null;
                  
-                 // RESTAURATION DE L'ÉPAISSEUR RELATIVE
-                 // On s'assure que le trait est visible même après dézoom
-                 const baseWidth = p.width || 6;
-                 const adjustedWidth = baseWidth / transform.scale; 
-                 
+                 // --- CORRECTION MAJEURE : Mode Proportionnel ---
+                 // On utilise p.width brut. Comme on est dans un <Group> qui a un scale,
+                 // l'épaisseur sera réduite automatiquement avec l'image.
+                 // C'est ce qui rend les miniatures nettes.
+                 const width = p.width || 6;
+
                  return (
                    <Path
                      key={index}
                      path={path}
-                     // RESTAURATION DES VRAIES COULEURS
                      color={p.isEraser ? "#000000" : (p.color || "#000000")}
                      style="stroke"
-                     strokeWidth={adjustedWidth} 
+                     strokeWidth={width} 
                      strokeCap="round"
                      strokeJoin="round"
                      blendMode={p.isEraser ? "clear" : "srcOver"}
@@ -114,5 +108,5 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
 
 const styles = StyleSheet.create({
   container: { backgroundColor: 'transparent' },
-  loading: { flex: 1, justifyContent: 'center', alignItems: 'center' }
+  loading: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F0F0F0' }
 });
