@@ -30,16 +30,15 @@ export default function DrawPage() {
   const [tagText, setTagText] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   
+  // L'état pour déclencher le replay
   const [replayPaths, setReplayPaths] = useState<any[] | null>(null);
   
+  // Animations
   const fadeWhiteAnim = useRef(new Animated.Value(0)).current; 
   const drawingOpacityAnim = useRef(new Animated.Value(1)).current; 
   const textOpacityAnim = useRef(new Animated.Value(0)).current; 
 
   const canvasRef = useRef<DrawingCanvasRef>(null);
-
-  // --- SÉCURITÉ SUR L'UPDATE ID ---
-  // On vérifie si Updates existe et si updateId est défini
   const updateLabel = (Updates && Updates.updateId) ? `v.${Updates.updateId.substring(0, 6)}` : '';
 
   useEffect(() => {
@@ -50,12 +49,7 @@ export default function DrawPage() {
     try {
       setLoading(true);
       setError(null);
-      // Si supabase n'est pas init, on ignore l'erreur pour l'instant et on continue (pour éviter le crash)
-      if (!supabase) {
-          console.warn('Supabase not init');
-          setLoading(false);
-          return;
-      }
+      if (!supabase) { setLoading(false); return; }
 
       const today = new Date().toISOString().split('T')[0];
       const { data, error: fetchError } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();
@@ -88,9 +82,9 @@ export default function DrawPage() {
     setModalVisible(true);
   };
 
+  // --- LE SCÉNARIO CINÉMATIQUE ---
   const confirmShare = async () => {
     if (!canvasRef.current || !cloud || !user) return;
-    
     const finalTag = tagText.trim();
     if (finalTag.length === 0) return;
 
@@ -99,6 +93,7 @@ export default function DrawPage() {
     try {
         const pathsData = canvasRef.current.getPaths();
         
+        // 1. Sauvegarde
         const { error: dbError } = await supabase
             .from('drawings')
             .insert({
@@ -110,21 +105,31 @@ export default function DrawPage() {
 
         setModalVisible(false);
 
+        // 2. Fondu au Blanc
         Animated.timing(fadeWhiteAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start(() => {
             
+            // 3. Lancement du Replay (Affiche le Viewer par dessus le Canvas)
             setReplayPaths(pathsData); 
             
+            // 4. Attente du tracé (1.5s) + Pause
             setTimeout(() => {
+                
+                // 5. Apparition du Titre
                 Animated.timing(textOpacityAnim, { toValue: 1, duration: 800, useNativeDriver: true }).start();
 
+                // 6. Admiration (2.5s)
                 setTimeout(() => {
+                    
+                    // 7. Tout s'efface vers le blanc
                     Animated.parallel([
                         Animated.timing(drawingOpacityAnim, { toValue: 0, duration: 800, useNativeDriver: true }),
                         Animated.timing(textOpacityAnim, { toValue: 0, duration: 800, useNativeDriver: true })
                     ]).start(() => {
                         
+                        // 8. Changement de page invisible
                         router.replace('/(tabs)/feed');
                         
+                        // 9. Nettoyage
                         setTimeout(() => {
                             fadeWhiteAnim.setValue(0);
                             drawingOpacityAnim.setValue(1);
@@ -156,17 +161,18 @@ export default function DrawPage() {
       
       <View style={styles.header}>
         <Text style={styles.headerText}>sunbim</Text>
-        {/* Affichage conditionnel du numéro de version */}
         {updateLabel ? <Text style={styles.versionText}>{updateLabel}</Text> : null}
       </View>
 
       <View style={styles.canvasContainer}>
+        {/* Si replay, on affiche le Viewer Animé, sinon le Canvas Interactif */}
         {replayPaths ? (
             <DrawingViewer 
                 imageUri={cloud.image_url}
                 canvasData={replayPaths}
                 viewerSize={screenWidth}
                 transparentMode={false} 
+                // C'est ici qu'on active la magie :
                 animated={true}
                 startVisible={false}
             />
@@ -208,6 +214,7 @@ export default function DrawPage() {
         </KeyboardAvoidingView>
       </Modal>
 
+      {/* LE VOILE BLANC */}
       <Animated.View 
         pointerEvents="none"
         style={[
@@ -223,12 +230,13 @@ export default function DrawPage() {
       >
           {replayPaths && (
               <Animated.View style={{ opacity: drawingOpacityAnim, width: screenWidth, alignItems: 'center' }}>
+                  {/* On affiche le viewer DANS le voile blanc pour l'effet "Papier" */}
                   <View style={{ height: screenWidth, width: screenWidth }}>
                     <DrawingViewer 
                         imageUri={cloud.image_url}
                         canvasData={replayPaths}
                         viewerSize={screenWidth}
-                        transparentMode={true} 
+                        transparentMode={true} // Transparent = Fond Blanc du voile
                         animated={true}
                         startVisible={false}
                     />
@@ -238,7 +246,6 @@ export default function DrawPage() {
                       <Text style={styles.finalTitle}>"{tagText}"</Text>
                       <Text style={styles.finalSubtitle}>Envoyé au ciel</Text>
                   </Animated.View>
-
               </Animated.View>
           )}
       </Animated.View>
