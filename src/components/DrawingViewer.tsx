@@ -1,142 +1,123 @@
 import React, { useMemo, useEffect } from 'react';
-import { View, StyleSheet, Dimensions, ActivityIndicator } from 'react-native';
-import { Canvas, Path, Image as SkiaImage, useImage, Group, Skia } from '@shopify/react-native-skia';
-import { useSharedValue, withTiming, Easing } from 'react-native-reanimated';
+import { Canvas, Path, Skia, useValue, runTiming, Easing } from '@shopify/react-native-skia';
+import { Image } from 'react-native';
 
 interface DrawingViewerProps {
-  imageUri: string;
-  canvasData: any; 
+  imageUri?: string | null;
+  canvasData: any[];
   viewerSize: number;
   transparentMode?: boolean;
-  animated?: boolean;     // Pour déclencher le tracé
-  startVisible?: boolean; // Pour décider si on voit le dessin direct ou pas
+  animated?: boolean;
+  startVisible?: boolean;
+  // NOUVELLE OPTION : Pour centrer et zoomer automatiquement le dessin
+  autoCenterAndScale?: boolean;
 }
 
-export const DrawingViewer: React.FC<DrawingViewerProps> = ({ 
-  imageUri, 
-  canvasData, 
-  viewerSize, 
+export const DrawingViewer: React.FC<DrawingViewerProps> = ({
+  imageUri,
+  canvasData,
+  viewerSize,
   transparentMode = false,
   animated = false,
-  startVisible = true // Par défaut (Galerie), c'est visible tout de suite
+  startVisible = true,
+  autoCenterAndScale = false, // Par défaut désactivé (pour la galerie, le feed...)
 }) => {
-  
-  const { width: screenWidth } = Dimensions.get('window');
-  // Image de fallback pour éviter le crash si URI vide
-  const image = useImage(imageUri || "https://via.placeholder.com/1000"); 
-
-  // --- MOTEUR D'ANIMATION ---
-  const progress = useSharedValue(startVisible ? 1 : 0);
+  // Valeur d'animation (de 0 à 1)
+  const progress = useValue(startVisible ? 1 : 0);
 
   useEffect(() => {
     if (animated) {
-        // Si on anime : on part de 0 et on va à 1
-        progress.value = 0;
-        progress.value = withTiming(1, { 
-            duration: 1500, // 1.5 secondes
-            easing: Easing.out(Easing.cubic) 
-        });
-    } else if (!startVisible) {
-        // Si pas animé et pas censé être visible (Feed en attente) -> 0
-        progress.value = 0; 
+      // Reset si on doit rejouer
+      if (!startVisible) progress.current = 0;
+        
+      // Lancement de l'animation fluide
+      runTiming(progress, 1, {
+        duration: 2500, // Durée un peu plus longue pour apprécier le zoom
+        easing: Easing.inOut(Easing.ease),
+      });
     } else {
-        // Si pas animé et censé être visible (Galerie) -> 1
-        progress.value = 1;
+      // Si pas animé, on fixe la visibilité selon la prop
+      progress.current = startVisible ? 1 : 0;
     }
-  }, [animated, startVisible, imageUri]);
+  }, [animated, canvasData, startVisible]); // On relance si les données changent
 
-  // 1. Parsing sécurisé
-  const safePaths = useMemo(() => {
-    let data = [];
-    if (Array.isArray(canvasData)) data = canvasData;
-    else if (typeof canvasData === 'string') {
-        try { data = JSON.parse(canvasData); } catch (e) { data = []; }
+  const paths = useMemo(() => {
+    if (!canvasData || canvasData.length === 0) return [];
+
+    // 1. CALCUL DU CENTRAGE ET DU ZOOM (Si demandé)
+    let matrix = Skia.Matrix();
+    if (autoCenterAndScale) {
+        // Créer un chemin temporaire combinant TOUS les traits pour trouver les limites
+        const combinedPath = Skia.Path.Make();
+        canvasData.forEach(stroke => {
+            const p = Skia.Path.MakeFromSVGString(stroke.path);
+            if(p) combinedPath.addPath(p);
+        });
+
+        const bounds = combinedPath.getBounds();
+        
+        // Si le dessin existe et n'est pas minuscule
+        if (bounds.width > 1 && bounds.height > 1) {
+            const padding = 60; // Marge autour du dessin zoomé
+            const availableSize = viewerSize - padding;
+            
+            // On calcule le facteur de zoom (on prend le côté le plus grand pour que tout rentre)
+            const scale = availableSize / Math.max(bounds.width, bounds.height);
+
+            // On calcule le décalage pour centrer
+            const translateX = (viewerSize - bounds.width * scale) / 2 - bounds.x * scale;
+            const translateY = (viewerSize - bounds.height * scale) / 2 - bounds.y * scale;
+
+            // On crée la matrice de transformation
+            matrix.translate(translateX, translateY);
+            matrix.scale(scale, scale);
+        }
     }
-    return data;
-  }, [canvasData]);
 
-  // 2. Calcul du Zoom (Basé sur la hauteur pour le carré)
-  const transform = useMemo(() => {
-    if (!image) return { scale: 1, translateX: 0, translateY: 0 };
-    
-    const CANVAS_SIZE = image.height();
-    if (CANVAS_SIZE === 0) return { scale: 1, translateX: 0, translateY: 0 };
+    // 2. CRÉATION DES CHEMINS SKIA (Avec application de la matrice)
+    return canvasData.map((stroke) => {
+      const path = Skia.Path.MakeFromSVGString(stroke.path);
+      if (!path) return null;
 
-    const fitScale = viewerSize / CANVAS_SIZE;
-    return { scale: fitScale, translateX: 0, translateY: 0 };
-  }, [image, viewerSize]);
+      // Appliquer la transformation (zoom/centrage) si elle existe
+      if (autoCenterAndScale) {
+         path.transform(matrix);
+      }
 
-  if (!image) {
-    if (transparentMode) return <View style={{width: viewerSize, height: viewerSize}} />;
-    return <View style={styles.loading}><ActivityIndicator color="#fff" /></View>;
+      return {
+        path,
+        color: stroke.color,
+        width: stroke.width,
+      };
+    }).filter(p => p !== null) as any[];
+  }, [canvasData, viewerSize, autoCenterAndScale]);
+
+  if (!canvasData || canvasData.length === 0) {
+    if (transparentMode) return null;
+    return imageUri ? <Image source={{ uri: imageUri }} style={{ width: viewerSize, height: viewerSize }} /> : null;
   }
 
-  // Dimensions natives pour le crop manuel
-  const NATIVE_W = image.width();
-  const NATIVE_H = image.height();
-  const offsetX = (NATIVE_W - NATIVE_H) / 2;
-  const offsetY = 0;
-
-  const matrix = [
-      { translateX: transform.translateX },
-      { translateY: transform.translateY },
-      { scale: transform.scale }
-  ];
-
   return (
-    <View style={[styles.container, {width: viewerSize, height: viewerSize, overflow: 'hidden'}]}>
-      <Canvas style={{ flex: 1 }}>
-        <Group transform={matrix}>
-          
-          {/* IMAGE DE FOND (Centrée manuellement) */}
-          {!transparentMode && (
-              <SkiaImage
-                image={image}
-                x={-offsetX} y={-offsetY}
-                width={NATIVE_W} height={NATIVE_H}
-                fit="none"
-              />
-          )}
-          
-          {/* DESSINS */}
-          <Group layer={true}> 
-          {safePaths.map((p: any, index: number) => {
-             if (!p || !p.svgPath) return null;
-
-             try {
-                 const path = Skia.Path.MakeFromSVGString(p.svgPath);
-                 if (!path) return null;
-                 
-                 // ÉPAISSEUR PROPORTIONNELLE (Sans le test jaune)
-                 const baseWidth = p.width || 6;
-                 const adjustedWidth = (baseWidth / transform.scale) * 0.6; 
-                 
-                 return (
-                   <Path
-                     key={index}
-                     path={path}
-                     // VRAIES COULEURS
-                     color={p.isEraser ? "#000000" : (p.color || "#000000")}
-                     style="stroke"
-                     strokeWidth={adjustedWidth} 
-                     strokeCap="round"
-                     strokeJoin="round"
-                     blendMode={p.isEraser ? "clear" : "srcOver"}
-                     // ANIMATION
-                     start={0}
-                     end={progress} 
-                   />
-                 );
-             } catch (e) { return null; }
-          })}
-          </Group>
-        </Group>
-      </Canvas>
-    </View>
+    <Canvas style={{ width: viewerSize, height: viewerSize }}>
+      {/* Fond Image (si pas transparent) */}
+      {!transparentMode && imageUri && (
+        <Image image={Skia.Image.MakeImageFromEncoded(Skia.Data.fromUri(imageUri))} x={0} y={0} width={viewerSize} height={viewerSize} fit="cover" />
+      )}
+      
+      {/* Traits du dessin */}
+      {paths.map((stroke, index) => (
+        <Path
+          key={index}
+          path={stroke.path}
+          color={stroke.color}
+          style="stroke"
+          strokeWidth={stroke.width}
+          strokeCap="round"
+          strokeJoin="round"
+          // L'animation coupe le tracé
+          end={progress}
+        />
+      ))}
+    </Canvas>
   );
 };
-
-const styles = StyleSheet.create({
-  container: { backgroundColor: 'transparent' },
-  loading: { flex: 1, justifyContent: 'center', alignItems: 'center' }
-});
