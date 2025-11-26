@@ -1,38 +1,26 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import Constants from 'expo-constants';
+import { createClient } from '@supabase/supabase-js';
 import 'react-native-url-polyfill/auto';
+import { AppState } from 'react-native';
 
-const supabaseUrl =
-  process.env.EXPO_PUBLIC_SUPABASE_URL ||
-  Constants.expoConfig?.extra?.EXPO_PUBLIC_SUPABASE_URL ||
-  '';
+// ⚠️ COLLE TES VRAIES CLES ICI (Celles qui sont dans ton fichier .env)
+// Ne laisse pas process.env pour ce test !
+const SUPABASE_URL = "https://ton-projet.supabase.co";
+const SUPABASE_KEY = "eyJh......"; 
 
-const supabaseAnonKey =
-  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
-  Constants.expoConfig?.extra?.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
-  '';
+export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: {
+    storage: null, // On simplifie le storage pour éviter les conflits AsyncStorage
+    autoRefreshToken: true,
+    persistSession: false, // On désactive la persistance pour tester (évite les crashs de session corrompue)
+    detectSessionInUrl: false,
+  },
+});
 
-let supabaseInstance: SupabaseClient | null = null;
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('❌ Supabase config missing!');
-  console.error('URL:', supabaseUrl ? 'OK' : 'MISSING');
-  console.error('Key:', supabaseAnonKey ? 'OK' : 'MISSING');
-  console.error('⚠️ Supabase client will be NULL. App will show error in UI.');
-} else {
-  try {
-    supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
-      auth: {
-        storage: undefined,
-        autoRefreshToken: true,
-        persistSession: true,
-        detectSessionInUrl: false,
-      },
-    });
-    console.log('✅ Supabase client initialized successfully');
-  } catch (error) {
-    console.error('❌ Failed to create Supabase client:', error);
+// Petit écouteur pour rafraichir le token si l'app revient au premier plan
+AppState.addEventListener('change', (state) => {
+  if (state === 'active') {
+    supabase.auth.startAutoRefresh();
+  } else {
+    supabase.auth.stopAutoRefresh();
   }
-}
-
-export const supabase = supabaseInstance;
+});
