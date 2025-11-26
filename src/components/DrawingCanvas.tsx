@@ -5,9 +5,9 @@ import {
 } from '@shopify/react-native-skia';
 
 // ---------------------------------------------------------
-// VERSION V19 - DATA FIX
-// - Correction critique : getPaths renvoie maintenant l'OBJET complet (Path + Couleur + Taille)
-// - Cela va réparer l'affichage invisible dans le Feed
+// VERSION V20 - INFINITE CANVAS + FIT CONTAIN
+// - Initialisation : L'image s'adapte pour être vue en entier.
+// - Mouvement : Plus de limites, on peut déplacer l'image à l'infini.
 // ---------------------------------------------------------
 
 interface DrawingCanvasProps {
@@ -22,7 +22,7 @@ export interface DrawingCanvasRef {
   clearCanvas: () => void;
   undo: () => void;
   redo: () => void;
-  getPaths: () => DrawingPath[]; // On renvoie des objets DrawingPath, pas des strings !
+  getPaths: () => DrawingPath[];
   getSnapshot: () => Promise<string | undefined>;
 }
 
@@ -41,7 +41,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
     const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
     const image = useImage(imageUri);
     
-    // On retire la ref ViewShot pour l'instant (Plan C actif)
+    // Refs (ViewShot retiré pour le moment)
     // const viewShotRef = useRef<View>(null);
 
     const [paths, setPaths] = useState<DrawingPath[]>([]);
@@ -54,7 +54,6 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
     
     const isInitialized = useRef(false);
     const baseScaleRef = useRef(1);
-    const squareSizeRef = useRef<number>(1000); 
     
     const mode = useRef<'NONE' | 'WAITING' | 'DRAWING' | 'ZOOMING'>('NONE');
     const timer = useRef<NodeJS.Timeout | null>(null);
@@ -81,42 +80,46 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
             return newStack;
         });
       },
-      
-      // 👇 C'EST ICI LA CORRECTION MAJEURE 👇
-      // Avant : paths.map(p => p.svgPath) -> Renvoie ["M...", "M..."] (Perte de couleur)
-      // Après : paths -> Renvoie [{svgPath:"...", color:"red"}, ...] (Tout est là)
       getPaths: () => paths,
-      
-      getSnapshot: async () => { return undefined; } // Désactivé pour Plan C
+      getSnapshot: async () => { return undefined; }
     }), [paths]);
 
-    // --- INITIALISATION ---
+    // --- INITIALISATION (FIT CONTAIN - Voir toute l'image) ---
     if (image && !isInitialized.current) {
-        const SIZE = image.height(); 
-        squareSizeRef.current = SIZE;
-        const fitScale = screenHeight / SIZE;
+        const w = image.width();
+        const h = image.height();
+        
+        // On calcule le zoom pour que TOUTE l'image soit visible
+        const scaleW = screenWidth / w;
+        const scaleH = screenHeight / h;
+        const fitScale = Math.min(scaleW, scaleH); // <--- LA DIFFÉRENCE EST ICI (Min au lieu de Max)
+
         baseScaleRef.current = fitScale;
-        const visualWidth = SIZE * fitScale;
-        const centerTx = (screenWidth - visualWidth) / 2;
-        transform.current = { scale: fitScale, translateX: centerTx, translateY: 0 };
+        
+        // On centre l'image
+        const centerTx = (screenWidth - w * fitScale) / 2;
+        const centerTy = (screenHeight - h * fitScale) / 2;
+
+        transform.current = { scale: fitScale, translateX: centerTx, translateY: centerTy };
         isInitialized.current = true;
     }
 
-    // --- GESTIONNAIRE TACTILE ---
     const getDistance = (t1: any, t2: any) => {
         const dx = t1.pageX - t2.pageX;
         const dy = t1.pageY - t2.pageY;
         return Math.sqrt(dx*dx + dy*dy);
     };
-    const getCenter = (t1: any, t2: any) => ({ x: (t1.pageX+t2.pageX)/2, y: (t1.pageY+t2.pageY)/2 });
 
     const startZooming = (touches: any[]) => {
         mode.current = 'ZOOMING';
         setCurrentPathObj(null); lastPoint.current = null; forceUpdate();
         const t1 = touches[0]; const t2 = touches[1];
-        const dist = getDistance(t1, t2); const center = getCenter(t1, t2);
+        const dist = getDistance(t1, t2); 
+        const center = { x: (t1.pageX + t2.pageX) / 2, y: (t1.pageY + t2.pageY) / 2 };
+        
         const anchorX = (center.x - transform.current.translateX) / transform.current.scale;
         const anchorY = (center.y - transform.current.translateY) / transform.current.scale;
+        
         gestureStart.current = { dist, scale: transform.current.scale, focalX: center.x, focalY: center.y, imageAnchorX: anchorX, imageAnchorY: anchorY };
     };
 
@@ -137,6 +140,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
           const { locationX, locationY } = evt.nativeEvent;
           const x = (locationX - transform.current.translateX) / transform.current.scale;
           const y = (locationY - transform.current.translateY) / transform.current.scale;
+          
           const newPath = Skia.Path.Make(); newPath.moveTo(x, y);
           setCurrentPathObj(newPath); lastPoint.current = { x, y };
         }
@@ -144,14 +148,34 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
 
       onPanResponderMove: (evt, gestureState) => {
         const touches = evt.nativeEvent.touches;
-        if (touches.length === 2 && mode.current !== 'ZOOMING') {
-            startZooming(touches); return;
-        }
+        
+        if (touches.length === 2 && gestureStart.current) {
+            if (mode.current !== 'ZOOMING') { startZooming(touches); return; }
+            
+            const t1 = touches[0]; const t2 = touches[1];
+            const currentDist = getDistance(t1, t2); 
+            const currentCenter = { x: (t1.pageX + t2.pageX) / 2, y: (t1.pageY + t2.pageY) / 2 };
+            
+            const start = gestureStart.current;
+            const ratio = currentDist / start.dist;
+            
+            let newScale = start.scale * ratio;
+            newScale = Math.max(0.1, Math.min(newScale, 10)); 
 
-        if (mode.current === 'DRAWING' && touches.length === 1 && currentPathObj && lastPoint.current) {
+            // Déplacement LIBRE (Plus de limites)
+            let newTx = currentCenter.x - (start.imageAnchorX * newScale);
+            let newTy = currentCenter.y - (start.imageAnchorY * newScale);
+            
+            transform.current.scale = newScale;
+            transform.current.translateX = newTx;
+            transform.current.translateY = newTy;
+            forceUpdate();
+        } 
+        else if (mode.current === 'DRAWING' && touches.length === 1 && currentPathObj && lastPoint.current) {
             const { locationX, locationY } = evt.nativeEvent;
             const x = (locationX - transform.current.translateX) / transform.current.scale;
             const y = (locationY - transform.current.translateY) / transform.current.scale;
+            
             if (distBetween(lastPoint.current, {x, y}) > 2.5) {
                 const xMid = (lastPoint.current.x + x) / 2;
                 const yMid = (lastPoint.current.y + y) / 2;
@@ -159,37 +183,16 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
                 lastPoint.current = { x, y };
                 setCurrentPathObj(currentPathObj); forceUpdate();
             }
-        } else if (mode.current === 'ZOOMING' && touches.length === 2 && gestureStart.current) {
-            const t1 = touches[0]; const t2 = touches[1];
-            const currentDist = getDistance(t1, t2); const currentCenter = getCenter(t1, t2);
-            const start = gestureStart.current;
-            const ratio = currentDist / start.dist;
-            const SIZE = squareSizeRef.current;
-            const baseScale = screenHeight / SIZE;
-            let newScale = start.scale * ratio;
-            newScale = Math.max(baseScale, Math.min(newScale, baseScale * 5));
-            let newTx = currentCenter.x - (start.imageAnchorX * newScale);
-            let newTy = currentCenter.y - (start.imageAnchorY * newScale);
-            const currentVisualSize = SIZE * newScale;
-            if (currentVisualSize <= screenWidth) newTx = (screenWidth - currentVisualSize) / 2;
-            else newTx = Math.min(0, Math.max(screenWidth - currentVisualSize, newTx));
-            if (currentVisualSize <= screenHeight) newTy = (screenHeight - currentVisualSize) / 2;
-            else newTy = Math.min(0, Math.max(screenHeight - currentVisualSize, newTy));
-            transform.current.scale = newScale;
-            transform.current.translateX = newTx;
-            transform.current.translateY = newTy;
-            forceUpdate();
         }
       },
 
       onPanResponderRelease: () => {
-        if (timer.current) clearTimeout(timer.current);
         if (mode.current === 'DRAWING' && currentPathObj) {
             if(lastPoint.current) currentPathObj.lineTo(lastPoint.current.x, lastPoint.current.y);
             setPaths(prev => [...prev, {
                 svgPath: currentPathObj.toSVGString(),
-                color: strokeColor, // On sauve la couleur !
-                width: strokeWidth, // On sauve l'épaisseur !
+                color: strokeColor,
+                width: strokeWidth, // On sauve l'épaisseur brute
                 isEraser: isEraserMode
             }]);
             setRedoStack([]);
@@ -207,22 +210,32 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
       { translateY: transform.current.translateY },
       { scale: transform.current.scale }
     ];
-    const DISPLAY_SIZE = squareSizeRef.current;
+    
+    const IMG_W = image.width();
+    const IMG_H = image.height();
 
     return (
       <View style={styles.container} {...panResponder.panHandlers}>
         <Canvas style={{ flex: 1 }} pointerEvents="none">
           <Group transform={skiaTransform}>
-            <SkiaImage image={image} x={0} y={0} width={DISPLAY_SIZE} height={DISPLAY_SIZE} fit="cover" />
+            {/* On affiche l'image entière */}
+            <SkiaImage 
+                image={image} 
+                x={0} y={0} 
+                width={IMG_W} height={IMG_H} 
+                fit="none" 
+            />
+            
             <Group layer={true}>
                 {paths.map((p, index) => {
                    const path = Skia.Path.MakeFromSVGString(p.svgPath);
                    if (!path) return null;
-                   const adjustedWidth = p.width / baseScaleRef.current;
                    return (
                      <Path
                        key={index} path={path} color={p.isEraser ? "#000" : p.color} style="stroke"
-                       strokeWidth={adjustedWidth} strokeCap="round" strokeJoin="round"
+                       // On divise par le scale pour que l'épaisseur visuelle reste constante quand on zoome
+                       strokeWidth={p.width / transform.current.scale} 
+                       strokeCap="round" strokeJoin="round"
                        blendMode={p.isEraser ? "clear" : "srcOver"}
                      />
                    );
@@ -230,7 +243,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
                 {currentPathObj && (
                   <Path
                     path={currentPathObj} color={isEraserMode ? "#000" : strokeColor} style="stroke"
-                    strokeWidth={strokeWidth / baseScaleRef.current} strokeCap="round" strokeJoin="round"
+                    strokeWidth={strokeWidth / transform.current.scale} strokeCap="round" strokeJoin="round"
                     blendMode={isEraserMode ? "clear" : "srcOver"}
                   />
                 )}
