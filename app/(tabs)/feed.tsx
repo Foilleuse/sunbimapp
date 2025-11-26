@@ -17,8 +17,6 @@ const FeedCard = ({ drawing, canvasSize, isActive }: { drawing: any, canvasSize:
 
     return (
         <View style={styles.cardContainer}>
-            
-            {/* DESSIN (Haut) */}
             <View style={{ width: canvasSize, height: canvasSize }}>
                 <DrawingViewer
                     imageUri={drawing.cloud_image_url}
@@ -29,47 +27,27 @@ const FeedCard = ({ drawing, canvasSize, isActive }: { drawing: any, canvasSize:
                     startVisible={false} 
                 />
             </View>
-
-            {/* INFOS (Bas) - Rectangulaire et épuré */}
             <View style={styles.cardInfo}>
-                
-                {/* Titre & Auteur */}
                 <View style={styles.headerInfo}>
-                    <Text style={styles.drawingTitle}>
-                        {drawing.label || "Sans titre"}
-                    </Text>
+                    <Text style={styles.drawingTitle}>{drawing.label || "Sans titre"}</Text>
                     <View style={styles.userInfo}>
                          <View style={styles.avatar}><User size={14} color="#666"/></View>
                          <Text style={styles.userName}>Anonyme</Text>
                          <Text style={styles.dateText}>• {new Date(drawing.created_at).toLocaleDateString()}</Text>
                     </View>
                 </View>
-
-                {/* Barre d'Actions */}
                 <View style={styles.actionBar}>
                     <TouchableOpacity style={styles.actionBtn} onPress={() => setIsLiked(!isLiked)}>
-                        <Heart 
-                            color={isLiked ? "#FF3B30" : "#000"} 
-                            fill={isLiked ? "#FF3B30" : "transparent"} 
-                            size={28} 
-                        />
+                        <Heart color={isLiked ? "#FF3B30" : "#000"} fill={isLiked ? "#FF3B30" : "transparent"} size={28} />
                         <Text style={styles.actionText}>{drawing.likes_count || 0}</Text>
                     </TouchableOpacity>
-
                     <TouchableOpacity style={styles.actionBtn}>
                         <MessageCircle color="#000" size={28} />
                         <Text style={styles.actionText}>{drawing.comments_count || 0}</Text>
                     </TouchableOpacity>
-
-                    {/* Espace */}
                     <View style={{flex: 1}} /> 
-
-                    <TouchableOpacity>
-                        <Share2 color="#000" size={24} />
-                    </TouchableOpacity>
+                    <TouchableOpacity><Share2 color="#000" size={24} /></TouchableOpacity>
                 </View>
-
-                {/* SUPPRESSION DU TEXTE NUAGE # ICI */}
             </View>
         </View>
     );
@@ -84,22 +62,14 @@ export default function FeedPage() {
     const { width: screenWidth } = Dimensions.get('window');
     const canvasSize = screenWidth; 
 
-    useEffect(() => {
-        fetchTodaysFeed();
-    }, []);
+    useEffect(() => { fetchTodaysFeed(); }, []);
 
     const fetchTodaysFeed = async () => {
         try {
             const today = new Date().toISOString().split('T')[0];
-            const { data: cloudData, error: cloudError } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();
-            
+            const { data: cloudData } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();
             if (cloudData) {
-                const { data: drawingsData, error: drawingsError } = await supabase
-                    .from('drawings')
-                    .select('*')
-                    .eq('cloud_id', cloudData.id)
-                    .order('created_at', { ascending: false })
-                    .limit(50); 
+                const { data: drawingsData } = await supabase.from('drawings').select('*').eq('cloud_id', cloudData.id).order('created_at', { ascending: false }).limit(50); 
                 setDrawings(drawingsData || []);
             }
         } catch (e) { console.error(e); } finally { setLoading(false); }
@@ -112,23 +82,18 @@ export default function FeedPage() {
     return (
         <View style={styles.container}>
             
-            <SunbimHeader showCloseButton={false} />
+            {/* HEADER AVEC PROFIL ACTIVÉ */}
+            <SunbimHeader 
+                showCloseButton={false} 
+                showProfileButton={true} // <--- ON L'ACTIVE ICI
+            />
 
             <View style={{ flex: 1, position: 'relative' }}>
-                
-                {/* FOND FIXE */}
                 {backgroundUrl && (
                     <View style={{ position: 'absolute', top: 0, width: canvasSize, height: canvasSize, zIndex: -1 }}>
-                        <DrawingViewer
-                            imageUri={backgroundUrl}
-                            canvasData={[]} 
-                            viewerSize={canvasSize}
-                            transparentMode={false} 
-                        />
+                        <DrawingViewer imageUri={backgroundUrl} canvasData={[]} viewerSize={canvasSize} transparentMode={false} />
                     </View>
                 )}
-
-                {/* SWIPE */}
                 {drawings.length > 0 ? (
                     <PagerView 
                         style={{ flex: 1 }} 
@@ -138,11 +103,7 @@ export default function FeedPage() {
                     >
                         {drawings.map((drawing, index) => (
                             <View key={drawing.id || index} style={{ flex: 1 }}>
-                                <FeedCard 
-                                    drawing={drawing} 
-                                    canvasSize={canvasSize} 
-                                    isActive={index === currentIndex} 
-                                />
+                                <FeedCard drawing={drawing} canvasSize={canvasSize} isActive={index === currentIndex} />
                             </View>
                         ))}
                     </PagerView>
@@ -159,19 +120,9 @@ const styles = StyleSheet.create({
     loadingContainer: { flex: 1, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     text: { color: '#666', fontSize: 16 },
-
-    // --- CARD STYLES ---
-    cardContainer: {
-        flex: 1,
-    },
+    cardContainer: { flex: 1 },
     cardInfo: {
-        flex: 1,
-        backgroundColor: '#FFFFFF',
-        // PLUS DE BORDURE ARRONDIE
-        marginTop: -20, // On garde le léger chevauchement pour l'esthétique "Carte"
-        paddingHorizontal: 20,
-        paddingTop: 25,
-        // Ombre plus subtile
+        flex: 1, backgroundColor: '#FFFFFF', marginTop: -20, paddingHorizontal: 20, paddingTop: 25,
         shadowColor: "#000", shadowOffset: {width: 0, height: -4}, shadowOpacity: 0.05, shadowRadius: 4, elevation: 5
     },
     headerInfo: { marginBottom: 20 },
@@ -180,7 +131,6 @@ const styles = StyleSheet.create({
     avatar: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#F0F0F0', justifyContent: 'center', alignItems: 'center' },
     userName: { fontSize: 14, fontWeight: '600', color: '#333' },
     dateText: { fontSize: 14, color: '#999' },
-
     actionBar: { flexDirection: 'row', alignItems: 'center', gap: 25 },
     actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     actionText: { fontSize: 16, fontWeight: '600', color: '#000' },

@@ -10,14 +10,10 @@ export default function GalleryPage() {
     const [drawings, setDrawings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
-
     const [showClouds, setShowClouds] = useState(true);
     const [onlyLiked, setOnlyLiked] = useState(false);
     const [searchText, setSearchText] = useState('');
-
-    // État pour le popup
     const [selectedDrawing, setSelectedDrawing] = useState<any | null>(null);
-    // État pour l'interaction "Maintenir pour voir l'original"
     const [isHolding, setIsHolding] = useState(false);
 
     const { width: screenWidth } = Dimensions.get('window');
@@ -46,17 +42,12 @@ export default function GalleryPage() {
 
     const renderItem = ({ item }: { item: any }) => (
         <TouchableOpacity 
-            activeOpacity={0.9}
-            onPress={() => openViewer(item)}
+            activeOpacity={0.9} onPress={() => openViewer(item)}
             style={{ width: ITEM_SIZE, height: ITEM_SIZE, marginBottom: SPACING, backgroundColor: '#F9F9F9', overflow: 'hidden' }}
         >
             <DrawingViewer
-                imageUri={item.cloud_image_url}
-                canvasData={item.canvas_data}
-                viewerSize={ITEM_SIZE}
-                transparentMode={!showClouds} 
-                startVisible={true}
-                animated={false}
+                imageUri={item.cloud_image_url} canvasData={item.canvas_data} viewerSize={ITEM_SIZE}
+                transparentMode={!showClouds} startVisible={true} animated={false}
             />
         </TouchableOpacity>
     );
@@ -64,17 +55,14 @@ export default function GalleryPage() {
     return (
         <View style={styles.container}>
             
-            {/* HEADER FIXE (Z-Index élevé pour rester au dessus du popup) */}
-            {/* On passe la fonction de fermeture au header si un dessin est ouvert */}
+            {/* HEADER AVEC PROFIL ACTIVÉ */}
             <SunbimHeader 
                 showCloseButton={selectedDrawing !== null} 
-                onClose={closeViewer} 
+                onClose={closeViewer}
+                showProfileButton={true} // <--- ON L'ACTIVE ICI
             />
 
-            {/* CONTENU PRINCIPAL */}
             <View style={{flex: 1, position: 'relative'}}>
-                
-                {/* A. La Grille (En dessous) */}
                 <View style={{flex: 1}}>
                     <View style={styles.toolsContainer}>
                         <View style={styles.searchBar}>
@@ -104,35 +92,27 @@ export default function GalleryPage() {
                             numColumns={2} columnWrapperStyle={{ gap: SPACING }} contentContainerStyle={{ paddingBottom: 100 }}
                             showsVerticalScrollIndicator={false}
                             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#000"/>}
-                            ListEmptyComponent={<View style={styles.emptyState}><Text style={styles.emptyText}>Galerie vide.</Text></View>}
+                            ListEmptyComponent={<View style={styles.emptyState}><Text style={styles.emptyText}>{searchText ? `Aucun résultat` : "Galerie vide."}</Text></View>}
                         />
                     )}
                 </View>
 
-                {/* B. LE POP-UP (Overlay qui couvre la grille mais PAS le header) */}
                 {selectedDrawing && (
                     <View style={styles.fullScreenOverlay}>
-                        
-                        {/* Zone Image avec Interaction Press-to-Hide */}
                         <Pressable 
-                            onPressIn={() => setIsHolding(true)}  // Doigt posé -> On cache le dessin
-                            onPressOut={() => setIsHolding(false)} // Doigt levé -> On remet le dessin
+                            onPressIn={() => setIsHolding(true)} onPressOut={() => setIsHolding(false)}
                             style={{ width: screenWidth, height: screenWidth, backgroundColor: '#F0F0F0' }}
                         >
                             <DrawingViewer
                                 imageUri={selectedDrawing.cloud_image_url}
-                                // Si on appuie (isHolding), on envoie des données vides [] pour effacer le dessin
                                 canvasData={isHolding ? [] : selectedDrawing.canvas_data}
                                 viewerSize={screenWidth}
-                                transparentMode={!showClouds} // Respecte le filtre global
-                                startVisible={false} // Animation
-                                animated={true}
+                                transparentMode={!showClouds}
+                                startVisible={false} animated={true}
                             />
-                            {/* Petit indice visuel */}
                             <Text style={styles.hintText}>Maintenir pour voir l'original</Text>
                         </Pressable>
 
-                        {/* Footer Infos */}
                         <View style={styles.detailsFooter}>
                             <View style={styles.userInfoRow}>
                                 <View style={styles.profilePlaceholder}><User color="#FFF" size={20} /></View>
@@ -148,7 +128,6 @@ export default function GalleryPage() {
                         </View>
                     </View>
                 )}
-
             </View>
         </View>
     );
@@ -157,7 +136,7 @@ export default function GalleryPage() {
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#FFFFFF' },
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    
+    // HEADER (Le composant SunbimHeader gère le style interne)
     // TOOLS
     toolsContainer: { flexDirection: 'row', paddingHorizontal: 15, paddingBottom: 15, paddingTop: 10, alignItems: 'center', gap: 10, borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
     searchBar: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#F5F5F5', borderRadius: 20, paddingHorizontal: 12, height: 40, gap: 8 },
@@ -167,19 +146,9 @@ const styles = StyleSheet.create({
     activeBtn: { backgroundColor: '#000', borderColor: '#000' },
     emptyState: { marginTop: 100, alignItems: 'center' },
     emptyText: { color: '#999' },
-
     // OVERLAY
-    fullScreenOverlay: {
-        position: 'absolute', // Vient se poser sur la grille
-        top: 0, left: 0, right: 0, bottom: 0,
-        backgroundColor: '#FFFFFF', 
-        zIndex: 50,
-    },
-    hintText: {
-        position: 'absolute', bottom: 10, alignSelf: 'center',
-        color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600',
-        textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width:1, height:1}, textShadowRadius: 1
-    },
+    fullScreenOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#FFFFFF', zIndex: 50 },
+    hintText: { position: 'absolute', bottom: 10, alignSelf: 'center', color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width:1, height:1}, textShadowRadius: 1 },
     detailsFooter: { padding: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#F0F0F0', marginTop: 10 },
     userInfoRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
     profilePlaceholder: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#CCC', justifyContent: 'center', alignItems: 'center' },
