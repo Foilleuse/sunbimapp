@@ -22,13 +22,21 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
   // 1. Parsing des données
   const safePaths = useMemo(() => {
     let data = [];
+    
     if (Array.isArray(canvasData)) {
         data = canvasData;
     } else if (typeof canvasData === 'string') {
         try { data = JSON.parse(canvasData); } catch (e) { data = []; }
     }
-    // Debug : Affiche combien de traits on a trouvé
-    if (data.length > 0) console.log(`🔍 Viewer: ${data.length} traits chargés.`);
+
+    // Debug : Affiche combien de traits on a trouvé et la couleur du premier trait
+    if (data.length > 0) {
+        console.log(`🔍 Viewer: ${data.length} traits chargés.`);
+        if (typeof data[0].color === 'string') {
+            console.log(`🎨 Viewer: Premier trait couleur: ${data[0].color}, Largeur: ${data[0].width}`);
+        }
+    }
+    
     return data;
   }, [canvasData]);
 
@@ -61,7 +69,7 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
       { scale: transform.scale }
   ];
 
-  return (
+  return ( // <--- LE DÉBUT DU RETURN EST ICI
     <View style={[styles.container, {width: viewerSize, height: viewerSize}]}>
       <Canvas style={{ flex: 1 }}>
         <Group transform={matrix}>
@@ -84,20 +92,18 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
                  const path = Skia.Path.MakeFromSVGString(p.svgPath);
                  if (!path) return null;
                  
-                 // --- CORRECTION : COMPENSATION DE L'ÉCHELLE ---
-                 // On divise la largeur stockée par le facteur de zoom.
-                 // Exemple : Largeur 6 / Scale 0.1 = 60. 
-                 // Une fois réduit par la matrice, ça fera 6px à l'écran.
+                 // CORRECTION : COMPENSATION DE L'ÉCHELLE (pour que le trait ait la bonne épaisseur)
                  const baseWidth = p.width || 6;
                  const adjustedWidth = baseWidth / transform.scale;
                  
-                 return (
+                 return ( // <--- C'EST LE RETURN À L'INTÉRIEUR DU MAP QUI DESSINE UN TRAIT
                    <Path
                      key={index}
                      path={path}
-                     color={p.isEraser ? "#000000" : (p.color || "#000000")}
+                     // --- TEST FINAL : FORCÉ EN JAUNE VIF ---
+                     color={p.isEraser ? "#000000" : "#FFFF00"} 
                      style="stroke"
-                     strokeWidth={adjustedWidth} // <--- C'est ça qui rend le trait visible !
+                     strokeWidth={adjustedWidth} 
                      strokeCap="round"
                      strokeJoin="round"
                      blendMode={p.isEraser ? "clear" : "srcOver"}
