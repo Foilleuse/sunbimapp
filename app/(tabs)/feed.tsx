@@ -1,22 +1,21 @@
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform, Image } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, Dimensions } from 'react-native';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
-import { X, Heart, MessageCircle, User } from 'lucide-react-native'; // Ajout des icones sociales
+import { X, Heart, MessageCircle, User } from 'lucide-react-native';
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
+import { SunbimHeader } from '../../src/components/SunbimHeader';
 
-let PagerView: any;
-if (Platform.OS !== 'web') {
-    try { PagerView = require('react-native-pager-view').default; } catch (e) { PagerView = View; }
-} else { PagerView = View; }
+// NOUVEAU MOTEUR DE SWIPE "FUN"
+import Carousel from 'react-native-reanimated-carousel';
 
 export default function FeedPage() {
-    const router = useRouter();
     const [drawings, setDrawings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    
     const [currentIndex, setCurrentIndex] = useState(0);
     
-    // État local pour simuler le like instantané (UX)
+    // État local pour le like visuel
     const [isLiked, setIsLiked] = useState(false);
 
     const { width: screenWidth } = Dimensions.get('window');
@@ -26,11 +25,8 @@ export default function FeedPage() {
         fetchTodaysFeed();
     }, []);
 
-    // Quand on change de slide, on reset l'état "Aimé" (pour la démo)
-    // Plus tard, on vérifiera si l'user a vraiment liké ce dessin via Supabase
-    useEffect(() => {
-        setIsLiked(false);
-    }, [currentIndex]);
+    // Reset du like au changement de slide
+    useEffect(() => { setIsLiked(false); }, [currentIndex]);
 
     const fetchTodaysFeed = async () => {
         try {
@@ -51,17 +47,8 @@ export default function FeedPage() {
         } catch (e) { console.error(e); } finally { setLoading(false); }
     };
 
-    // Action Like
-    const handleLike = () => {
-        setIsLiked(!isLiked);
-        // TODO: Envoyer la requête à Supabase pour incrémenter likes_count
-    };
-
-    // Action Commentaire
-    const handleComment = () => {
-        console.log("Ouvrir commentaires pour le dessin", activeDrawing?.id);
-        // TODO: Ouvrir une modale de commentaires
-    };
+    const handleLike = () => setIsLiked(!isLiked);
+    const handleComment = () => console.log("Commentaire...");
 
     if (loading) return <View style={styles.loadingContainer}><ActivityIndicator color="#87CEEB" size="large" /></View>;
     
@@ -72,14 +59,12 @@ export default function FeedPage() {
         <View style={styles.container}>
             
             {/* HEADER */}
-            <View style={styles.headerBar}>
-                <Text style={styles.headerText}>sunbim</Text>
-            </View>
+            <SunbimHeader showCloseButton={false} />
 
-            {/* ZONE SWIPE (Image + Dessins) */}
+            {/* ZONE SWIPE */}
             <View style={{ width: canvasSize, height: canvasSize, backgroundColor: '#F0F0F0', position: 'relative' }}>
                 
-                {/* FOND */}
+                {/* COUCHE 1 : FOND FIXE */}
                 {backgroundUrl && (
                     <View style={StyleSheet.absoluteFill}>
                         <DrawingViewer
@@ -92,21 +77,28 @@ export default function FeedPage() {
                     </View>
                 )}
 
-                {/* SWIPE */}
+                {/* COUCHE 2 : CARROUSEL ANIMÉ */}
                 {drawings.length > 0 ? (
-                    <PagerView 
-                        style={{ flex: 1 }} 
-                        initialPage={0}
-                        orientation="horizontal"
-                        onPageSelected={(e: any) => setCurrentIndex(e.nativeEvent.position)}
-                    >
-                        {drawings.map((drawing, index) => {
+                    <Carousel
+                        loop={false} // On ne tourne pas en rond à l'infini (choix UX)
+                        width={canvasSize}
+                        height={canvasSize}
+                        data={drawings}
+                        scrollAnimationDuration={800} // Vitesse de l'animation (ms)
+                        onSnapToItem={(index) => setCurrentIndex(index)}
+                        // --- EFFET "DEMI-CERCLE" / PROFONDEUR ---
+                        mode="parallax"
+                        modeConfig={{
+                            parallaxScrollingScale: 0.9, // L'image d'à côté est un peu plus petite
+                            parallaxScrollingOffset: 50, // Elle est un peu décalée
+                        }}
+                        renderItem={({ item, index }) => {
                             const isActive = index === currentIndex;
                             return (
-                                <View key={drawing.id || index} style={{ flex: 1, backgroundColor: 'transparent' }}>
+                                <View style={{ flex: 1, backgroundColor: 'transparent' }}>
                                     <DrawingViewer
-                                        imageUri={drawing.cloud_image_url}
-                                        canvasData={drawing.canvas_data}
+                                        imageUri={item.cloud_image_url}
+                                        canvasData={item.canvas_data}
                                         viewerSize={canvasSize}
                                         transparentMode={true}
                                         animated={isActive} 
@@ -114,27 +106,24 @@ export default function FeedPage() {
                                     />
                                 </View>
                             );
-                        })}
-                    </PagerView>
+                        }}
+                    />
                 ) : (
                     <View style={styles.centerBox}><Text style={styles.text}>La galerie est vide.</Text></View>
                 )}
             </View>
 
-            {/* --- NOUVEAU : ZONE D'INFORMATIONS SOCIALES --- */}
+            {/* INFOS SOCIALES (Sans le numéro) */}
             <View style={styles.socialContainer}>
                  
-                 {/* 1. Le TAG (Titre) */}
                  <View style={styles.titleRow}>
                     <Text style={styles.drawingTitle}>
                         {activeDrawing?.label || "Sans titre"}
                     </Text>
                  </View>
 
-                 {/* 2. Profil & Actions */}
                  <View style={styles.metaRow}>
                     
-                    {/* Profil User */}
                     <View style={styles.userProfile}>
                         <View style={styles.avatarPlaceholder}>
                             <User size={16} color="#666" />
@@ -142,10 +131,7 @@ export default function FeedPage() {
                         <Text style={styles.userName}>Anonyme</Text>
                     </View>
 
-                    {/* Boutons Actions */}
                     <View style={styles.actions}>
-                        
-                        {/* LIKE */}
                         <TouchableOpacity style={styles.actionBtn} onPress={handleLike}>
                             <Heart 
                                 color={isLiked ? "#FF3B30" : "#000"} 
@@ -155,20 +141,14 @@ export default function FeedPage() {
                             <Text style={styles.statText}>{activeDrawing?.likes_count || 0}</Text>
                         </TouchableOpacity>
 
-                        {/* COMMENTAIRE */}
                         <TouchableOpacity style={styles.actionBtn} onPress={handleComment}>
                             <MessageCircle color="#000" size={26} />
                             <Text style={styles.statText}>{activeDrawing?.comments_count || 0}</Text>
                         </TouchableOpacity>
-                    
                     </View>
                  </View>
-
-                 {/* Indicateur de position (optionnel) */}
-                 <Text style={styles.paginationText}>
-                    {drawings.length > 0 ? `${currentIndex + 1} / ${drawings.length}` : ''}
-                 </Text>
-
+                 
+                 {/* J'ai supprimé le Text de pagination ici */}
             </View>
         </View>
     );
@@ -177,18 +157,6 @@ export default function FeedPage() {
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#FFFFFF' },
     loadingContainer: { flex: 1, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
-    
-    // HEADER
-    headerBar: {
-        width: '100%', backgroundColor: '#FFFFFF', 
-        paddingTop: 60, paddingBottom: 15, paddingHorizontal: 20,
-        flexDirection: 'row', justifyContent: 'center', alignItems: 'center', zIndex: 10,
-        borderBottomWidth: 1, borderBottomColor: '#F0F0F0'
-    },
-    headerText: {
-        fontSize: 32, fontWeight: '900', color: '#FFFFFF', 
-        textShadowColor: 'rgba(0, 0, 0, 0.5)', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 0, 
-    },
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     text: { color: '#666', fontSize: 16 },
 
@@ -199,59 +167,13 @@ const styles = StyleSheet.create({
         paddingTop: 20,
         backgroundColor: '#FFF',
     },
-    titleRow: {
-        marginBottom: 15,
-    },
-    drawingTitle: {
-        fontSize: 28, // Très gros pour le tag
-        fontWeight: '900',
-        color: '#000',
-        letterSpacing: -0.5,
-    },
-    metaRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    // Profil
-    userProfile: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 10,
-    },
-    avatarPlaceholder: {
-        width: 32, height: 32,
-        borderRadius: 16,
-        backgroundColor: '#F0F0F0',
-        justifyContent: 'center', alignItems: 'center',
-    },
-    userName: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#333',
-    },
-    // Actions
-    actions: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 20,
-    },
-    actionBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-    },
-    statText: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#000',
-    },
-    // Pagination
-    paginationText: {
-        position: 'absolute',
-        bottom: 20,
-        alignSelf: 'center',
-        color: '#CCC',
-        fontSize: 12,
-    }
+    titleRow: { marginBottom: 15 },
+    drawingTitle: { fontSize: 28, fontWeight: '900', color: '#000', letterSpacing: -0.5 },
+    metaRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    userProfile: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    avatarPlaceholder: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#F0F0F0', justifyContent: 'center', alignItems: 'center' },
+    userName: { fontSize: 14, fontWeight: '600', color: '#333' },
+    actions: { flexDirection: 'row', alignItems: 'center', gap: 20 },
+    actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    statText: { fontSize: 14, fontWeight: '600', color: '#000' },
 });
