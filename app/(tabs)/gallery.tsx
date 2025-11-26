@@ -1,9 +1,9 @@
-import { View, Text, StyleSheet, FlatList, Dimensions, TouchableOpacity, ActivityIndicator, RefreshControl, TextInput } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Dimensions, TouchableOpacity, ActivityIndicator, RefreshControl, TextInput, Keyboard } from 'react-native';
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { useFocusEffect } from 'expo-router';
-import { Search, Heart, Cloud, CloudOff } from 'lucide-react-native';
+import { Search, Heart, Cloud, CloudOff, XCircle } from 'lucide-react-native';
 
 export default function GalleryPage() {
     const [drawings, setDrawings] = useState<any[]>([]);
@@ -13,19 +13,29 @@ export default function GalleryPage() {
     // --- ETATS FILTRES ---
     const [showClouds, setShowClouds] = useState(true);
     const [onlyLiked, setOnlyLiked] = useState(false);
-    const [searchText, setSearchText] = useState('');
+    const [searchText, setSearchText] = useState(''); // Le texte tapé
 
     const { width: screenWidth } = Dimensions.get('window');
     const SPACING = 1; 
     const ITEM_SIZE = (screenWidth - SPACING) / 2;
 
-    const fetchGallery = async () => {
+    // Fonction de recherche intelligente
+    const fetchGallery = async (searchQuery = searchText) => {
         try {
-            const { data, error } = await supabase
+            let query = supabase
                 .from('drawings')
                 .select('*')
                 .order('created_at', { ascending: false })
-                .limit(50); 
+                .limit(50);
+
+            // SI UN TEXTE EST ENTRÉ : On filtre par tag (label)
+            if (searchQuery.trim().length > 0) {
+                // 'ilike' = Case Insensitive Like (trouve "Dragon" si on tape "dragon")
+                // Les % signifient "contient" (ex: "mon dragon rouge")
+                query = query.ilike('label', `%${searchQuery.trim()}%`);
+            }
+
+            const { data, error } = await query;
 
             if (error) throw error;
             setDrawings(data || []);
@@ -37,15 +47,33 @@ export default function GalleryPage() {
         }
     };
 
+    // Chargement initial
     useEffect(() => { fetchGallery(); }, []);
 
+    // Rafraîchissement au focus
     useFocusEffect(
         useCallback(() => { fetchGallery(); }, [])
     );
 
     const onRefresh = () => {
         setRefreshing(true);
+        // On recharge en gardant la recherche actuelle
         fetchGallery();
+    };
+
+    // Action quand on appuie sur "Rechercher" sur le clavier
+    const handleSearchSubmit = () => {
+        setLoading(true);
+        fetchGallery();
+        Keyboard.dismiss(); // Ferme le clavier
+    };
+
+    // Action pour effacer la recherche
+    const clearSearch = () => {
+        setSearchText('');
+        setLoading(true);
+        fetchGallery(''); // On force une recherche vide pour tout réafficher
+        Keyboard.dismiss();
     };
 
     const renderItem = ({ item }: { item: any }) => (
@@ -71,7 +99,7 @@ export default function GalleryPage() {
     return (
         <View style={styles.container}>
             
-            {/* 1. HEADER (CORRIGÉ : TAILLE 32) */}
+            {/* 1. HEADER */}
             <View style={styles.headerBar}>
                 <Text style={styles.headerText}>sunbim</Text>
             </View>
@@ -82,12 +110,21 @@ export default function GalleryPage() {
                 <View style={styles.searchBar}>
                     <Search color="#999" size={18} />
                     <TextInput 
-                        placeholder="Rechercher..." 
+                        placeholder="Rechercher un tag..." 
                         placeholderTextColor="#999"
                         style={styles.searchInput}
                         value={searchText}
                         onChangeText={setSearchText}
+                        // Déclenche la recherche quand on fait "Enter" / "Rechercher"
+                        onSubmitEditing={handleSearchSubmit}
+                        returnKeyType="search"
                     />
+                    {/* Petite croix pour effacer si du texte est présent */}
+                    {searchText.length > 0 && (
+                        <TouchableOpacity onPress={clearSearch}>
+                            <XCircle color="#CCC" size={18} />
+                        </TouchableOpacity>
+                    )}
                 </View>
 
                 <View style={styles.actionsRow}>
@@ -132,7 +169,9 @@ export default function GalleryPage() {
                     }
                     ListEmptyComponent={
                         <View style={styles.emptyState}>
-                            <Text style={styles.emptyText}>Galerie vide.</Text>
+                            <Text style={styles.emptyText}>
+                                {searchText ? `Aucun résultat pour "${searchText}"` : "Galerie vide."}
+                            </Text>
                         </View>
                     }
                 />
@@ -145,18 +184,17 @@ const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#FFFFFF' },
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     
-    // --- HEADER CORRIGÉ ---
     headerBar: {
         width: '100%',
         backgroundColor: '#FFFFFF', 
         paddingTop: 60, 
-        paddingBottom: 10, // Un peu moins de padding pour coller à la barre outils
+        paddingBottom: 10,
         alignItems: 'center',
         justifyContent: 'center',
         zIndex: 10,
     },
     headerText: {
-        fontSize: 32, // <--- PASSÉ DE 24 À 32 (Comme l'accueil)
+        fontSize: 32, 
         fontWeight: '900',
         color: '#FFFFFF', 
         textShadowColor: 'rgba(0, 0, 0, 0.5)', 
@@ -165,7 +203,6 @@ const styles = StyleSheet.create({
         letterSpacing: -1,
     },
 
-    // BARRE D'OUTILS
     toolsContainer: {
         flexDirection: 'row',
         paddingHorizontal: 15,
