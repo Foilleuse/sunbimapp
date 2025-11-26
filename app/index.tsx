@@ -8,7 +8,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '../src/contexts/AuthContext';
 import * as Updates from 'expo-updates';
 import React from 'react';
-import { Mail, Lock, X } from 'lucide-react-native'; // Icons pour le login
+import { Mail, Lock, X } from 'lucide-react-native';
 
 interface Cloud {
   id: string;
@@ -32,11 +32,9 @@ export default function DrawPage() {
   const [strokeWidth, setStrokeWidth] = useState(6);
   const [isEraserMode, setIsEraserMode] = useState(false);
   
-  // Modales
-  const [modalVisible, setModalVisible] = useState(false); // Tag
-  const [loginVisible, setLoginVisible] = useState(false); // Login
+  const [modalVisible, setModalVisible] = useState(false);
+  const [loginVisible, setLoginVisible] = useState(false);
   
-  // Formulaire Auth
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
@@ -54,7 +52,6 @@ export default function DrawPage() {
   const canvasRef = useRef<DrawingCanvasRef>(null);
   const updateLabel = (Updates && Updates.updateId) ? `v.${Updates.updateId.substring(0, 6)}` : '';
 
-  // Fermer le login si connecté
   useEffect(() => {
       if (user && loginVisible) setLoginVisible(false);
   }, [user]);
@@ -69,6 +66,7 @@ export default function DrawPage() {
     try {
         if (!supabase) throw new Error("No Supabase");
         const today = new Date().toISOString().split('T')[0];
+        
         const { data: cloudData, error: cloudError } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();   
         if (cloudError) throw cloudError;
         const currentCloud = cloudData || FALLBACK_CLOUD;
@@ -117,7 +115,7 @@ export default function DrawPage() {
     if (!paths || paths.length === 0) { Alert.alert("Oups", "Dessine quelque chose !"); return; }
     
     if (!user) {
-        setLoginVisible(true); // Ouvre la modale de login locale
+        setLoginVisible(true);
         return;
     }
     setModalVisible(true);
@@ -192,45 +190,45 @@ export default function DrawPage() {
           </View>
       )}
 
-      {/* MODALE LOGIN */}
+      {/* --- FIX MODALE LOGIN (Structure découplée) --- */}
       <Modal animationType="slide" transparent={true} visible={loginVisible} onRequestClose={() => setLoginVisible(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-                <TouchableOpacity style={{position:'absolute', top:15, right:15, padding:5}} onPress={() => setLoginVisible(false)}>
-                    <X color="#000" size={24}/>
-                </TouchableOpacity>
-                <Text style={styles.modalTitle}>{isSignUp ? "Créer un compte" : "Connexion"}</Text>
-                <Text style={styles.modalSubtitle}>Pour sauvegarder ton œuvre</Text>
-                
-                <View style={styles.inputWrapper}>
-                    <Mail size={20} color="#999" style={styles.inputIcon}/>
-                    <TextInput placeholder="Email" value={authEmail} onChangeText={setAuthEmail} autoCapitalize="none" style={styles.input} placeholderTextColor="#BBB" />
+        <View style={styles.modalOverlay}>
+            {/* Le KeyboardAvoidingView est DEDANS, il ne touche pas au fond sombre */}
+            <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{width:'100%', alignItems:'center'}}>
+                <View style={styles.modalContent}>
+                    <TouchableOpacity style={{position:'absolute', top:15, right:15, padding:5}} onPress={() => setLoginVisible(false)}>
+                        <X color="#000" size={24}/>
+                    </TouchableOpacity>
+                    <Text style={styles.modalTitle}>{isSignUp ? "Créer un compte" : "Connexion"}</Text>
+                    <Text style={styles.modalSubtitle}>Pour sauvegarder ton œuvre</Text>
+                    
+                    <View style={styles.inputWrapper}><Mail size={20} color="#999" style={styles.inputIcon}/><TextInput placeholder="Email" value={authEmail} onChangeText={setAuthEmail} autoCapitalize="none" style={styles.input} placeholderTextColor="#BBB" /></View>
+                    <View style={styles.inputWrapper}><Lock size={20} color="#999" style={styles.inputIcon}/><TextInput placeholder="Mot de passe" value={authPassword} onChangeText={setAuthPassword} secureTextEntry style={styles.input} placeholderTextColor="#BBB" /></View>
+                    
+                    <TouchableOpacity style={styles.authBtn} onPress={handleAuth} disabled={authLoading}>
+                        {authLoading ? <ActivityIndicator color="#FFF"/> : <Text style={styles.authBtnText}>{isSignUp ? "S'inscrire" : "Se connecter"}</Text>}
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity onPress={() => setIsSignUp(!isSignUp)}><Text style={styles.switchText}>{isSignUp ? "Déjà un compte ?" : "Pas de compte ?"}</Text></TouchableOpacity>
                 </View>
-                <View style={styles.inputWrapper}>
-                    <Lock size={20} color="#999" style={styles.inputIcon}/>
-                    <TextInput placeholder="Mot de passe" value={authPassword} onChangeText={setAuthPassword} secureTextEntry style={styles.input} placeholderTextColor="#BBB" />
-                </View>
-                
-                <TouchableOpacity style={styles.authBtn} onPress={handleAuth} disabled={authLoading}>
-                    {authLoading ? <ActivityIndicator color="#FFF"/> : <Text style={styles.authBtnText}>{isSignUp ? "S'inscrire" : "Se connecter"}</Text>}
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => setIsSignUp(!isSignUp)}><Text style={styles.switchText}>{isSignUp ? "Déjà un compte ?" : "Pas de compte ?"}</Text></TouchableOpacity>
-            </View>
-        </KeyboardAvoidingView>
+            </KeyboardAvoidingView>
+        </View>
       </Modal>
 
-      {/* MODALE TAG */}
+      {/* --- FIX MODALE TAG --- */}
       <Modal animationType="fade" transparent={true} visible={modalVisible} onRequestClose={() => setModalVisible(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-                <Text style={styles.modalTitle}>Qu'as-tu vu ?</Text>
-                <TextInput style={styles.input} placeholder="Ex: Un dragon..." placeholderTextColor="#BBB" value={tagText} onChangeText={setTagText} autoFocus={true} maxLength={30} onSubmitEditing={confirmShare}/>
-                <TouchableOpacity style={styles.validateBtn} onPress={confirmShare} disabled={isUploading}>
-                    {isUploading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.validateText}>Publier</Text>}
-                </TouchableOpacity>
-                {!isUploading && <TouchableOpacity style={styles.cancelBtn} onPress={() => setModalVisible(false)}><Text style={styles.cancelText}>Annuler</Text></TouchableOpacity>}
-            </View>
-        </KeyboardAvoidingView>
+        <View style={styles.modalOverlay}>
+            <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{width:'100%', alignItems:'center'}}>
+                <View style={styles.modalContent}>
+                    <Text style={styles.modalTitle}>Qu'as-tu vu ?</Text>
+                    <TextInput style={styles.input} placeholder="Ex: Un dragon..." value={tagText} onChangeText={setTagText} autoFocus={true} maxLength={30} onSubmitEditing={confirmShare}/>
+                    <TouchableOpacity style={styles.validateBtn} onPress={confirmShare} disabled={isUploading}>
+                        {isUploading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.validateText}>Publier</Text>}
+                    </TouchableOpacity>
+                    {!isUploading && <TouchableOpacity style={styles.cancelBtn} onPress={() => setModalVisible(false)}><Text style={styles.cancelText}>Annuler</Text></TouchableOpacity>}
+                </View>
+            </KeyboardAvoidingView>
+        </View>
       </Modal>
 
       <Animated.View pointerEvents="none" style={[ StyleSheet.absoluteFill, { backgroundColor: 'white', opacity: fadeWhiteAnim, zIndex: 9999, justifyContent: 'center', alignItems: 'center' } ]}>
@@ -258,20 +256,15 @@ const styles = StyleSheet.create({
   noCloudText: { fontSize: 18, color: '#666', textAlign: 'center' },
   errorText: { color: 'red', textAlign: 'center' },
 
-  // MODALE COMMUNE
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' },
   modalContent: { width: '85%', backgroundColor: '#FFF', borderRadius: 20, padding: 25, alignItems: 'center', shadowColor: "#000", shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.25, shadowRadius: 10 },
   modalTitle: { fontSize: 22, fontWeight: '800', color: '#000', marginBottom: 5 },
   modalSubtitle: { fontSize: 14, color: '#666', marginBottom: 20 },
   
-  // INPUTS ALIGNÉS
-  inputWrapper: { 
-      flexDirection: 'row', alignItems: 'center', 
-      backgroundColor: '#F5F5F5', borderRadius: 12, 
-      paddingHorizontal: 15, marginBottom: 15, height: 50, width: '100%' 
-  },
+  // INPUTS
+  inputWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F5F5F5', borderRadius: 12, paddingHorizontal: 15, marginBottom: 15, height: 50, width: '100%' },
   inputIcon: { marginRight: 10 },
-  input: { flex: 1, height: '100%', fontSize: 16, color: '#000' }, // Hauteur 100% pour centrer le texte
+  input: { flex: 1, height: '100%', fontSize: 16, color: '#000' },
 
   validateBtn: { width: '100%', height: 50, backgroundColor: '#000', borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
   validateText: { color: '#FFF', fontWeight: '700', fontSize: 16 },
