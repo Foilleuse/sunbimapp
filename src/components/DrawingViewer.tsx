@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, StyleSheet, Dimensions, ActivityIndicator, Text } from 'react-native';
+import { View, StyleSheet, Dimensions, ActivityIndicator } from 'react-native';
 import { Canvas, Path, Image as SkiaImage, useImage, Group, Skia } from '@shopify/react-native-skia';
 
 interface DrawingViewerProps {
@@ -16,11 +16,9 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
   transparentMode = false 
 }) => {
   
-  const { width: screenWidth } = Dimensions.get('window');
-  // On charge l'image, ou une image de fallback si vide
-  const image = useImage(imageUri || "https://via.placeholder.com/1000"); 
+  const image = useImage(imageUri || ""); 
 
-  // 1. LOGS DE DONNÉES
+  // 1. Parsing des données
   const safePaths = useMemo(() => {
     let data = [];
     if (Array.isArray(canvasData)) {
@@ -28,34 +26,35 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
     } else if (typeof canvasData === 'string') {
         try { data = JSON.parse(canvasData); } catch (e) { data = []; }
     }
-    // DEBUG: Affiche la longueur
-    console.log(`🔍 [VIEWER] Mode: ${transparentMode ? 'Transparent' : 'Image'} | Traits: ${data.length}`);
     return data;
-  }, [canvasData, transparentMode]);
+  }, [canvasData]);
 
+  // 2. Calcul du Zoom (SIMPLIFIÉ : Zéro Centrage, juste Scale)
   const transform = useMemo(() => {
+    // Si pas d'image, pas de transfo
     if (!image) return { scale: 1, translateX: 0, translateY: 0 };
     
-    const CANVAS_SIZE = image.height();
+    const CANVAS_SIZE = image.height(); // On se base sur la hauteur (référence du carré)
     if (CANVAS_SIZE === 0) return { scale: 1, translateX: 0, translateY: 0 };
 
+    // Calcul simple : Combien de fois l'image native rentre dans l'écran ?
     const fitScale = viewerSize / CANVAS_SIZE;
-    const imgW = image.width ? image.width() : CANVAS_SIZE;
-    const visualWidth = imgW * fitScale;
-    const centerTx = (screenWidth - visualWidth) / 2;
 
-    console.log(`📐 [SCALE] Native: ${CANVAS_SIZE} -> Screen: ${viewerSize} (Scale: ${fitScale})`);
-
-    return { scale: fitScale, translateX: centerTx, translateY: 0 };
-  }, [image, screenWidth, viewerSize]);
+    // On aligne tout à 0,0 (Coin haut gauche)
+    // Comme on force le format carré partout, ça va s'aligner tout seul.
+    return { 
+        scale: fitScale, 
+        translateX: 0, 
+        translateY: 0 
+    };
+  }, [image, viewerSize]);
 
   if (!image) {
-    if (transparentMode) return <View style={{width: viewerSize, height: viewerSize, borderColor: 'blue', borderWidth: 2}} />;
-    return <View style={styles.loading}><ActivityIndicator color="red" size="large" /></View>;
+    if (transparentMode) return <View style={{width: viewerSize, height: viewerSize}} />;
+    return <View style={styles.loading}><ActivityIndicator color="#fff" /></View>;
   }
 
-  const CANVAS_H = image.height();
-  const CANVAS_W = image.width();
+  const CANVAS_SIZE = image.height(); // Taille native carré
   
   const matrix = [
       { translateX: transform.translateX },
@@ -64,28 +63,21 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
   ];
 
   return (
-    // AJOUT D'UNE BORDURE ROUGE AUTOUR DU CANVAS POUR VÉRIFIER QU'IL PREND DE LA PLACE
-    <View style={[styles.container, {width: viewerSize, height: viewerSize, borderColor: 'red', borderWidth: 2, zIndex: 999}]}>
-      
+    <View style={[styles.container, {width: viewerSize, height: viewerSize}]}>
       <Canvas style={{ flex: 1 }}>
-        
-        {/* TEST 1 : UNE CROIX ROUGE FORCEE (Doit apparaître par dessus tout) */}
-        <Path path="M 0 0 L 500 500" color="red" style="stroke" strokeWidth={10} />
-        <Path path="M 500 0 L 0 500" color="red" style="stroke" strokeWidth={10} />
-
         <Group transform={matrix}>
           
-          {/* IMAGE */}
+          {/* IMAGE DE FOND */}
           {!transparentMode && (
               <SkiaImage
                 image={image}
                 x={0} y={0}
-                width={CANVAS_W} height={CANVAS_H}
+                width={CANVAS_SIZE} height={CANVAS_SIZE} // On force le carré natif
                 fit="cover"
               />
           )}
           
-          {/* DESSINS SUPABASE */}
+          {/* DESSINS */}
           <Group layer={true}> 
           {safePaths.map((p: any, index: number) => {
              if (!Skia || !Skia.Path) return null;
@@ -95,19 +87,21 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
                  const path = Skia.Path.MakeFromSVGString(p.svgPath);
                  if (!path) return null;
                  
-                 const baseWidth = p.width || 10;
-                 // TEST 2 : ON FORCE UNE GROSSE ÉPAISSEUR POUR VOIR
-                 const adjustedWidth = (baseWidth / transform.scale) * 2; 
+                 // Compensation de l'épaisseur
+                 const baseWidth = p.width || 6;
+                 const adjustedWidth = baseWidth / transform.scale;
                  
                  return (
                    <Path
                      key={index}
                      path={path}
-                     color="#FFFF00" // JAUNE VIF
+                     // On remet la vraie couleur du trait (ou noir si gomme)
+                     color={p.isEraser ? "#000000" : (p.color || "#000000")}
                      style="stroke"
                      strokeWidth={adjustedWidth} 
                      strokeCap="round"
                      strokeJoin="round"
+                     blendMode={p.isEraser ? "clear" : "srcOver"}
                    />
                  );
              } catch (e) { return null; }
