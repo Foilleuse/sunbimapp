@@ -5,8 +5,7 @@ import { supabase } from '../src/lib/supabaseClient';
 import { useAuth } from '../src/contexts/AuthContext';
 import { User, Mail, Lock, LogOut, ChevronLeft, Settings, Heart, MessageCircle, X } from 'lucide-react-native'; 
 import { DrawingViewer } from '../src/components/DrawingViewer';
-// IMPORTANT : On réimporte la modale de commentaires
-import { CommentsModal } from '../src/components/CommentsModal'; 
+import { CommentsModal } from '../src/components/CommentsModal';
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -15,13 +14,11 @@ export default function ProfilePage() {
   const [userDrawings, setUserDrawings] = useState<any[]>([]);
   const [loadingDrawings, setLoadingDrawings] = useState(true);
   
-  // --- ETATS D'INTERACTION ---
   const [selectedDrawing, setSelectedDrawing] = useState<any | null>(null);
   const [isHolding, setIsHolding] = useState(false);
-  const [showComments, setShowComments] = useState(false); // <--- Il manquait ça
-  const [isLiked, setIsLiked] = useState(false); // <--- Pour savoir si on a liké le dessin ouvert
+  const [showComments, setShowComments] = useState(false);
+  const [isLiked, setIsLiked] = useState(false);
 
-  // Formulaire
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [formLoading, setFormLoading] = useState(false);
@@ -35,11 +32,52 @@ export default function ProfilePage() {
     if (user) fetchUserDrawings();
   }, [user]);
 
-  // Quand on ouvre un dessin, on vérifie si on l'a déjà liké
+  // --- FONCTION INTELLIGENTE DE REDIRECTION ---
+  const checkStatusAndRedirect = async (userId: string) => {
+    try {
+        setFormLoading(true); // On garde le loader pendant la vérif
+        const today = new Date().toISOString().split('T')[0];
+        
+        // 1. On trouve le nuage du jour
+        const { data: cloudData } = await supabase
+            .from('clouds')
+            .select('id')
+            .eq('published_for', today)
+            .maybeSingle();
+
+        if (!cloudData) {
+            // Pas de nuage ? On renvoie à l'accueil par défaut
+            router.replace('/'); 
+            return;
+        }
+
+        // 2. On cherche si l'user a dessiné
+        const { data: existingDrawing } = await supabase
+            .from('drawings')
+            .select('id')
+            .eq('user_id', userId)
+            .eq('cloud_id', cloudData.id)
+            .maybeSingle();
+
+        if (existingDrawing) {
+            console.log("✅ Déjà joué -> Direction Feed");
+            router.replace('/(tabs)/feed');
+        } else {
+            console.log("🎨 Pas encore joué -> Direction Index");
+            router.replace('/');
+        }
+
+    } catch (e) {
+        console.error(e);
+        router.replace('/'); // Fallback
+    } finally {
+        setFormLoading(false);
+    }
+  };
+
+  // --- FETCH DATA ---
   useEffect(() => {
-      if (selectedDrawing && user) {
-          checkLikeStatus();
-      }
+      if (selectedDrawing && user) checkLikeStatus();
   }, [selectedDrawing]);
 
   const fetchUserDrawings = async () => {
@@ -49,7 +87,6 @@ export default function ProfilePage() {
             .select('*')
             .eq('user_id', user?.id)
             .order('created_at', { ascending: false });
-
         if (error) throw error;
         setUserDrawings(data || []);
     } catch (e) { console.error("Erreur profil:", e); } finally { setLoadingDrawings(false); }
@@ -57,45 +94,28 @@ export default function ProfilePage() {
 
   const checkLikeStatus = async () => {
     try {
-        const { data } = await supabase
-            .from('likes')
-            .select('id')
-            .eq('user_id', user?.id)
-            .eq('drawing_id', selectedDrawing.id)
-            .maybeSingle();
+        const { data } = await supabase.from('likes').select('id').eq('user_id', user?.id).eq('drawing_id', selectedDrawing.id).maybeSingle();
         setIsLiked(!!data);
     } catch (e) { console.error(e); }
   };
 
-  // --- LOGIQUE DU LIKE (RÉTABLIE) ---
   const handleLike = async () => {
       if (!selectedDrawing || !user) return;
-
       const newLikedState = !isLiked;
       setIsLiked(newLikedState);
-      
-      // Mise à jour optimiste du compteur local
       const newCount = (selectedDrawing.likes_count || 0) + (newLikedState ? 1 : -1);
       setSelectedDrawing({...selectedDrawing, likes_count: newCount});
-
-      // Mise à jour dans la liste globale pour que la grille soit à jour aussi
       setUserDrawings(prev => prev.map(d => d.id === selectedDrawing.id ? {...d, likes_count: newCount} : d));
 
       try {
-          if (newLiked) {
-              await supabase.from('likes').insert({ user_id: user.id, drawing_id: selectedDrawing.id });
-          } else {
-              await supabase.from('likes').delete().eq('user_id', user.id).eq('drawing_id', selectedDrawing.id);
-          }
-      } catch (e) {
-          console.error("Erreur like", e);
-          // Rollback si erreur
-          setIsLiked(!newLiked);
-      }
+          if (newLiked) await supabase.from('likes').insert({ user_id: user.id, drawing_id: selectedDrawing.id });
+          else await supabase.from('likes').delete().eq('user_id', user.id).eq('drawing_id', selectedDrawing.id);
+      } catch (e) { setIsLiked(!newLiked); }
   };
 
   const totalLikes = userDrawings.reduce((acc, curr) => acc + (curr.likes_count || 0), 0);
 
+  // --- LOGIN / SIGNUP ---
   const handleEmailAuth = async () => {
     setFormLoading(true);
     try {
@@ -103,11 +123,20 @@ export default function ProfilePage() {
             const { error } = await supabase.auth.signUp({ email, password });
             if (error) throw error;
             Alert.alert("Vérifie tes emails !", "Lien envoyé.");
+            setFormLoading(false);
         } else {
-            const { error } = await supabase.auth.signInWithPassword({ email, password });
+            const { data, error } = await supabase.auth.signInWithPassword({ email, password });
             if (error) throw error;
+            
+            // SUCCÈS -> ON LANCE LA VÉRIFICATION INTELLIGENTE
+            if (data.user) {
+                await checkStatusAndRedirect(data.user.id);
+            }
         }
-    } catch (e: any) { Alert.alert("Erreur", e.message); } finally { setFormLoading(false); }
+    } catch (e: any) { 
+        Alert.alert("Erreur", e.message); 
+        setFormLoading(false);
+    } 
   };
 
   const handleSignOut = async () => { await signOut(); router.replace('/'); };
@@ -115,14 +144,10 @@ export default function ProfilePage() {
 
   const renderItem = ({ item }: { item: any }) => (
     <TouchableOpacity 
-        activeOpacity={0.9}
-        onPress={() => setSelectedDrawing(item)}
+        activeOpacity={0.9} onPress={() => setSelectedDrawing(item)}
         style={{ width: ITEM_SIZE, height: ITEM_SIZE, marginBottom: SPACING, backgroundColor: '#F9F9F9', overflow: 'hidden' }}
     >
-        <DrawingViewer
-            imageUri={item.cloud_image_url} canvasData={item.canvas_data} viewerSize={ITEM_SIZE}
-            transparentMode={false} startVisible={true} animated={false}
-        />
+        <DrawingViewer imageUri={item.cloud_image_url} canvasData={item.canvas_data} viewerSize={ITEM_SIZE} transparentMode={false} startVisible={true} animated={false}/>
     </TouchableOpacity>
   );
 
@@ -168,12 +193,8 @@ export default function ProfilePage() {
                 </View>
 
                 <FlatList
-                    data={userDrawings}
-                    renderItem={renderItem}
-                    keyExtractor={(item) => item.id}
-                    numColumns={2}
-                    columnWrapperStyle={{ gap: SPACING }}
-                    contentContainerStyle={{ paddingBottom: 50 }}
+                    data={userDrawings} renderItem={renderItem} keyExtractor={(item) => item.id}
+                    numColumns={2} columnWrapperStyle={{ gap: SPACING }} contentContainerStyle={{ paddingBottom: 50 }}
                     showsVerticalScrollIndicator={false}
                     ListEmptyComponent={<View style={styles.emptyState}><Text style={styles.emptyText}>Aucun dessin pour l'instant.</Text></View>}
                 />
@@ -190,51 +211,35 @@ export default function ProfilePage() {
             </View>
        )}
 
-       {/* MODALE ZOOM INTERACTIVE */}
-       <Modal animationType="slide" transparent={false} visible={selectedDrawing !== null} onRequestClose={() => setSelectedDrawing(null)}>
-            {selectedDrawing && (
-                <View style={styles.modalContainer}>
-                    <View style={styles.modalHeader}>
-                        <TouchableOpacity onPress={() => setSelectedDrawing(null)} style={styles.closeModalBtn}><X color="#000" size={32} /></TouchableOpacity>
-                    </View>
-                    <Pressable onPressIn={() => setIsHolding(true)} onPressOut={() => setIsHolding(false)} style={{ width: screenWidth, height: screenWidth, backgroundColor: '#F0F0F0' }}>
-                        <DrawingViewer
-                            imageUri={selectedDrawing.cloud_image_url}
-                            canvasData={isHolding ? [] : selectedDrawing.canvas_data}
-                            viewerSize={screenWidth}
-                            transparentMode={false} startVisible={false} animated={true}
-                        />
-                    </Pressable>
-                    <View style={styles.modalFooter}>
-                        <View>
-                            <Text style={styles.drawingLabel}>{selectedDrawing.label}</Text>
-                            <Text style={styles.dateText}>Le {new Date(selectedDrawing.created_at).toLocaleDateString()}</Text>
-                        </View>
-                        
-                        <View style={styles.statsRowSmall}>
-                             {/* BOUTON LIKE ACTIF */}
-                             <TouchableOpacity onPress={handleLike} style={{flexDirection:'row', alignItems:'center', gap:5, marginRight:15}}>
+       {selectedDrawing && (
+        <Modal animationType="slide" transparent={false} visible={true} onRequestClose={() => setSelectedDrawing(null)}>
+            <View style={styles.modalContainer}>
+                <View style={styles.modalHeader}>
+                    <TouchableOpacity onPress={() => setSelectedDrawing(null)} style={styles.closeModalBtn}><X color="#000" size={32} /></TouchableOpacity>
+                </View>
+                <Pressable onPressIn={() => setIsHolding(true)} onPressOut={() => setIsHolding(false)} style={{ width: screenWidth, height: screenWidth, backgroundColor: '#F0F0F0' }}>
+                    <DrawingViewer
+                        imageUri={selectedDrawing.cloud_image_url}
+                        canvasData={isHolding ? [] : selectedDrawing.canvas_data}
+                        viewerSize={screenWidth} transparentMode={false} startVisible={false} animated={true}
+                    />
+                </Pressable>
+                <View style={styles.modalFooter}>
+                    <Text style={styles.drawingLabel}>{selectedDrawing.label}</Text>
+                    <View style={{flexDirection:'row', gap:15, alignItems:'center'}}>
+                            <TouchableOpacity onPress={handleLike} style={{flexDirection:'row', alignItems:'center', gap:5}}>
                                 <Heart color={isLiked ? "#FF3B30" : "#000"} fill={isLiked ? "#FF3B30" : "transparent"} size={24} />
                                 <Text style={styles.statTextSmall}>{selectedDrawing.likes_count || 0}</Text>
-                             </TouchableOpacity>
-
-                             {/* BOUTON COMMENTAIRE ACTIF */}
-                             <TouchableOpacity onPress={() => setShowComments(true)} style={{flexDirection:'row', alignItems:'center', gap:5}}>
-                                <MessageCircle color="#000" size={24} />
-                                <Text style={styles.statTextSmall}>{selectedDrawing.comments_count || 0}</Text>
-                             </TouchableOpacity>
-                        </View>
+                            </TouchableOpacity>
+                            <TouchableOpacity onPress={() => setShowComments(true)} style={{flexDirection:'row', alignItems:'center', gap:5}}>
+                                <MessageCircle color="#000" size={24} /><Text style={styles.statTextSmall}>{selectedDrawing.comments_count || 0}</Text>
+                            </TouchableOpacity>
                     </View>
-                    
-                    {/* LA MODALE DE COMMENTAIRES EST ICI ! */}
-                    <CommentsModal 
-                        visible={showComments} 
-                        onClose={() => setShowComments(false)} 
-                        drawingId={selectedDrawing.id} 
-                    />
                 </View>
-            )}
-       </Modal>
+                <CommentsModal visible={showComments} onClose={() => setShowComments(false)} drawingId={selectedDrawing.id} />
+            </View>
+        </Modal>
+       )}
     </View>
   );
 }
