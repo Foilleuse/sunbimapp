@@ -29,10 +29,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     let isMounted = true;
 
-    // 1. SÉCURITÉ : Si dans 1.5s on n'a pas fini, on force l'affichage
+    // 1. LE TIMER DE SÉCURITÉ (L'Anti-Blocage)
+    // Si Supabase ne répond pas en 1.5 secondes, on force l'ouverture.
     const safetyTimer = setTimeout(() => {
         if (isMounted && loading) {
-            console.log("⚠️ Timeout Supabase : On force l'affichage");
+            console.log("⚠️ Timeout Supabase : On force l'affichage (Mode Déconnecté)");
             setLoading(false);
         }
     }, 1500);
@@ -51,6 +52,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         } catch (e) {
             console.error("Erreur Auth Init:", e);
         } finally {
+            // Si ça répond vite, on arrête le chargement ici
             if (isMounted) setLoading(false);
         }
     };
