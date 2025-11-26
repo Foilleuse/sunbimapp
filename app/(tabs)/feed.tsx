@@ -1,19 +1,15 @@
-// AJOUT DE 'TouchableOpacity' DANS LES IMPORTS 👇
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform } from 'react-native';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { Heart, MessageCircle, User } from 'lucide-react-native';
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
-
-// LE CARROUSEL FUN
 import Carousel from 'react-native-reanimated-carousel';
 
 export default function FeedPage() {
     const [drawings, setDrawings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
-    
     const [currentIndex, setCurrentIndex] = useState(0);
     const [isLiked, setIsLiked] = useState(false);
 
@@ -29,17 +25,15 @@ export default function FeedPage() {
     const fetchTodaysFeed = async () => {
         try {
             const today = new Date().toISOString().split('T')[0];
-            const { data: cloudData, error: cloudError } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();
+            const { data: cloudData } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();
             
             if (cloudData) {
-                const { data: drawingsData, error: drawingsError } = await supabase
+                const { data: drawingsData } = await supabase
                     .from('drawings')
                     .select('*')
                     .eq('cloud_id', cloudData.id)
                     .order('created_at', { ascending: false })
                     .limit(50); 
-
-                if (drawingsError) throw drawingsError;
                 setDrawings(drawingsData || []);
             }
         } catch (e) { console.error(e); } finally { setLoading(false); }
@@ -56,13 +50,10 @@ export default function FeedPage() {
     return (
         <View style={styles.container}>
             
-            {/* HEADER */}
             <SunbimHeader showCloseButton={false} />
 
-            {/* ZONE SWIPE FUN (PARALLAXE) */}
             <View style={{ width: canvasSize, height: canvasSize, backgroundColor: '#F0F0F0', position: 'relative' }}>
                 
-                {/* FOND FIXE */}
                 {backgroundUrl && (
                     <View style={StyleSheet.absoluteFill}>
                         <DrawingViewer
@@ -75,20 +66,19 @@ export default function FeedPage() {
                     </View>
                 )}
 
-                {/* CARROUSEL ANIMÉ */}
                 {drawings.length > 0 ? (
                     <Carousel
                         loop={false}
                         width={canvasSize}
                         height={canvasSize}
                         data={drawings}
-                        scrollAnimationDuration={800}
+                        scrollAnimationDuration={600} // Plus rapide aussi au swipe
                         onSnapToItem={(index) => setCurrentIndex(index)}
-                        // Mode Parallaxe pour l'effet "3D / Demi-cercle"
+                        // --- REGLAGES FUN ---
                         mode="parallax"
                         modeConfig={{
-                            parallaxScrollingScale: 0.9,
-                            parallaxScrollingOffset: 50,
+                            parallaxScrollingScale: 0.8, // Effet de profondeur marqué
+                            parallaxScrollingOffset: 130, // Chevauchement important
                         }}
                         renderItem={({ item, index }) => {
                             const isActive = index === currentIndex;
@@ -99,7 +89,7 @@ export default function FeedPage() {
                                         canvasData={item.canvas_data}
                                         viewerSize={canvasSize}
                                         transparentMode={true}
-                                        animated={isActive} // Animation au focus
+                                        animated={isActive} 
                                         startVisible={false} 
                                     />
                                 </View>
@@ -111,33 +101,22 @@ export default function FeedPage() {
                 )}
             </View>
 
-            {/* INFOS */}
             <View style={styles.socialContainer}>
-                 
                  <View style={styles.titleRow}>
                     <Text style={styles.drawingTitle}>
                         {activeDrawing?.label || "Sans titre"}
                     </Text>
                  </View>
-
                  <View style={styles.metaRow}>
                     <View style={styles.userProfile}>
-                        <View style={styles.avatarPlaceholder}>
-                            <User size={16} color="#666" />
-                        </View>
+                        <View style={styles.avatarPlaceholder}><User size={16} color="#666" /></View>
                         <Text style={styles.userName}>Anonyme</Text>
                     </View>
-
                     <View style={styles.actions}>
                         <TouchableOpacity style={styles.actionBtn} onPress={handleLike}>
-                            <Heart 
-                                color={isLiked ? "#FF3B30" : "#000"} 
-                                fill={isLiked ? "#FF3B30" : "transparent"} 
-                                size={26} 
-                            />
+                            <Heart color={isLiked ? "#FF3B30" : "#000"} fill={isLiked ? "#FF3B30" : "transparent"} size={26} />
                             <Text style={styles.statText}>{activeDrawing?.likes_count || 0}</Text>
                         </TouchableOpacity>
-
                         <TouchableOpacity style={styles.actionBtn} onPress={handleComment}>
                             <MessageCircle color="#000" size={26} />
                             <Text style={styles.statText}>{activeDrawing?.comments_count || 0}</Text>
@@ -154,13 +133,7 @@ const styles = StyleSheet.create({
     loadingContainer: { flex: 1, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     text: { color: '#666', fontSize: 16 },
-
-    socialContainer: {
-        flex: 1,
-        paddingHorizontal: 20,
-        paddingTop: 20,
-        backgroundColor: '#FFF',
-    },
+    socialContainer: { flex: 1, paddingHorizontal: 20, paddingTop: 20, backgroundColor: '#FFF' },
     titleRow: { marginBottom: 15 },
     drawingTitle: { fontSize: 28, fontWeight: '900', color: '#000', letterSpacing: -0.5 },
     metaRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
