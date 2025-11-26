@@ -5,7 +5,7 @@ import { Canvas, Path, Image as SkiaImage, useImage, Group, Skia } from '@shopif
 interface DrawingViewerProps {
   imageUri: string;
   canvasData: any; 
-  viewerSize: number; // La taille du carré à l'écran (ex: 390px)
+  viewerSize: number; // La taille du carré à l'écran
   transparentMode?: boolean;
 }
 
@@ -16,6 +16,7 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
   transparentMode = false 
 }) => {
   
+  const { width: screenWidth } = Dimensions.get('window');
   const image = useImage(imageUri || ""); 
 
   // 1. Parsing des données
@@ -28,20 +29,17 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
     return data;
   }, [canvasData]);
 
-  // 2. Calcul du Zoom (Miroir exact du Créateur)
+  // 2. Calcul du Zoom (Cadrage Carré Basé sur la Hauteur)
   const transform = useMemo(() => {
     if (!image) return { scale: 1, translateX: 0, translateY: 0 };
     
-    // IMPORTANT : On reprend la logique "Carré basé sur la Hauteur" du créateur
-    const NATIVE_SQUARE_SIZE = image.height(); 
-    if (NATIVE_SQUARE_SIZE === 0) return { scale: 1, translateX: 0, translateY: 0 };
+    const CANVAS_SIZE = image.height(); // On garde la référence Hauteur
+    if (CANVAS_SIZE === 0) return { scale: 1, translateX: 0, translateY: 0 };
 
-    // On calcule le ratio pour faire rentrer ce carré géant dans le petit carré du viewer
-    const fitScale = viewerSize / NATIVE_SQUARE_SIZE;
-
-    // Pas besoin de centrage complexe ici car :
-    // Carré Natif (4000x4000) * Scale => Carré Viewer (390x390)
-    // Ça rentre pile poil.
+    // On fait rentrer le carré natif dans le carré écran
+    const fitScale = viewerSize / CANVAS_SIZE;
+    
+    // Pas de centrage complexe nécessaire car on aligne 0,0
     return { 
         scale: fitScale, 
         translateX: 0, 
@@ -54,9 +52,7 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
     return <View style={styles.loading}><ActivityIndicator color="#fff" /></View>;
   }
 
-  // On force les dimensions natives à être un CARRÉ basé sur la hauteur
-  // C'est ce qui garantit que l'image est croppée exactement comme au moment du dessin.
-  const DISPLAY_SIZE = image.height();
+  const DISPLAY_SIZE = image.height(); // On force le carré
   
   const matrix = [
       { translateX: transform.translateX },
@@ -69,17 +65,17 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
       <Canvas style={{ flex: 1 }}>
         <Group transform={matrix}>
           
-          {/* IMAGE DE FOND */}
+          {/* A. IMAGE DE FOND */}
           {!transparentMode && (
               <SkiaImage
                 image={image}
                 x={0} y={0}
-                width={DISPLAY_SIZE} height={DISPLAY_SIZE} // <--- FORCE LE CARRÉ
-                fit="cover" // Rogne les bords qui dépassent, comme à la création
+                width={DISPLAY_SIZE} height={DISPLAY_SIZE}
+                fit="cover" // Cadrage carré strict
               />
           )}
           
-          {/* DESSINS */}
+          {/* B. DESSINS */}
           <Group layer={true}> 
           {safePaths.map((p: any, index: number) => {
              if (!p || !p.svgPath) return null;
@@ -88,9 +84,13 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
                  const path = Skia.Path.MakeFromSVGString(p.svgPath);
                  if (!path) return null;
                  
-                 // Compensation épaisseur
+                 // --- CORRECTION ÉPAISSEUR ---
+                 // On prend la largeur enregistrée (ex: 6)
+                 // Et on la DIVISE par le scale (ex: 0.1)
+                 // Résultat : 60.
+                 // Quand le Groupe sera réduit, ça reviendra à 6 visuel.
                  const baseWidth = p.width || 6;
-                 const adjustedWidth = baseWidth / transform.scale;
+                 const adjustedWidth = baseWidth / transform.scale; 
                  
                  return (
                    <Path
@@ -98,7 +98,7 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
                      path={path}
                      color={p.isEraser ? "#000000" : (p.color || "#000000")}
                      style="stroke"
-                     strokeWidth={adjustedWidth} 
+                     strokeWidth={adjustedWidth} // <--- C'est ça qui marche
                      strokeCap="round"
                      strokeJoin="round"
                      blendMode={p.isEraser ? "clear" : "srcOver"}
