@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { supabase } from '../src/lib/supabaseClient';
 import { useAuth } from '../src/contexts/AuthContext';
-import { User, Mail, Lock, LogOut, ChevronLeft, Settings } from 'lucide-react-native'; 
+import { User, Mail, Lock, LogOut, ChevronLeft, Settings, AlertCircle, Heart } from 'lucide-react-native'; 
 import { DrawingViewer } from '../src/components/DrawingViewer';
 
 export default function ProfilePage() {
@@ -11,8 +11,12 @@ export default function ProfilePage() {
   const { user, profile, signOut, loading: authLoading } = useAuth();
   
   // --- ETATS ---
-  const [userDrawings, setUserDrawings] = useState<any[]>([]);
-  const [loadingDrawings, setLoadingDrawings] = useState(true);
+  const [historyItems, setHistoryItems] = useState<any[]>([]); // La liste complète (Dessins + Ratés)
+  const [loadingHistory, setLoadingHistory] = useState(true);
+  
+  const [totalLikes, setTotalLikes] = useState(0);
+  const [drawingCount, setDrawingCount] = useState(0);
+
   const [selectedDrawing, setSelectedDrawing] = useState<any | null>(null);
   const [isHolding, setIsHolding] = useState(false);
 
@@ -27,28 +31,61 @@ export default function ProfilePage() {
   const ITEM_SIZE = (screenWidth - SPACING) / 2;
 
   useEffect(() => {
-    if (user) fetchUserDrawings();
+    if (user) fetchHistory();
   }, [user]);
 
-  const fetchUserDrawings = async () => {
+  const fetchHistory = async () => {
     try {
-        const { data, error } = await supabase
+        const today = new Date().toISOString().split('T')[0];
+
+        // 1. Récupérer TOUS les nuages passés
+        const { data: clouds, error: cloudsError } = await supabase
+            .from('clouds')
+            .select('*')
+            .lte('published_for', today) 
+            .order('published_for', { ascending: false });
+
+        if (cloudsError) throw cloudsError;
+
+        // 2. Récupérer MES dessins
+        const { data: myDrawings, error: drawingsError } = await supabase
             .from('drawings')
             .select('*')
-            .eq('user_id', user?.id)
-            .order('created_at', { ascending: false });
+            .eq('user_id', user?.id);
 
-        if (error) throw error;
-        setUserDrawings(data || []);
+        if (drawingsError) throw drawingsError;
+
+        // 3. FUSION : On crée la liste unifiée
+        const history = clouds?.map(cloud => {
+            const drawing = myDrawings?.find(d => d.cloud_id === cloud.id);
+            
+            return {
+                id: cloud.id, // ID unique pour la liste
+                type: drawing ? 'drawing' : 'missed', // Type d'élément
+                date: cloud.published_for,
+                
+                // Données pour l'affichage
+                cloud_image_url: cloud.image_url,
+                canvas_data: drawing ? drawing.canvas_data : [], // Vide si raté
+                label: drawing ? drawing.label : null,
+                likes_count: drawing ? drawing.likes_count : 0,
+                created_at: drawing ? drawing.created_at : cloud.published_for
+            };
+        });
+
+        setHistoryItems(history || []);
+        
+        // Calculs Stats
+        const realDrawings = myDrawings || [];
+        setDrawingCount(realDrawings.length);
+        setTotalLikes(realDrawings.reduce((acc, curr) => acc + (curr.likes_count || 0), 0));
+
     } catch (e) {
         console.error("Erreur profil:", e);
     } finally {
-        setLoadingDrawings(false);
+        setLoadingHistory(false);
     }
   };
-
-  // Calcul des likes totaux
-  const totalLikes = userDrawings.reduce((acc, curr) => acc + (curr.likes_count || 0), 0);
 
   const handleEmailAuth = async () => {
     setFormLoading(true);
@@ -60,7 +97,6 @@ export default function ProfilePage() {
         } else {
             const { error } = await supabase.auth.signInWithPassword({ email, password });
             if (error) throw error;
-            // Auto-refresh via AuthContext
         }
     } catch (e: any) { Alert.alert("Erreur", e.message); } finally { setFormLoading(false); }
   };
@@ -68,30 +104,47 @@ export default function ProfilePage() {
   const handleSignOut = async () => { await signOut(); router.replace('/'); };
   const handleEditProfile = () => Alert.alert("Bientôt", "Édition profil à venir");
 
-  // Rendu Vignette
-  const renderItem = ({ item }: { item: any }) => (
-    <TouchableOpacity 
-        activeOpacity={0.9}
-        onPress={() => setSelectedDrawing(item)}
-        style={{ width: ITEM_SIZE, height: ITEM_SIZE, marginBottom: SPACING, backgroundColor: '#F9F9F9', overflow: 'hidden' }}
-    >
-        <DrawingViewer
-            imageUri={item.cloud_image_url}
-            canvasData={item.canvas_data}
-            viewerSize={ITEM_SIZE}
-            transparentMode={false} 
-            startVisible={true}
-            animated={false}
-        />
-    </TouchableOpacity>
-  );
+  // --- RENDU INTELLIGENT ---
+  const renderItem = ({ item }: { item: any }) => {
+    const isMissed = item.type === 'missed';
+
+    return (
+        <TouchableOpacity 
+            activeOpacity={isMissed ? 1 : 0.9} // Pas de clic si raté (ou alors juste pour voir le nuage vide)
+            onPress={() => !isMissed && setSelectedDrawing(item)}
+            style={{ 
+                width: ITEM_SIZE, height: ITEM_SIZE, 
+                marginBottom: SPACING, backgroundColor: '#F9F9F9', overflow: 'hidden',
+                opacity: isMissed ? 0.6 : 1 // On grise les jours ratés
+            }}
+        >
+            <DrawingViewer
+                imageUri={item.cloud_image_url}
+                canvasData={item.canvas_data}
+                viewerSize={ITEM_SIZE}
+                transparentMode={false} 
+                startVisible={true}
+                animated={false}
+            />
+
+            {/* Overlay "RATÉ" */}
+            {isMissed && (
+                <View style={styles.missedBadge}>
+                    <AlertCircle color="#FFF" size={24} />
+                    <Text style={styles.missedText}>
+                        {new Date(item.date).toLocaleDateString(undefined, {day:'numeric', month:'short'})}
+                    </Text>
+                </View>
+            )}
+        </TouchableOpacity>
+    );
+  };
 
   if (authLoading) return <View style={styles.container}><ActivityIndicator color="#000"/></View>;
 
   return (
     <View style={styles.container}>
        
-       {/* --- ZONE 1 : HEADER NAVIGATION (Fixe) --- */}
        <View style={styles.navHeader}>
             <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}>
                 <ChevronLeft color="#000" size={32} />
@@ -110,10 +163,7 @@ export default function ProfilePage() {
        </View>
 
        {user ? (
-            // --- ÉCRAN CONNECTÉ ---
             <View style={{flex: 1}}>
-                
-                {/* --- ZONE 2 : CARTE D'IDENTITÉ (Fixe) --- */}
                 <View style={styles.profileCard}>
                     <View style={styles.profileRow}>
                         <View style={styles.avatarContainer}>
@@ -126,10 +176,8 @@ export default function ProfilePage() {
                         <View style={styles.textsContainer}>
                             <Text style={styles.displayName}>{profile?.display_name || "Anonyme"}</Text>
                             <Text style={styles.bio}>{profile?.bio || "Chasseur de nuages."}</Text>
-                            
-                            {/* Stats intégrées */}
                             <View style={styles.miniStats}>
-                                <Text style={styles.miniStatText}>{userDrawings.length} <Text style={styles.miniStatLabel}>dessins</Text></Text>
+                                <Text style={styles.miniStatText}>{drawingCount} <Text style={styles.miniStatLabel}>dessins</Text></Text>
                                 <Text style={styles.miniStatText}>•</Text>
                                 <Text style={styles.miniStatText}>{totalLikes} <Text style={styles.miniStatLabel}>likes</Text></Text>
                             </View>
@@ -138,9 +186,8 @@ export default function ProfilePage() {
                     <View style={styles.divider} />
                 </View>
 
-                {/* --- ZONE 3 : GALERIE (Scrollable) --- */}
                 <FlatList
-                    data={userDrawings}
+                    data={historyItems} // On utilise la liste fusionnée
                     renderItem={renderItem}
                     keyExtractor={(item) => item.id}
                     numColumns={2}
@@ -148,12 +195,11 @@ export default function ProfilePage() {
                     contentContainerStyle={{ paddingBottom: 50 }}
                     showsVerticalScrollIndicator={false}
                     ListEmptyComponent={
-                        <View style={styles.emptyState}><Text style={styles.emptyText}>Aucun dessin pour l'instant.</Text></View>
+                        <View style={styles.emptyState}><Text style={styles.emptyText}>Chargement de l'historique...</Text></View>
                     }
                 />
             </View>
        ) : (
-            // --- ÉCRAN FORMULAIRE ---
             <View style={styles.formContainer}>
                 <Text style={styles.welcomeText}>Connecte-toi.</Text>
                 <View style={styles.inputWrapper}><Mail size={20} color="#999" style={styles.inputIcon}/><TextInput placeholder="Email" value={email} onChangeText={setEmail} autoCapitalize="none" style={styles.input} /></View>
@@ -165,8 +211,7 @@ export default function ProfilePage() {
             </View>
        )}
 
-       {/* MODALE ZOOM */}
-       <Modal animationType="fade" transparent={false} visible={selectedDrawing !== null} onRequestClose={() => setSelectedDrawing(null)}>
+       <Modal animationType="slide" transparent={false} visible={selectedDrawing !== null} onRequestClose={() => setSelectedDrawing(null)}>
             {selectedDrawing && (
                 <View style={styles.modalContainer}>
                     <View style={styles.modalHeader}>
@@ -180,6 +225,12 @@ export default function ProfilePage() {
                             startVisible={false} animated={true}
                         />
                     </Pressable>
+                    <View style={styles.modalFooter}>
+                        <Text style={styles.drawingLabel}>{selectedDrawing.label}</Text>
+                        <View style={{flexDirection:'row', gap:5, alignItems:'center'}}>
+                             <Heart color="#000" size={20} /><Text style={{fontWeight:'600'}}>{selectedDrawing.likes_count || 0}</Text>
+                        </View>
+                    </View>
                 </View>
             )}
        </Modal>
@@ -193,7 +244,6 @@ const styles = StyleSheet.create({
   iconBtn: { padding: 5 },
   topRightActions: { flexDirection: 'row', gap: 15 },
   
-  // NOUVEAU STYLE PROFIL FIXE
   profileCard: { paddingHorizontal: 20, paddingBottom: 10, backgroundColor: '#FFF' },
   profileRow: { flexDirection: 'row', alignItems: 'center', gap: 20 },
   avatar: { width: 80, height: 80, borderRadius: 40 },
@@ -219,4 +269,16 @@ const styles = StyleSheet.create({
   modalContainer: { flex: 1, backgroundColor: '#FFF' },
   modalHeader: { width: '100%', height: 100, justifyContent: 'flex-end', alignItems: 'flex-end', paddingRight: 20, paddingBottom: 10, backgroundColor: '#FFF', zIndex: 20 },
   closeModalBtn: { padding: 5 },
+  modalFooter: { padding: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#F0F0F0', marginTop: 10 },
+  drawingLabel: { fontSize: 20, fontWeight: '800', color: '#000' },
+
+  // STYLE MISSED
+  missedBadge: {
+      position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+      backgroundColor: 'rgba(0,0,0,0.3)', // Voile sombre
+      justifyContent: 'center', alignItems: 'center',
+  },
+  missedText: {
+      color: '#FFF', fontWeight: '800', marginTop: 5, fontSize: 14
+  }
 });
