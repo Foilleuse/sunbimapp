@@ -48,7 +48,7 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
     return data;
   }, [canvasData]);
 
-  // 2. LOGIQUE D'AFFICHAGE
+  // 2. LOGIQUE MATRICE
   const displayLogic = useMemo(() => {
       const m = Skia.Matrix();
       if (!image) return { matrix: m, scale: 1 };
@@ -56,7 +56,7 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
       const NATIVE_SIZE = image.height();
       if (NATIVE_SIZE === 0) return { matrix: m, scale: 1 };
 
-      // CAS A : ZOOM AUTOMATIQUE (Animation Fin)
+      // CAS A : ZOOM AUTOMATIQUE
       if (autoCenter && safePaths.length > 0) {
           try {
               const combinedPath = Skia.Path.Make();
@@ -73,28 +73,26 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
                   if (bounds.width > 10 && bounds.height > 10) {
                       const padding = 40;
                       const targetSize = viewerSize - padding;
-                      
-                      // On calcule le zoom
-                      const focusScale = Math.min(targetSize / Math.max(bounds.width, bounds.height), 4);
+                      const focusScale = Math.min(targetSize / Math.max(bounds.width, bounds.height), 5);
 
-                      // On centre
                       const translateX = (viewerSize - bounds.width * focusScale) / 2 - bounds.x * focusScale;
                       const translateY = (viewerSize - bounds.height * focusScale) / 2 - bounds.y * focusScale;
 
                       m.translate(translateX, translateY);
                       m.scale(focusScale, focusScale);
                       
+                      // Note : ici le scale sert au groupe entier, donc aux traits aussi
                       return { matrix: m, scale: focusScale };
                   }
               }
           } catch (e) {}
       }
 
-      // CAS B : STANDARD (Feed/Galerie)
-      const simpleScale = viewerSize / NATIVE_SIZE;
-      m.scale(simpleScale, simpleScale);
+      // CAS B : STANDARD
+      const fitScale = viewerSize / NATIVE_SIZE;
+      m.scale(fitScale, fitScale);
       
-      return { matrix: m, scale: simpleScale };
+      return { matrix: m, scale: fitScale };
 
   }, [image, viewerSize, autoCenter, safePaths]);
 
@@ -108,9 +106,10 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
   return (
     <View style={[styles.container, {width: viewerSize, height: viewerSize, overflow: 'hidden'}]}>
       <Canvas style={{ flex: 1 }}>
+        
+        {/* LE GROUPE APPLIQUE LE ZOOM À TOUT LE MONDE (IMAGE + TRAITS) */}
         <Group matrix={displayLogic.matrix}>
           
-          {/* IMAGE */}
           {!transparentMode && (
               <SkiaImage
                 image={image}
@@ -120,30 +119,28 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
               />
           )}
           
-          {/* DESSINS */}
           <Group layer={true}> 
           {safePaths.map((p: any, index: number) => {
              if (!p || !p.svgPath) return null;
-
              try {
                  const path = Skia.Path.MakeFromSVGString(p.svgPath);
                  if (!path) return null;
                  
-                 // --- CORRECTION DÉFINITIVE DE L'ÉPAISSEUR ---
-                 // On utilise la largeur enregistrée (p.width).
-                 // C'est tout. Pas de division, pas de multiplication.
-                 // Le Groupe (Group matrix) gère déjà le zoom de tout le monde.
+                 // --- CORRECTION FINALE ---
+                 // On utilise la largeur native enregistrée. C'est tout.
+                 // Puisque le <Group> au-dessus est zoomé/dézoomé,
+                 // cette épaisseur sera zoomée/dézoomée automatiquement avec l'image.
+                 // Si l'image devient toute petite, le trait devient tout fin.
+                 // Si l'image devient géante, le trait devient épais.
+                 const width = p.width || 15; // Valeur brute
                  
-                 // (On garde juste une sécurité "|| 10" pour les vieux dessins sans épaisseur)
-                 const naturalWidth = p.width || 15; 
-
                  return (
                    <Path
                      key={index}
                      path={path}
                      color={p.isEraser ? "#000000" : (p.color || "#000000")}
                      style="stroke"
-                     strokeWidth={naturalWidth} 
+                     strokeWidth={width} // <--- PLUS AUCUN CALCUL ICI
                      strokeCap="round"
                      strokeJoin="round"
                      blendMode={p.isEraser ? "clear" : "srcOver"}
