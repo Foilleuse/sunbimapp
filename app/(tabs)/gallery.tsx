@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet, FlatList, Dimensions, TouchableOpacity, ActivityIndicator, RefreshControl, TextInput, Keyboard, Modal, Image } from 'react-native';
-import { useEffect, useState, useCallback } from 'react'; // useCallback est bien importé ici
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { useFocusEffect } from 'expo-router';
@@ -10,15 +10,13 @@ export default function GalleryPage() {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
 
-    // --- ETATS FILTRES ---
     const [showClouds, setShowClouds] = useState(true);
     const [onlyLiked, setOnlyLiked] = useState(false);
     const [searchText, setSearchText] = useState('');
 
-    // --- ETAT MODALE ---
     const [selectedDrawing, setSelectedDrawing] = useState<any | null>(null);
 
-    const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+    const { width: screenWidth } = Dimensions.get('window');
     const SPACING = 1; 
     const ITEM_SIZE = (screenWidth - SPACING) / 2;
 
@@ -45,13 +43,7 @@ export default function GalleryPage() {
     };
 
     useEffect(() => { fetchGallery(); }, []);
-
-    // --- CORRECTION ICI : useCallback au lieu de callback ---
-    useFocusEffect(
-        useCallback(() => {
-            fetchGallery();
-        }, [])
-    );
+    useFocusEffect(useCallback(() => { fetchGallery(); }, []));
 
     const onRefresh = () => { setRefreshing(true); fetchGallery(); };
     const handleSearchSubmit = () => { setLoading(true); fetchGallery(); Keyboard.dismiss(); };
@@ -74,7 +66,7 @@ export default function GalleryPage() {
                 canvasData={item.canvas_data}
                 viewerSize={ITEM_SIZE}
                 transparentMode={!showClouds} 
-                startVisible={true}
+                startVisible={true} // Miniature : toujours visible direct
                 animated={false}
             />
         </TouchableOpacity>
@@ -83,10 +75,12 @@ export default function GalleryPage() {
     return (
         <View style={styles.container}>
             
-            {/* HEADER */}
-            <View style={styles.headerBar}><Text style={styles.headerText}>sunbim</Text></View>
+            {/* HEADER PRINCIPAL */}
+            <View style={styles.headerBar}>
+                <Text style={styles.headerText}>sunbim</Text>
+            </View>
 
-            {/* TOOLS */}
+            {/* BARRE D'OUTILS */}
             <View style={styles.toolsContainer}>
                 <View style={styles.searchBar}>
                     <Search color="#999" size={18} />
@@ -122,7 +116,7 @@ export default function GalleryPage() {
                 />
             )}
 
-            {/* MODALE POP-UP */}
+            {/* --- MODALE POP-UP --- */}
             <Modal
                 animationType="slide"
                 transparent={false}
@@ -132,10 +126,12 @@ export default function GalleryPage() {
                 {selectedDrawing && (
                     <View style={styles.modalContainer}>
                         
-                        {/* Croix de fermeture */}
-                        <View style={styles.modalHeader}>
-                            <TouchableOpacity onPress={closeModal} style={styles.closeModalBtn}>
-                                <X color="#000" size={32} />
+                        {/* HEADER MODALE (Même style que l'accueil) */}
+                        <View style={styles.headerBar}>
+                            <Text style={styles.headerText}>sunbim</Text>
+                            {/* Croix de fermeture */}
+                            <TouchableOpacity style={styles.closeBtn} onPress={closeModal}>
+                                <X color="#000" size={28} />
                             </TouchableOpacity>
                         </View>
 
@@ -146,8 +142,9 @@ export default function GalleryPage() {
                                 canvasData={selectedDrawing.canvas_data}
                                 viewerSize={screenWidth}
                                 transparentMode={!showClouds}
-                                startVisible={true}
-                                animated={false}
+                                // --- ANIMATION ACTIVÉE ---
+                                startVisible={false} // On part de zéro
+                                animated={true}      // On lance le tracé
                             />
                         </View>
 
@@ -176,9 +173,37 @@ export default function GalleryPage() {
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#FFFFFF' },
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    headerBar: { width: '100%', backgroundColor: '#FFFFFF', paddingTop: 60, paddingBottom: 10, alignItems: 'center', justifyContent: 'center', zIndex: 10 },
-    headerText: { fontSize: 32, fontWeight: '900', color: '#FFFFFF', textShadowColor: 'rgba(0, 0, 0, 0.5)', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 0, letterSpacing: -1 },
-    toolsContainer: { flexDirection: 'row', paddingHorizontal: 15, paddingBottom: 15, alignItems: 'center', gap: 10, borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
+    
+    // HEADER (Utilisé en haut et dans la modale)
+    headerBar: { 
+        width: '100%', 
+        backgroundColor: '#FFFFFF', 
+        paddingTop: 60, 
+        paddingBottom: 15, 
+        alignItems: 'center', 
+        justifyContent: 'center', 
+        zIndex: 10,
+        // Petit trait de séparation
+        borderBottomWidth: 1,
+        borderBottomColor: '#F9F9F9'
+    },
+    headerText: { 
+        fontSize: 32, 
+        fontWeight: '900', 
+        color: '#FFFFFF', 
+        textShadowColor: 'rgba(0, 0, 0, 0.5)', 
+        textShadowOffset: { width: 2, height: 2 }, 
+        textShadowRadius: 0, 
+        letterSpacing: -1 
+    },
+    closeBtn: {
+        position: 'absolute',
+        right: 20,
+        bottom: 15, // Aligné verticalement avec le texte
+    },
+
+    // TOOLS
+    toolsContainer: { flexDirection: 'row', paddingHorizontal: 15, paddingBottom: 15, paddingTop: 10, alignItems: 'center', gap: 10, borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
     searchBar: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#F5F5F5', borderRadius: 20, paddingHorizontal: 12, height: 40, gap: 8 },
     searchInput: { flex: 1, fontSize: 14, color: '#000', height: '100%' },
     actionsRow: { flexDirection: 'row', gap: 8 },
@@ -186,9 +211,9 @@ const styles = StyleSheet.create({
     activeBtn: { backgroundColor: '#000', borderColor: '#000' },
     emptyState: { marginTop: 100, alignItems: 'center' },
     emptyText: { color: '#999' },
+
+    // MODALE
     modalContainer: { flex: 1, backgroundColor: '#FFF' },
-    modalHeader: { width: '100%', height: 100, justifyContent: 'flex-end', alignItems: 'flex-end', paddingRight: 20, paddingBottom: 10, backgroundColor: '#FFF', zIndex: 20 },
-    closeModalBtn: { padding: 5 },
     modalFooter: { padding: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#F0F0F0', marginTop: 10 },
     userInfoRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
     profilePlaceholder: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#CCC', justifyContent: 'center', alignItems: 'center' },
