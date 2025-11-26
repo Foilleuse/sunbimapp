@@ -1,17 +1,16 @@
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, Dimensions, Platform } from 'react-native';
 import { useEffect, useState } from 'react';
-import { useRouter } from 'expo-router';
-import { X } from 'lucide-react-native';
+// On a retiré useRouter et X car ils ne servent plus
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 
+// Import dynamique PagerView
 let PagerView: any;
 if (Platform.OS !== 'web') {
     try { PagerView = require('react-native-pager-view').default; } catch (e) { PagerView = View; }
 } else { PagerView = View; }
 
 export default function FeedPage() {
-    const router = useRouter();
     const [drawings, setDrawings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [currentIndex, setCurrentIndex] = useState(0);
@@ -26,6 +25,7 @@ export default function FeedPage() {
     const fetchTodaysFeed = async () => {
         try {
             const today = new Date().toISOString().split('T')[0];
+            
             const { data: cloudData, error: cloudError } = await supabase
                 .from('clouds')
                 .select('*')
@@ -56,13 +56,12 @@ export default function FeedPage() {
     return (
         <View style={styles.container}>
             
+            {/* HEADER PUR (Sans bouton retour) */}
             <View style={styles.headerBar}>
                 <Text style={styles.headerText}>sunbim</Text>
-                <TouchableOpacity style={styles.closeBtn} onPress={() => router.back()}>
-                    <X color="#000" size={28} /> 
-                </TouchableOpacity>
             </View>
 
+            {/* SWIPE AREA */}
             <View style={{ width: canvasSize, height: canvasSize, backgroundColor: '#F0F0F0', position: 'relative' }}>
                 
                 {/* FOND FIXE */}
@@ -73,11 +72,12 @@ export default function FeedPage() {
                             canvasData={[]} 
                             viewerSize={canvasSize}
                             transparentMode={false} 
+                            animated={false}
                         />
                     </View>
                 )}
 
-                {/* SWIPE */}
+                {/* SWIPE DESSINS */}
                 {drawings.length > 0 ? (
                     <PagerView 
                         style={{ flex: 1 }} 
@@ -95,20 +95,21 @@ export default function FeedPage() {
                                         viewerSize={canvasSize}
                                         transparentMode={true}
                                         animated={isActive} 
-                                        startVisible={false} // <--- LE SECRET EST ICI : Invisible par défaut
+                                        startVisible={false} 
                                     />
                                 </View>
                             );
                         })}
                     </PagerView>
                 ) : (
-                    <View style={styles.centerBox}><Text style={styles.text}>Sois le premier à dessiner !</Text></View>
+                    <View style={styles.centerBox}><Text style={styles.text}>La galerie est vide.</Text></View>
                 )}
             </View>
 
+            {/* INFOS */}
             <View style={styles.interactions}>
                  <Text style={styles.drawingTitle}>
-                    {activeDrawing ? (activeDrawing.label || "Sans titre") : ''}
+                    {activeDrawing ? (activeDrawing.label || `Nuage du ${new Date(activeDrawing.created_at).toLocaleDateString()}`) : ''}
                  </Text>
                  <Text style={styles.userText}>
                     {drawings.length > 0 ? `Dessin ${currentIndex + 1} sur ${drawings.length}` : ''}
@@ -131,7 +132,6 @@ const styles = StyleSheet.create({
         fontSize: 32, fontWeight: '900', color: '#FFFFFF', 
         textShadowColor: 'rgba(0, 0, 0, 0.5)', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 0, 
     },
-    closeBtn: { position: 'absolute', right: 20, bottom: 15 },
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     text: { color: '#666', fontSize: 16 },
     interactions: { width: '100%', padding: 20, alignItems: 'flex-start' },
