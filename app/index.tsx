@@ -1,8 +1,9 @@
-import { View, Text, StyleSheet, ActivityIndicator, Alert, Modal, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, Alert, Modal, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Animated } from 'react-native';
 import { useEffect, useState, useRef } from 'react';
 import { supabase } from '../src/lib/supabaseClient';
 import { DrawingCanvas, DrawingCanvasRef } from '../src/components/DrawingCanvas';
 import { DrawingControls } from '../src/components/DrawingControls';
+import { SunbimHeader } from '../src/components/SunbimHeader';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../src/contexts/AuthContext';
 
@@ -23,12 +24,15 @@ export default function DrawPage() {
   const [strokeWidth, setStrokeWidth] = useState(6);
   const [isEraserMode, setIsEraserMode] = useState(false);
   
-  // Etats Tag & Upload
+  // Tag & Upload
   const [modalVisible, setModalVisible] = useState(false);
   const [tagText, setTagText] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   
   const canvasRef = useRef<DrawingCanvasRef>(null);
+
+  // --- MOTEUR D'ANIMATION (Le Voile Blanc) ---
+  const fadeAnim = useRef(new Animated.Value(0)).current; // 0 = Invisible
 
   useEffect(() => {
     fetchTodaysCloud();
@@ -53,33 +57,24 @@ export default function DrawPage() {
   const handleRedo = () => canvasRef.current?.redo();
   const toggleEraser = () => setIsEraserMode((prev) => !prev);
 
-  // --- 1. CLIC SHARE ---
   const handleSharePress = () => {
     if (!canvasRef.current) return;
-    
     const paths = canvasRef.current.getPaths();
     if (!paths || paths.length === 0) {
         Alert.alert("Oups", "Dessine quelque chose avant de partager !");
         return;
     }
-
-    // Vérification connexion ici uniquement
     if (!user) {
-        Alert.alert(
-            "Connexion requise",
-            "Tu dois avoir un compte pour ajouter ton nuage à la galerie.",
-            [
-                { text: "Annuler", style: "cancel" },
-                { text: "Se connecter", onPress: () => router.push('/profile') }
-            ]
-        );
+        Alert.alert("Connexion requise", "Tu dois avoir un compte pour ajouter ton nuage.", [
+            { text: "Annuler", style: "cancel" },
+            { text: "Se connecter", onPress: () => router.push('/profile') }
+        ]);
         return;
     }
-
     setModalVisible(true);
   };
 
-  // --- 2. CONFIRMATION TAG ---
+  // --- VALIDATION ET ANIMATION ---
   const confirmShare = async () => {
     if (!canvasRef.current || !cloud || !user) return;
     
@@ -106,14 +101,24 @@ export default function DrawPage() {
 
         if (dbError) throw dbError;
 
+        // 1. On ferme la modale (clavier etc)
         setModalVisible(false);
         setTagText('');
-        Alert.alert("Succès !", "Ton œuvre est dans les nuages ☁️");
-        router.push('/(tabs)/feed');
+        
+        // 2. On lance l'animation "Montée au ciel" (Fondu Blanc)
+        Animated.timing(fadeAnim, {
+            toValue: 1, // Devient tout blanc
+            duration: 1200, // Durée onirique (1.2s)
+            useNativeDriver: true,
+        }).start(() => {
+            // 3. Une fois l'écran blanc, on change de page
+            router.replace('/(tabs)/feed');
+            // On remet le fade à 0 pour la prochaine fois (après un petit délai)
+            setTimeout(() => fadeAnim.setValue(0), 1000);
+        });
         
     } catch (e: any) {
         Alert.alert("Erreur", e.message);
-    } finally {
         setIsUploading(false);
     }
   };
@@ -125,10 +130,8 @@ export default function DrawPage() {
   return (
     <View style={styles.container}>
       
-      {/* HEADER FLOTTANT IMMERSIF (Sans fond blanc) */}
       <View style={styles.header}>
         <Text style={styles.headerText}>sunbim</Text>
-        {/* Pas d'icône profil ici */}
       </View>
 
       <View style={styles.canvasContainer}>
@@ -177,6 +180,21 @@ export default function DrawPage() {
             </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* --- LE VOILE BLANC (Animation) --- */}
+      {/* Il est en zIndex maximum pour tout recouvrir */}
+      <Animated.View 
+        pointerEvents="none" // Laisse passer les clics quand il est transparent
+        style={[
+            StyleSheet.absoluteFill, 
+            { 
+                backgroundColor: 'white', 
+                opacity: fadeAnim, 
+                zIndex: 9999 
+            }
+        ]} 
+      />
+
     </View>
   );
 }
@@ -194,7 +212,6 @@ const styles = StyleSheet.create({
     paddingTop: 60, paddingBottom: 15,
     alignItems: 'center', justifyContent: 'center',
     zIndex: 10, pointerEvents: 'none',
-    // Pas de backgroundColor ici !
   },
   headerText: {
     fontSize: 32, fontWeight: '900', color: '#FFFFFF',
