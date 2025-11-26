@@ -49,16 +49,15 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
     return data;
   }, [canvasData]);
 
-  // 2. LOGIQUE D'AFFICHAGE (C'est ici la correction)
+  // 2. LOGIQUE D'AFFICHAGE
   const displayLogic = useMemo(() => {
       const m = Skia.Matrix();
-      if (!image) return { matrix: m, fit: "cover" as const, scale: 1, useMatrix: false };
+      if (!image) return { matrix: m, scale: 1, useMatrix: false };
       
-      const NATIVE_SIZE = image.height();
-      if (NATIVE_SIZE === 0) return { matrix: m, fit: "cover" as const, scale: 1, useMatrix: false };
+      const NATIVE_SIZE = image.height(); // Référence absolue : LA HAUTEUR
+      if (NATIVE_SIZE === 0) return { matrix: m, scale: 1, useMatrix: false };
 
       // --- CAS A : ZOOM AUTOMATIQUE (Animation Fin Index) ---
-      // Ici on calcule une matrice complexe pour centrer le dessin
       if (autoCenter && safePaths.length > 0) {
           try {
               const combinedPath = Skia.Path.Make();
@@ -83,22 +82,20 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
                       m.translate(translateX, translateY);
                       m.scale(focusScale, focusScale);
                       
-                      // En mode AutoCenter, on applique la matrice et on ignore l'image (souvent transparente)
-                      return { matrix: m, fit: "none" as const, scale: focusScale, useMatrix: true };
+                      return { matrix: m, scale: focusScale, useMatrix: true };
                   }
               }
           } catch (e) {}
       }
 
       // --- CAS B : AFFICHAGE STANDARD (Feed / Galerie) ---
-      // C'est le retour à la méthode simple qui marche :
-      // 1. On utilise fit="cover" pour l'image (Skia gère le centrage)
-      // 2. On utilise un scale simple pour les traits. Pas de translation.
-      
+      // On calcule juste le ratio pour passer de "Taille Native" à "Taille Viewer"
       const simpleScale = viewerSize / NATIVE_SIZE;
+      
+      // On applique ce ratio à tout le monde
       m.scale(simpleScale, simpleScale);
       
-      return { matrix: m, fit: "cover" as const, scale: simpleScale, useMatrix: false };
+      return { matrix: m, scale: simpleScale, useMatrix: false };
 
   }, [image, viewerSize, autoCenter, safePaths]);
 
@@ -107,75 +104,62 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
     return <View style={styles.loading}><ActivityIndicator color="#fff" /></View>;
   }
 
-  // On force le carré basé sur la hauteur
+  // --- LE SECRET : ON REPRODUIT LE CADRE DE CRÉATION ---
+  // À la création, on a forcé width = height = image.height()
   const SQUARE_SIZE = image.height();
 
   return (
     <View style={[styles.container, {width: viewerSize, height: viewerSize, overflow: 'hidden'}]}>
       <Canvas style={{ flex: 1 }}>
         
-        {/* CAS 1 : GROUPE MATRICIEL (Pour l'animation zoomée) */}
-        {displayLogic.useMatrix ? (
-            <Group matrix={displayLogic.matrix}>
-                 {/* On n'affiche généralement pas l'image en mode AutoCenter (fond blanc) */}
-                 <Group layer={true}> 
-                    {renderPaths(safePaths, displayLogic.scale, progress)}
-                 </Group>
-            </Group>
-        ) : (
-            // CAS 2 : GROUPE STANDARD (Feed/Galerie - Positionnement parfait)
-            <>
-                {/* L'IMAGE (Gérée par Skia Cover) */}
-                {!transparentMode && (
-                    <SkiaImage
-                        image={image}
-                        x={0} y={0}
-                        width={SQUARE_SIZE} height={SQUARE_SIZE}
-                        fit="cover"
-                    />
-                )}
-                
-                {/* LES TRAITS (Juste Scalés, pas décalés) */}
-                <Group transform={[{ scale: displayLogic.scale }]}>
-                    <Group layer={true}>
-                        {renderPaths(safePaths, displayLogic.scale, progress)}
-                    </Group>
-                </Group>
-            </>
-        )}
+        {/* GROUPE GLOBAL : Tout le monde subit la même réduction */}
+        <Group matrix={displayLogic.matrix}>
+             
+             {/* IMAGE DE FOND */}
+             {/* On lui donne les mêmes contraintes qu'à la création : Carré + Cover */}
+             {!transparentMode && (
+                <SkiaImage
+                    image={image}
+                    x={0} y={0}
+                    width={SQUARE_SIZE} height={SQUARE_SIZE} // <--- IMPORTANT : Carré basé sur la hauteur
+                    fit="cover"
+                />
+             )}
+
+             {/* DESSINS */}
+             <Group layer={true}> 
+                {safePaths.map((p: any, index: number) => {
+                    if (!p || !p.svgPath) return null;
+                    try {
+                        const path = Skia.Path.MakeFromSVGString(p.svgPath);
+                        if (!path) return null;
+                        
+                        // Épaisseur adaptée au scale du groupe
+                        const baseWidth = p.width || 6;
+                        const adjustedWidth = (baseWidth / displayLogic.scale) * 0.65; 
+                        
+                        return (
+                        <Path
+                            key={index}
+                            path={path}
+                            color={p.isEraser ? "#000000" : (p.color || "#000000")}
+                            style="stroke"
+                            strokeWidth={adjustedWidth} 
+                            strokeCap="round"
+                            strokeJoin="round"
+                            blendMode={p.isEraser ? "clear" : "srcOver"}
+                            start={0}
+                            end={progress} 
+                        />
+                        );
+                    } catch (e) { return null; }
+                })}
+             </Group>
+        </Group>
 
       </Canvas>
     </View>
   );
-};
-
-// Helper pour dessiner les traits
-const renderPaths = (paths: any[], currentScale: number, progress: any) => {
-    return paths.map((p: any, index: number) => {
-        if (!p || !p.svgPath) return null;
-        try {
-            const path = Skia.Path.MakeFromSVGString(p.svgPath);
-            if (!path) return null;
-            
-            const baseWidth = p.width || 6;
-            const adjustedWidth = (baseWidth / currentScale) * 0.65; 
-            
-            return (
-            <Path
-                key={index}
-                path={path}
-                color={p.isEraser ? "#000000" : (p.color || "#000000")}
-                style="stroke"
-                strokeWidth={adjustedWidth} 
-                strokeCap="round"
-                strokeJoin="round"
-                blendMode={p.isEraser ? "clear" : "srcOver"}
-                start={0}
-                end={progress} 
-            />
-            );
-        } catch (e) { return null; }
-    });
 };
 
 const styles = StyleSheet.create({
