@@ -129,8 +129,8 @@ export default function DrawPage() {
       
       {/* Header Fixe */}
       <View style={styles.header}>
-        {/* 👇 LE TEST EST ICI : ROUGE */}
-        <Text style={[styles.headerText, { color: 'red' }]}>sunbim</Text>
+        {/* RETOUR AU BLANC ICI */}
+        <Text style={styles.headerText}>sunbim</Text>
       </View>
 
       <View style={styles.canvasContainer}>

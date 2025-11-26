@@ -5,45 +5,53 @@ import { X } from 'lucide-react-native';
 import { supabase } from '../src/lib/supabaseClient';
 import { DrawingViewer } from '../src/components/DrawingViewer';
 
-// --- CORRECTION DU BUILD (Dynamic Import) ---
-// On n'importe PagerView que si on n'est PAS sur le web.
-// Cela empêche le build serveur de crasher.
+// Import dynamique PagerView
 let PagerView: any;
 if (Platform.OS !== 'web') {
-    try {
-        PagerView = require('react-native-pager-view').default;
-    } catch (e) {
-        console.error("PagerView not found", e);
-        PagerView = View; // Fallback
-    }
-} else {
-    PagerView = View; // Pour le web/server build, c'est juste une View vide
-}
+    try { PagerView = require('react-native-pager-view').default; } catch (e) { PagerView = View; }
+} else { PagerView = View; }
 
 export default function FeedPage() {
     const router = useRouter();
     const [drawings, setDrawings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
-    
     const [currentIndex, setCurrentIndex] = useState(0);
+    const [currentCloud, setCurrentCloud] = useState<any>(null);
 
     const { width: screenWidth } = Dimensions.get('window');
     const canvasSize = screenWidth; 
 
     useEffect(() => {
-        fetchDrawings();
+        fetchTodaysFeed();
     }, []);
 
-    const fetchDrawings = async () => {
+    const fetchTodaysFeed = async () => {
         try {
-            const { data, error } = await supabase
-                .from('drawings')
+            const today = new Date().toISOString().split('T')[0];
+            
+            // 1. On récupère le nuage du jour pour avoir son ID
+            const { data: cloudData, error: cloudError } = await supabase
+                .from('clouds')
                 .select('*')
-                .order('created_at', { ascending: false })
-                .limit(20); 
+                .eq('published_for', today)
+                .maybeSingle();
 
-            if (error) throw error;
-            setDrawings(data || []);
+            if (cloudError) throw cloudError;
+            setCurrentCloud(cloudData);
+
+            if (cloudData) {
+                // 2. On récupère UNIQUEMENT les dessins liés à CE nuage
+                const { data: drawingsData, error: drawingsError } = await supabase
+                    .from('drawings')
+                    .select('*')
+                    .eq('cloud_id', cloudData.id) // <--- LE FILTRE IMPORTANT
+                    .order('created_at', { ascending: false })
+                    .limit(50); 
+
+                if (drawingsError) throw drawingsError;
+                setDrawings(drawingsData || []);
+            }
+            
         } catch (e) {
             console.error("Erreur feed:", e);
         } finally {
@@ -54,11 +62,14 @@ export default function FeedPage() {
     if (loading) return <View style={styles.loadingContainer}><ActivityIndicator color="#87CEEB" size="large" /></View>;
     
     const activeDrawing = drawings[currentIndex];
+    
+    // L'image de fond est celle du nuage du jour
+    const backgroundUrl = currentCloud?.image_url;
 
     return (
         <View style={styles.container}>
             
-            {/* HEADER BAR */}
+            {/* HEADER */}
             <View style={styles.headerBar}>
                 <Text style={styles.headerText}>sunbim</Text>
                 <TouchableOpacity style={styles.closeBtn} onPress={() => router.back()}>
@@ -66,8 +77,22 @@ export default function FeedPage() {
                 </TouchableOpacity>
             </View>
 
-            {/* ZONE DE SWIPE */}
-            <View style={{ width: canvasSize, height: canvasSize, backgroundColor: '#F0F0F0' }}>
+            {/* ZONE CONTENU */}
+            <View style={{ width: canvasSize, height: canvasSize, backgroundColor: '#F0F0F0', position: 'relative' }}>
+                
+                {/* COUCHE 1 : FOND FIXE (Le Nuage du Jour) */}
+                {backgroundUrl && (
+                    <View style={StyleSheet.absoluteFill}>
+                        <DrawingViewer
+                            imageUri={backgroundUrl}
+                            canvasData={[]} // Rien à dessiner sur le fond
+                            viewerSize={canvasSize}
+                            transparentMode={false} 
+                        />
+                    </View>
+                )}
+
+                {/* COUCHE 2 : SWIPE DES DESSINS */}
                 {drawings.length > 0 ? (
                     <PagerView 
                         style={{ flex: 1 }} 
@@ -76,32 +101,33 @@ export default function FeedPage() {
                         onPageSelected={(e: any) => setCurrentIndex(e.nativeEvent.position)}
                     >
                         {drawings.map((drawing, index) => (
-                            <View key={drawing.id || index} style={{ flex: 1 }}>
+                            <View key={drawing.id || index} style={{ flex: 1, backgroundColor: 'transparent' }}>
                                 <DrawingViewer
-                                    imageUri={drawing.cloud_image_url}
-                                    canvasData={drawing.canvas_data}
+                                    imageUri={backgroundUrl} // On passe la même image pour caler l'échelle
+                                    canvasData={drawing.canvas_data} // <--- LES DONNÉES DU DESSIN
                                     viewerSize={canvasSize}
+                                    transparentMode={true} // Juste les traits
                                 />
                             </View>
                         ))}
                     </PagerView>
                 ) : (
-                    <View style={styles.centerBox}>
-                        <Text style={styles.text}>La galerie est vide pour le moment.</Text>
-                    </View>
+                    <View style={styles.centerBox}><Text style={styles.text}>Sois le premier à dessiner !</Text></View>
                 )}
             </View>
 
             {/* INFOS */}
             <View style={styles.interactions}>
                  <Text style={styles.drawingTitle}>
-                    {activeDrawing ? `Nuage du ${new Date(activeDrawing.created_at).toLocaleDateString()}` : ''}
+                    {currentCloud?.title || "Nuage du jour"}
                  </Text>
                  <Text style={styles.userText}>
-                    Dessin #{currentIndex + 1} sur {drawings.length}
+                    {drawings.length > 0 
+                        ? `Dessin ${currentIndex + 1} sur ${drawings.length}`
+                        : "Aucun dessin pour l'instant"
+                    }
                  </Text>
             </View>
-
         </View>
     );
 }
@@ -110,23 +136,14 @@ const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#FFFFFF' },
     loadingContainer: { flex: 1, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
     headerBar: {
-        width: '100%',
-        backgroundColor: '#FFFFFF', 
-        paddingTop: 60, 
-        paddingBottom: 15,
-        paddingHorizontal: 20,
-        flexDirection: 'row',
-        justifyContent: 'center', 
-        alignItems: 'center',
-        zIndex: 10,
+        width: '100%', backgroundColor: '#FFFFFF', 
+        paddingTop: 60, paddingBottom: 15, paddingHorizontal: 20,
+        flexDirection: 'row', justifyContent: 'center', alignItems: 'center', zIndex: 10,
+        borderBottomWidth: 1, borderBottomColor: '#F0F0F0'
     },
     headerText: {
-        fontSize: 32,
-        fontWeight: '900',
-        color: '#FFFFFF', 
-        textShadowColor: 'rgba(0, 0, 0, 0.5)', 
-        textShadowOffset: { width: 2, height: 2 }, 
-        textShadowRadius: 0, 
+        fontSize: 32, fontWeight: '900', color: '#FFFFFF', 
+        textShadowColor: 'rgba(0, 0, 0, 0.5)', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 0, 
     },
     closeBtn: { position: 'absolute', right: 20, bottom: 15 },
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },

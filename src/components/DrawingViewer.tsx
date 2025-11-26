@@ -17,23 +17,29 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
 }) => {
   
   const { width: screenWidth } = Dimensions.get('window');
-  // Protection : Si pas d'URI, on ne tente même pas de charger
-  const image = useImage(imageUri || ""); 
+  // Protection contre URI vide
+  const image = useImage(imageUri || "https://via.placeholder.com/1000");
 
-  // 1. PARSING SÉCURISÉ (Anti-Crash JSON)
+  // --- 1. PARSING ROBUSTE DES DONNÉES ---
   const safePaths = useMemo(() => {
     if (!canvasData) return [];
+    
+    // Cas 1 : C'est déjà un tableau d'objets (Supabase a bien fait le job)
     if (Array.isArray(canvasData)) return canvasData;
     
-    // Si c'est une string JSON, on essaie de la parser
+    // Cas 2 : C'est une chaine de caractères (String JSON)
     if (typeof canvasData === 'string') {
         try {
+            // On tente de parser. Si c'est du JSON valide, ça devient un tableau.
             const parsed = JSON.parse(canvasData);
             return Array.isArray(parsed) ? parsed : [];
         } catch (e) {
-            return []; // Donnée poubelle -> on renvoie vide
+            console.warn("DrawingViewer: Impossible de parser le JSON", e);
+            return [];
         }
     }
+    
+    // Cas 3 : Format inconnu
     return [];
   }, [canvasData]);
 
@@ -44,22 +50,21 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
     if (CANVAS_SIZE === 0) return { scale: 1, translateX: 0, translateY: 0 };
 
     const fitScale = viewerSize / CANVAS_SIZE;
-    // On utilise width() si dispo, sinon on suppose carré
+    // On utilise la largeur réelle si dispo, sinon on assume carré
     const imgW = image.width ? image.width() : CANVAS_SIZE;
-    const visualWidth = imgW * fitScale;
     
+    const visualWidth = imgW * fitScale;
     const centerTx = (screenWidth - visualWidth) / 2;
 
     return { scale: fitScale, translateX: centerTx, translateY: 0 };
   }, [image, screenWidth, viewerSize]);
 
-  // Affichage du loader si l'image n'est pas prête
   if (!image) {
     if (transparentMode) return <View style={{width: viewerSize, height: viewerSize}} />;
     return <View style={styles.loading}><ActivityIndicator color="#fff" /></View>;
   }
 
-  const CANVAS_H = image.height();
+  const CANVAS_SIZE = image.height();
   const CANVAS_W = image.width();
   
   const matrix = [
@@ -73,35 +78,26 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
       <Canvas style={{ flex: 1 }}>
         <Group transform={matrix}>
           
-          {/* IMAGE (Masquée en mode transparent) */}
           {!transparentMode && (
               <SkiaImage
                 image={image}
                 x={0} y={0}
-                width={CANVAS_W} height={CANVAS_H}
+                width={CANVAS_W} height={CANVAS_SIZE}
                 fit="cover"
               />
           )}
           
-          {/* DESSINS (Avec Protection Anti-Crash par trait) */}
           <Group layer={true}> 
           {safePaths.map((p: any, index: number) => {
-             
-             // --- LE BOUCLIER ANTI-CRASH ---
-             // 1. Vérifier que Skia est chargé
-             if (!Skia || !Skia.Path) return null;
+             // Vérification de sécurité
+             if (!p || !p.svgPath || typeof p.svgPath !== 'string') return null;
 
-             // 2. Vérifier que la donnée du trait est valide
-             if (!p || !p.svgPath || typeof p.svgPath !== 'string') {
-                 return null; // On saute silencieusement ce trait pourri
-             }
-
-             // 3. Tenter de créer le chemin (Try/Catch ultime)
              try {
                  const path = Skia.Path.MakeFromSVGString(p.svgPath);
                  if (!path) return null;
                  
-                 const adjustedWidth = p.width / transform.scale;
+                 // Calcul de l'épaisseur pour qu'elle soit visuellement identique à l'original
+                 const adjustedWidth = p.width ? (p.width / transform.scale) : 2;
                  
                  return (
                    <Path
@@ -115,9 +111,7 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
                      blendMode={p.isEraser ? "clear" : "srcOver"}
                    />
                  );
-             } catch (e) {
-                 return null; // Si Skia n'aime pas le SVG, on saute
-             }
+             } catch (e) { return null; }
           })}
           </Group>
         </Group>
