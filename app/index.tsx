@@ -189,14 +189,15 @@ export default function DrawPage() {
                   
                   <View style={{ height: screenWidth, width: screenWidth }}>
                     {/* LE VIEWER OPTIMISÉ AVEC ZOOM AUTOMATIQUE */}
+                   {/* LE VIEWER DE REPLAY (Sans auto-zoom) */}
                     <DrawingViewer 
-                        imageUri={null} // Pas d'image, juste le trait
+                        imageUri={cloud.image_url} // On garde l'URI pour le calcul d'échelle (même si transparent)
                         canvasData={replayPaths}
                         viewerSize={screenWidth}
-                        transparentMode={true} 
+                        transparentMode={true} // Fond blanc (car posé sur le voile blanc)
                         animated={true}
                         startVisible={false}
-                        autoCenterAndScale={true} // <--- LE CADRAGE MAGIQUE EST ICI
+                        // autoCenterAndScale RETIRÉ
                     />
                   </View>
                   
