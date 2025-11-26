@@ -1,6 +1,5 @@
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform } from 'react-native';
-import { useEffect, useState } from 'react';
-// AJOUT de useLocalSearchParams
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform, Animated } from 'react-native';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Heart, MessageCircle, User, Share2 } from 'lucide-react-native';
 import { supabase } from '../../src/lib/supabaseClient';
@@ -15,8 +14,14 @@ if (Platform.OS !== 'web') {
 const FeedCard = ({ drawing, canvasSize, isActive, forceStatic }: { drawing: any, canvasSize: number, isActive: boolean, forceStatic: boolean }) => {
     const [isLiked, setIsLiked] = useState(false);
 
-    // Si forceStatic est vrai, on coupe l'animation même si la carte est active
+    // LOGIQUE CORRIGÉE :
+    // 1. On anime seulement si c'est la carte active ET qu'on ne force pas le statique
     const shouldAnimate = isActive && !forceStatic;
+    
+    // 2. Visibilité au démarrage :
+    // - Si c'est "forceStatic" (mon dessin juste posté) -> Visible tout de suite (True)
+    // - Pour TOUS les autres (le feed normal) -> Invisible au début (False), l'animation le fera apparaître
+    const startVisible = forceStatic; 
 
     return (
         <View style={styles.cardContainer}>
@@ -26,8 +31,8 @@ const FeedCard = ({ drawing, canvasSize, isActive, forceStatic }: { drawing: any
                     canvasData={drawing.canvas_data}
                     viewerSize={canvasSize}
                     transparentMode={true} 
-                    animated={shouldAnimate} // <--- LOGIQUE MODIFIÉE
-                    startVisible={!shouldAnimate} // Si pas d'anim, on affiche direct
+                    animated={shouldAnimate}
+                    startVisible={startVisible} // <--- C'EST ICI LA CORRECTION
                 />
             </View>
             <View style={styles.cardInfo}>
@@ -58,7 +63,6 @@ const FeedCard = ({ drawing, canvasSize, isActive, forceStatic }: { drawing: any
 
 export default function FeedPage() {
     const router = useRouter();
-    // RÉCUPÉRATION DU PARAMÈTRE
     const params = useLocalSearchParams();
     const justPosted = params.justPosted === 'true';
 
@@ -68,6 +72,8 @@ export default function FeedPage() {
 
     const { width: screenWidth } = Dimensions.get('window');
     const canvasSize = screenWidth; 
+
+    const fadeAnim = useRef(new Animated.Value(1)).current;
 
     useEffect(() => {
         fetchTodaysFeed();
@@ -87,23 +93,37 @@ export default function FeedPage() {
                     .limit(50); 
                 setDrawings(drawingsData || []);
             }
-        } catch (e) { console.error(e); } finally { setLoading(false); }
+        } catch (e) { console.error(e); } finally { 
+            setLoading(false);
+            Animated.timing(fadeAnim, {
+                toValue: 0, 
+                duration: 800,
+                useNativeDriver: true,
+            }).start();
+        }
     };
 
-    if (loading) return <View style={styles.loadingContainer}><ActivityIndicator color="#000" size="large" /></View>;
-    
     const activeDrawing = drawings[currentIndex];
     const backgroundUrl = drawings.length > 0 ? drawings[0].cloud_image_url : null;
 
     return (
         <View style={styles.container}>
             
+            <Animated.View 
+                pointerEvents="none"
+                style={[
+                    StyleSheet.absoluteFill, 
+                    { backgroundColor: 'white', opacity: fadeAnim, zIndex: 9999 }
+                ]} 
+            />
+
             <SunbimHeader showCloseButton={false} />
 
             <View style={{ flex: 1, position: 'relative' }}>
                 
-                {backgroundUrl && (
-                    <View style={{ position: 'absolute', top: 0, width: canvasSize, height: canvasSize, zIndex: -1 }}>
+                {/* FOND FIXE */}
+                <View style={{ position: 'absolute', top: 0, width: canvasSize, height: canvasSize, zIndex: -1, backgroundColor: '#F0F0F0' }}>
+                    {backgroundUrl && (
                         <DrawingViewer
                             imageUri={backgroundUrl}
                             canvasData={[]} 
@@ -111,10 +131,11 @@ export default function FeedPage() {
                             transparentMode={false} 
                             animated={false}
                         />
-                    </View>
-                )}
+                    )}
+                </View>
 
-                {drawings.length > 0 ? (
+                {/* SWIPE */}
+                {!loading && drawings.length > 0 ? (
                     <PagerView 
                         style={{ flex: 1 }} 
                         initialPage={0}
@@ -123,11 +144,6 @@ export default function FeedPage() {
                     >
                         {drawings.map((drawing, index) => {
                             const isActive = index === currentIndex;
-                            
-                            // LOGIQUE INTELLIGENTE :
-                            // Si on vient de poster (justPosted=true) ET que c'est le premier dessin (index=0)
-                            // ALORS on force le mode statique (forceStatic=true).
-                            // Pour tous les autres cas, on laisse l'animation normale.
                             const isMyNewDrawing = justPosted && index === 0;
 
                             return (
@@ -136,14 +152,16 @@ export default function FeedPage() {
                                         drawing={drawing} 
                                         canvasSize={canvasSize} 
                                         isActive={isActive}
-                                        forceStatic={isMyNewDrawing} // <--- LE SECRET
+                                        forceStatic={isMyNewDrawing}
                                     />
                                 </View>
                             );
                         })}
                     </PagerView>
                 ) : (
-                    <View style={styles.centerBox}><Text style={styles.text}>La galerie est vide.</Text></View>
+                    <View style={styles.centerBox}>
+                        {!loading && <Text style={styles.text}>La galerie est vide.</Text>}
+                    </View>
                 )}
             </View>
         </View>
@@ -152,9 +170,10 @@ export default function FeedPage() {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#FFFFFF' },
-    loadingContainer: { flex: 1, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
+    // loadingContainer supprimé
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     text: { color: '#666', fontSize: 16 },
+
     cardContainer: { flex: 1 },
     cardInfo: {
         flex: 1, backgroundColor: '#FFFFFF', marginTop: -20, paddingHorizontal: 20, paddingTop: 25,
