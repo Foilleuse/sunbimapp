@@ -10,10 +10,10 @@ export default function GalleryPage() {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
 
-    // --- NOUVEAUX ÉTATS POUR LES FILTRES ---
-    const [showClouds, setShowClouds] = useState(true); // Afficher/Masquer les photos
-    const [onlyLiked, setOnlyLiked] = useState(false); // Filtre "Likes" (visuel pour l'instant)
-    const [searchText, setSearchText] = useState(''); // Recherche
+    // --- ETATS FILTRES ---
+    const [showClouds, setShowClouds] = useState(true);
+    const [onlyLiked, setOnlyLiked] = useState(false);
+    const [searchText, setSearchText] = useState('');
 
     const { width: screenWidth } = Dimensions.get('window');
     const SPACING = 1; 
@@ -55,7 +55,7 @@ export default function GalleryPage() {
                 width: ITEM_SIZE, 
                 height: ITEM_SIZE, 
                 marginBottom: SPACING,
-                backgroundColor: '#F9F9F9', // Gris très clair quand pas de photo
+                backgroundColor: '#F9F9F9', 
                 overflow: 'hidden'
             }}
         >
@@ -63,7 +63,6 @@ export default function GalleryPage() {
                 imageUri={item.cloud_image_url}
                 canvasData={item.canvas_data}
                 viewerSize={ITEM_SIZE}
-                // LA MAGIE EST ICI : On passe l'état du switch
                 transparentMode={!showClouds} 
             />
         </TouchableOpacity>
@@ -72,19 +71,18 @@ export default function GalleryPage() {
     return (
         <View style={styles.container}>
             
-            {/* 1. HEADER (Style Signature : Blanc Ombré) */}
+            {/* 1. HEADER (CORRIGÉ : TAILLE 32) */}
             <View style={styles.headerBar}>
                 <Text style={styles.headerText}>sunbim</Text>
             </View>
 
-            {/* 2. BARRE D'OUTILS (Recherche + Filtres) */}
+            {/* 2. BARRE D'OUTILS */}
             <View style={styles.toolsContainer}>
                 
-                {/* Barre de recherche */}
                 <View style={styles.searchBar}>
                     <Search color="#999" size={18} />
                     <TextInput 
-                        placeholder="Rechercher un tag..." 
+                        placeholder="Rechercher..." 
                         placeholderTextColor="#999"
                         style={styles.searchInput}
                         value={searchText}
@@ -92,9 +90,7 @@ export default function GalleryPage() {
                     />
                 </View>
 
-                {/* Boutons d'action */}
                 <View style={styles.actionsRow}>
-                    {/* Bouton Like (Filtre) */}
                     <TouchableOpacity 
                         style={[styles.actionBtn, onlyLiked && styles.activeBtn]}
                         onPress={() => setOnlyLiked(!onlyLiked)}
@@ -106,9 +102,8 @@ export default function GalleryPage() {
                         />
                     </TouchableOpacity>
 
-                    {/* Bouton Nuage (Toggle Photo) */}
                     <TouchableOpacity 
-                        style={[styles.actionBtn, !showClouds && styles.activeBtn]} // Actif si on cache les nuages (mode dessin pur)
+                        style={[styles.actionBtn, !showClouds && styles.activeBtn]}
                         onPress={() => setShowClouds(!showClouds)}
                     >
                         {showClouds ? (
@@ -150,20 +145,20 @@ const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#FFFFFF' },
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     
-    // HEADER IDENTIQUE FEED
+    // --- HEADER CORRIGÉ ---
     headerBar: {
         width: '100%',
         backgroundColor: '#FFFFFF', 
         paddingTop: 60, 
-        paddingBottom: 10,
+        paddingBottom: 10, // Un peu moins de padding pour coller à la barre outils
         alignItems: 'center',
         justifyContent: 'center',
         zIndex: 10,
     },
     headerText: {
-        fontSize: 32, 
+        fontSize: 32, // <--- PASSÉ DE 24 À 32 (Comme l'accueil)
         fontWeight: '900',
-        color: '#FFFFFF', // Blanc
+        color: '#FFFFFF', 
         textShadowColor: 'rgba(0, 0, 0, 0.5)', 
         textShadowOffset: { width: 2, height: 2 }, 
         textShadowRadius: 0,
