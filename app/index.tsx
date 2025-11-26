@@ -37,6 +37,7 @@ export default function DrawPage() {
   
   const [replayPaths, setReplayPaths] = useState<any[] | null>(null);
   
+  // Animations
   const fadeWhiteAnim = useRef(new Animated.Value(0)).current; 
   const drawingOpacityAnim = useRef(new Animated.Value(1)).current; 
   const textOpacityAnim = useRef(new Animated.Value(0)).current; 
@@ -44,6 +45,7 @@ export default function DrawPage() {
   const canvasRef = useRef<DrawingCanvasRef>(null);
   const updateLabel = (Updates && Updates.updateId) ? `v.${Updates.updateId.substring(0, 6)}` : '';
 
+  // Vérification à chaque affichage de la page
   useFocusEffect(
     React.useCallback(() => {
         checkStatusAndLoad();
@@ -55,14 +57,24 @@ export default function DrawPage() {
         if (!supabase) throw new Error("No Supabase");
         const today = new Date().toISOString().split('T')[0];
         
-        const { data: cloudData, error: cloudError } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();   
+        // 1. Récupérer le nuage
+        const { data: cloudData, error: cloudError } = await supabase
+            .from('clouds')
+            .select('*')
+            .eq('published_for', today)
+            .maybeSingle();
+            
         if (cloudError) throw cloudError;
         const currentCloud = cloudData || FALLBACK_CLOUD;
         
-        if (user && cloudData) {
+        // 2. Vérifier si déjà joué
+        if (user && currentCloud.id !== 'fallback') {
             const { data: existingDrawing } = await supabase
-                .from('drawings').select('id')
-                .eq('user_id', user.id).eq('cloud_id', cloudData.id).maybeSingle();
+                .from('drawings')
+                .select('id')
+                .eq('user_id', user.id)
+                .eq('cloud_id', currentCloud.id)
+                .maybeSingle();
 
             if (existingDrawing) {
                 console.log("🚫 Déjà joué -> Redirection Feed");
@@ -71,6 +83,7 @@ export default function DrawPage() {
             }
         }
         setCloud(currentCloud);
+
     } catch (err) {
         console.error(err);
         setCloud(FALLBACK_CLOUD);
@@ -87,11 +100,21 @@ export default function DrawPage() {
   const handleSharePress = () => {
     if (!canvasRef.current) return;
     const paths = canvasRef.current.getPaths();
-    if (!paths || paths.length === 0) { Alert.alert("Oups", "Dessine quelque chose !"); return; }
-    if (!user) { Alert.alert("Connexion requise", "Connecte-toi pour participer.", [{ text: "Annuler", style: "cancel" }, { text: "Se connecter", onPress: () => router.push('/profile') }]); return; }
+    if (!paths || paths.length === 0) {
+        Alert.alert("Oups", "Dessine quelque chose !");
+        return;
+    }
+    if (!user) {
+        Alert.alert("Connexion requise", "Connecte-toi pour participer.", [
+            { text: "Annuler", style: "cancel" },
+            { text: "Se connecter", onPress: () => router.push('/profile') }
+        ]);
+        return;
+    }
     setModalVisible(true);
   };
 
+  // --- SÉQUENCE CINÉMATIQUE ---
   const confirmShare = async () => {
     if (!canvasRef.current || !cloud || !user) return;
     const finalTag = tagText.trim();
@@ -101,38 +124,59 @@ export default function DrawPage() {
     
     try {
         const pathsData = canvasRef.current.getPaths();
+        
+        // 1. Upload
         const { error: dbError } = await supabase.from('drawings').insert({
-            cloud_id: cloud.id, user_id: user.id, canvas_data: pathsData, cloud_image_url: cloud.image_url, label: finalTag, is_shared: true
+            cloud_id: cloud.id, user_id: user.id, canvas_data: pathsData, cloud_image_url: cloud.image_url,
+            label: finalTag, is_shared: true
         });
         if (dbError) throw dbError;
 
         setModalVisible(false);
 
-        // SÉQUENCE D'ANIMATION
+        // 2. Fondu au Blanc
         Animated.timing(fadeWhiteAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start(() => {
+            
+            // 3. Lancement Replay
             setReplayPaths(pathsData); 
             
-            // Le Viewer met 2.5s à s'animer (réglé dans DrawingViewer)
+            // 4. Attente fin tracé (1.5s)
             setTimeout(() => {
+                // Apparition Titre
                 Animated.timing(textOpacityAnim, { toValue: 1, duration: 800, useNativeDriver: true }).start();
-                
+
+                // 5. Admiration (2.5s)
                 setTimeout(() => {
+                    
+                    // 6. Disparition
                     Animated.parallel([
                         Animated.timing(drawingOpacityAnim, { toValue: 0, duration: 800, useNativeDriver: true }),
                         Animated.timing(textOpacityAnim, { toValue: 0, duration: 800, useNativeDriver: true })
                     ]).start(() => {
+                        
+                        // 7. Navigation vers le Feed avec signal
                         router.replace({ pathname: '/(tabs)/feed', params: { justPosted: 'true' } });
                         
+                        // 8. Reset
                         setTimeout(() => {
-                            fadeWhiteAnim.setValue(0); drawingOpacityAnim.setValue(1); textOpacityAnim.setValue(0);
-                            setReplayPaths(null); setTagText(''); handleClear(); setIsUploading(false);
+                            fadeWhiteAnim.setValue(0);
+                            drawingOpacityAnim.setValue(1);
+                            textOpacityAnim.setValue(0);
+                            setReplayPaths(null);
+                            setTagText('');
+                            handleClear();
+                            setIsUploading(false);
                         }, 1000);
                     });
-                }, 2500); // Temps d'admiration
-            }, 2500); // Temps du tracé
+
+                }, 2500); 
+            }, 1500); 
         });
         
-    } catch (e: any) { Alert.alert("Erreur", e.message); setIsUploading(false); }
+    } catch (e: any) {
+        Alert.alert("Erreur", e.message);
+        setIsUploading(false);
+    }
   };
 
   if (loading) return <View style={styles.container}><ActivityIndicator size="large" color="#87CEEB" /></View>;
@@ -141,16 +185,36 @@ export default function DrawPage() {
   return (
     <View style={styles.container}>
       
+      {/* HEADER FLOTTANT */}
       <View style={styles.header}>
         <Text style={styles.headerText}>sunbim</Text>
         {updateLabel ? <Text style={styles.versionText}>{updateLabel}</Text> : null}
       </View>
 
       <View style={styles.canvasContainer}>
-        {/* Si Replay actif, on ne montre RIEN ici, c'est l'overlay qui prend le relais */}
-        {!replayPaths && (
+        {/* SI REPLAY (Animation de fin) :
+            On utilise le DrawingViewer avec autoCenter={true}.
+            Cela va zoomer et centrer le dessin sur le fond blanc, 
+            même si l'utilisateur a dessiné dans un coin.
+         */}
+        {replayPaths ? (
+            <DrawingViewer 
+                imageUri={cloud.image_url}
+                canvasData={replayPaths}
+                viewerSize={screenWidth}
+                transparentMode={true} // Fond Blanc (car posé sur le voile blanc)
+                animated={true}
+                startVisible={false}
+                autoCenter={true} // <--- LE ZOOM AUTOMATIQUE EST ICI
+            />
+        ) : (
             <DrawingCanvas
-              ref={canvasRef} imageUri={cloud.image_url} strokeColor={strokeColor} strokeWidth={strokeWidth} isEraserMode={isEraserMode} onClear={handleClear}
+              ref={canvasRef}
+              imageUri={cloud.image_url}
+              strokeColor={strokeColor}
+              strokeWidth={strokeWidth}
+              isEraserMode={isEraserMode}
+              onClear={handleClear}
             />
         )}
       </View>
@@ -160,8 +224,10 @@ export default function DrawPage() {
             <View style={{flex: 1}} pointerEvents="none" /> 
             <DrawingControls
                 onUndo={handleUndo} onRedo={handleRedo} onClear={handleClear}
-                strokeColor={strokeColor} onColorChange={setStrokeColor} strokeWidth={strokeWidth} onStrokeWidthChange={setStrokeWidth}
-                isEraserMode={isEraserMode} toggleEraser={toggleEraser} onShare={handleSharePress}
+                strokeColor={strokeColor} onColorChange={setStrokeColor}
+                strokeWidth={strokeWidth} onStrokeWidthChange={setStrokeWidth}
+                isEraserMode={isEraserMode} toggleEraser={toggleEraser}
+                onShare={handleSharePress}
              />
           </View>
       )}
@@ -179,25 +245,27 @@ export default function DrawPage() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* --- VOILE BLANC CINÉMATIQUE --- */}
+      {/* VOILE BLANC */}
       <Animated.View 
         pointerEvents="none"
-        style={[ StyleSheet.absoluteFill, { backgroundColor: 'white', opacity: fadeWhiteAnim, zIndex: 9999, justifyContent: 'center', alignItems: 'center' } ]} 
+        style={[
+            StyleSheet.absoluteFill, 
+            { backgroundColor: 'white', opacity: fadeWhiteAnim, zIndex: 9999, justifyContent: 'center', alignItems: 'center' }
+        ]} 
       >
           {replayPaths && (
               <Animated.View style={{ opacity: drawingOpacityAnim, width: screenWidth, alignItems: 'center' }}>
                   
+                  {/* LE REPLAY EST RENDU ICI (DESSUS LE VOILE) */}
                   <View style={{ height: screenWidth, width: screenWidth }}>
-                    {/* LE VIEWER OPTIMISÉ AVEC ZOOM AUTOMATIQUE */}
-                   {/* LE VIEWER DE REPLAY (Sans auto-zoom) */}
                     <DrawingViewer 
-                        imageUri={cloud.image_url} // On garde l'URI pour le calcul d'échelle (même si transparent)
+                        imageUri={cloud.image_url}
                         canvasData={replayPaths}
                         viewerSize={screenWidth}
-                        transparentMode={true} // Fond blanc (car posé sur le voile blanc)
+                        transparentMode={true}
                         animated={true}
                         startVisible={false}
-                        // autoCenterAndScale RETIRÉ
+                        autoCenter={true} // <--- ZOOM AUTO
                     />
                   </View>
                   
