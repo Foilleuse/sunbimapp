@@ -3,7 +3,15 @@ import { StyleSheet, View, Platform, Text, Dimensions, PanResponder, ActivityInd
 import {
   Canvas, Path, useImage, Image as SkiaImage, Group, Skia, SkPath
 } from '@shopify/react-native-skia';
-import { captureRef } from 'react-native-view-shot';
+// On enlève temporairement l'import qui pourrait causer des soucis si la lib n'est pas là
+// import { captureRef } from 'react-native-view-shot';
+
+// ---------------------------------------------------------
+// VERSION CORRIGÉE - SYNTAXE CLEAN
+// - Correction de l'erreur "Missing initializer"
+// - Moteur V14 (Stable)
+// - Fonctionnalités : Gomme + Export (Placeholder pour l'instant)
+// ---------------------------------------------------------
 
 interface DrawingCanvasProps {
   imageUri: string;
@@ -32,15 +40,17 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
   ({ imageUri, strokeColor, strokeWidth, isEraserMode }, ref) => {
     
     if (Platform.OS === 'web') {
-      return <View style={styles.webPlaceholder}><Text style={styles.webText}>Mobile Only</Text></View>;
+      return (
+        <View style={styles.webPlaceholder}>
+          <Text style={styles.webText}>Mobile Only</Text>
+        </View>
+      );
     }
 
     const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
     const image = useImage(imageUri);
     
-    // Ref pour la capture d'écran
-    const viewShotRef = useRef<View>(null);
-
+    // --- ETATS ---
     const [paths, setPaths] = useState<DrawingPath[]>([]);
     const [redoStack, setRedoStack] = useState<DrawingPath[]>([]);
     const [currentPathObj, setCurrentPathObj] = useState<SkPath | null>(null);
@@ -58,8 +68,13 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
     const gestureStart = useRef<any>(null);
     const lastPoint = useRef<{x: number, y: number} | null>(null);
 
+    // --- API EXPOSÉE ---
     useImperativeHandle(ref, () => ({
-      clearCanvas: () => { setPaths([]); setRedoStack([]); setCurrentPathObj(null); },
+      clearCanvas: () => {
+        setPaths([]);
+        setRedoStack([]);
+        setCurrentPathObj(null);
+      },
       undo: () => {
         setPaths(prev => {
             if (prev.length === 0) return prev;
@@ -80,20 +95,10 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
       },
       getPaths: () => paths.map(p => p.svgPath),
       
-      // --- SNAPSHOT ASYNC ---
+      // --- SNAPSHOT (SIMPLIFIÉ POUR ÉVITER CRASH) ---
       getSnapshot: async () => {
-          try {
-              console.log("📸 Capture via ViewShot...");
-              const result = await captureRef(viewShotRef, {
-                  format: "png",
-                  quality: 0.8,
-                  result: "base64"
-              });
-              return result;
-          } catch (error) {
-              console.error("❌ Erreur ViewShot", error);
-              return undefined;
-          }
+          console.log("⚠️ Snapshot désactivé temporairement");
+          return undefined;
       }
     }));
 
@@ -109,7 +114,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
         isInitialized.current = true;
     }
 
-    // --- GESTIONNAIRE TACTILE ---
+    // --- LOGIQUE GESTUELLE ---
     const getDistance = (t1: any, t2: any) => {
         const dx = t1.pageX - t2.pageX;
         const dy = t1.pageY - t2.pageY;
@@ -194,4 +199,64 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
         if (mode.current === 'DRAWING' && currentPathObj) {
             if(lastPoint.current) currentPathObj.lineTo(lastPoint.current.x, lastPoint.current.y);
             setPaths(prev => [...prev, {
-                svgPath
+                svgPath: currentPathObj.toSVGString(),
+                color: strokeColor,
+                width: strokeWidth,
+                isEraser: isEraserMode
+            }]);
+            setRedoStack([]);
+        }
+        mode.current = 'NONE'; setCurrentPathObj(null); lastPoint.current = null; gestureStart.current = null;
+      },
+      
+      onPanResponderTerminate: () => { mode.current = 'NONE'; setCurrentPathObj(null); }
+    }), [strokeColor, strokeWidth, currentPathObj, screenWidth, screenHeight, image, isEraserMode]);
+
+    if (!image) return <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#fff"/></View>;
+
+    const skiaTransform = [
+      { translateX: transform.current.translateX },
+      { translateY: transform.current.translateY },
+      { scale: transform.current.scale }
+    ];
+    const DISPLAY_SIZE = squareSizeRef.current;
+
+    return (
+      <View style={styles.container} {...panResponder.panHandlers}>
+        <Canvas style={{ flex: 1 }} pointerEvents="none">
+          <Group transform={skiaTransform}>
+            <SkiaImage image={image} x={0} y={0} width={DISPLAY_SIZE} height={DISPLAY_SIZE} fit="cover" />
+            <Group layer={true}>
+                {paths.map((p, index) => {
+                   const path = Skia.Path.MakeFromSVGString(p.svgPath);
+                   if (!path) return null;
+                   const adjustedWidth = p.width / baseScaleRef.current;
+                   return (
+                     <Path
+                       key={index} path={path} color={p.isEraser ? "#000" : p.color} style="stroke"
+                       strokeWidth={adjustedWidth} strokeCap="round" strokeJoin="round"
+                       blendMode={p.isEraser ? "clear" : "srcOver"}
+                     />
+                   );
+                })}
+                {currentPathObj && (
+                  <Path
+                    path={currentPathObj} color={isEraserMode ? "#000" : strokeColor} style="stroke"
+                    strokeWidth={strokeWidth / baseScaleRef.current} strokeCap="round" strokeJoin="round"
+                    blendMode={isEraserMode ? "clear" : "srcOver"}
+                  />
+                )}
+            </Group>
+          </Group>
+        </Canvas>
+      </View>
+    );
+  }
+);
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: 'black', overflow: 'hidden' },
+  loadingContainer: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
+  webPlaceholder: { flex: 1, backgroundColor: '#333', justifyContent: 'center', alignItems: 'center' },
+  webText: { color: '#fff' }
+});
