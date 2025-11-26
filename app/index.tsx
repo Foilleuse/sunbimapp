@@ -101,7 +101,7 @@ export default function DrawPage() {
         if (dbError) throw dbError;
 
         Alert.alert("Succès !", "Sauvegardé avec succès");
-        router.push('/feed');
+        router.push('/(tabs)/feed');
         
     } catch (e: any) {
         Alert.alert("Erreur", e.message);

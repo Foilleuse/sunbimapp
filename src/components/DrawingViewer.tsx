@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { View, StyleSheet, Dimensions, ActivityIndicator } from 'react-native';
-import { Canvas, Path, Image as SkiaImage, useImage, Group, Skia, Rect, Paint } from '@shopify/react-native-skia';
+import { Canvas, Path, Image as SkiaImage, useImage, Group, Skia } from '@shopify/react-native-skia';
 
 interface DrawingViewerProps {
   imageUri: string;
@@ -19,88 +19,91 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
   const { width: screenWidth } = Dimensions.get('window');
   const image = useImage(imageUri || ""); 
 
-  // 1. Parsing des données
+  // 1. Parsing sécurisé des données
   const safePaths = useMemo(() => {
     let data = [];
-    if (Array.isArray(canvasData)) data = canvasData;
-    else if (typeof canvasData === 'string') {
+    if (Array.isArray(canvasData)) {
+        data = canvasData;
+    } else if (typeof canvasData === 'string') {
         try { data = JSON.parse(canvasData); } catch (e) { data = []; }
     }
     return data;
   }, [canvasData]);
 
-  // 2. Calcul du Zoom (Strictement Carré 1:1)
+  // 2. Calcul du Zoom (1:1 Carré)
   const transform = useMemo(() => {
-    if (!image) return { scale: 1 };
+    if (!image) return { scale: 1, translateX: 0, translateY: 0 };
     
-    const CANVAS_SIZE = image.height(); // Taille native
-    if (CANVAS_SIZE === 0) return { scale: 1 };
+    const CANVAS_SIZE = image.height(); // Référence : Hauteur native
+    if (CANVAS_SIZE === 0) return { scale: 1, translateX: 0, translateY: 0 };
 
-    // On veut que le carré natif rentre dans le carré écran
+    // On adapte l'image native pour qu'elle rentre dans le viewerSize
     const fitScale = viewerSize / CANVAS_SIZE;
     
-    return { scale: fitScale };
-  }, [image, viewerSize]);
+    const imgW = image.width ? image.width() : CANVAS_SIZE;
+    const visualWidth = imgW * fitScale;
+    const centerTx = (screenWidth - visualWidth) / 2;
+
+    return { scale: fitScale, translateX: centerTx, translateY: 0 };
+  }, [image, screenWidth, viewerSize]);
 
   if (!image) {
     if (transparentMode) return <View style={{width: viewerSize, height: viewerSize}} />;
     return <View style={styles.loading}><ActivityIndicator color="#fff" /></View>;
   }
 
-  const NATIVE_SIZE = image.height();
+  const CANVAS_H = image.height();
+  const CANVAS_W = image.width();
   
-  // Matrice simplifiée à l'extrême (Juste le Scale, tout à 0,0)
-  const matrix = [{ scale: transform.scale }];
+  const matrix = [
+      { translateX: transform.translateX },
+      { translateY: transform.translateY },
+      { scale: transform.scale }
+  ];
 
   return (
     <View style={[styles.container, {width: viewerSize, height: viewerSize}]}>
       <Canvas style={{ flex: 1 }}>
         <Group transform={matrix}>
           
-          {/* A. IMAGE DE FOND */}
+          {/* A. IMAGE DE FOND (Si pas transparent) */}
           {!transparentMode && (
               <SkiaImage
                 image={image}
                 x={0} y={0}
-                width={NATIVE_SIZE} height={NATIVE_SIZE}
+                width={CANVAS_W} height={CANVAS_H}
                 fit="cover"
               />
           )}
-
-          {/* B. TEST VISUEL : CADRE BLEU (Limites du dessin) */}
-          {/* Si tu ne vois pas ce cadre bleu, c'est que le canvas est hors-champ */}
-          {transparentMode && (
-              <Rect x={0} y={0} width={NATIVE_SIZE} height={NATIVE_SIZE} style="stroke" strokeWidth={20} color="blue" />
-          )}
-
-          {/* C. TEST VISUEL : DIAGONALE ROUGE (Test du moteur) */}
-          {transparentMode && (
-              <Path path={`M 0 0 L ${NATIVE_SIZE} ${NATIVE_SIZE}`} style="stroke" strokeWidth={20} color="red" />
-          )}
           
-          {/* D. TES DESSINS (EN VERT) */}
+          {/* B. DESSINS */}
           <Group layer={true}> 
           {safePaths.map((p: any, index: number) => {
              if (!p || !p.svgPath) return null;
-             const path = Skia.Path.MakeFromSVGString(p.svgPath);
-             if (!path) return null;
              
-             // On force une grosse épaisseur pour le test
-             const debugWidth = 50; 
-             
-             return (
-               <Path
-                 key={index}
-                 path={path}
-                 // FORCE EN VERT POUR LE TEST
-                 color={p.isEraser ? "#000000" : "#00FF00"} 
-                 style="stroke"
-                 strokeWidth={debugWidth} 
-                 strokeCap="round"
-                 strokeJoin="round"
-                 blendMode={p.isEraser ? "clear" : "srcOver"}
-               />
-             );
+             try {
+                 const path = Skia.Path.MakeFromSVGString(p.svgPath);
+                 if (!path) return null;
+                 
+                 // RESTAURATION DE L'ÉPAISSEUR RELATIVE
+                 // On s'assure que le trait est visible même après dézoom
+                 const baseWidth = p.width || 6;
+                 const adjustedWidth = baseWidth / transform.scale; 
+                 
+                 return (
+                   <Path
+                     key={index}
+                     path={path}
+                     // RESTAURATION DES VRAIES COULEURS
+                     color={p.isEraser ? "#000000" : (p.color || "#000000")}
+                     style="stroke"
+                     strokeWidth={adjustedWidth} 
+                     strokeCap="round"
+                     strokeJoin="round"
+                     blendMode={p.isEraser ? "clear" : "srcOver"}
+                   />
+                 );
+             } catch (e) { return null; }
           })}
           </Group>
         </Group>
