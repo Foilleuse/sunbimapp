@@ -1,7 +1,6 @@
 import React, { useMemo, useEffect } from 'react';
 import { View, StyleSheet, Dimensions, ActivityIndicator } from 'react-native';
 import { Canvas, Path, Image as SkiaImage, useImage, Group, Skia } from '@shopify/react-native-skia';
-// Ajout des outils d'animation
 import { useSharedValue, withTiming, Easing } from 'react-native-reanimated';
 
 interface DrawingViewerProps {
@@ -9,7 +8,8 @@ interface DrawingViewerProps {
   canvasData: any; 
   viewerSize: number;
   transparentMode?: boolean;
-  animated?: boolean; // <--- Option pour activer l'effet
+  animated?: boolean;
+  startVisible?: boolean; // <--- NOUVEAU : État par défaut
 }
 
 export const DrawingViewer: React.FC<DrawingViewerProps> = ({ 
@@ -17,31 +17,36 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
   canvasData, 
   viewerSize, 
   transparentMode = false,
-  animated = false
+  animated = false,
+  startVisible = true // Par défaut (Galerie), on voit tout direct
 }) => {
   
   const { width: screenWidth } = Dimensions.get('window');
   const image = useImage(imageUri || ""); 
 
-  // --- 1. MOTEUR D'ANIMATION ---
-  // Si on demande l'animation, on commence à 0. Sinon on est direct à 1 (100% visible).
-  const progress = useSharedValue(animated ? 0 : 1);
+  // --- MOTEUR D'ANIMATION CORRIGÉ ---
+  // Si on est dans le Feed (startVisible=false), on commence invisible.
+  const progress = useSharedValue(startVisible ? 1 : 0);
 
   useEffect(() => {
     if (animated) {
-        // On reset à 0
-        progress.value = 0;
-        // On lance l'animation vers 1 en 2.5 secondes
+        // CAS 1 : C'est notre tour ! On lance l'animation
+        progress.value = 0; // On s'assure qu'on part de zéro
         progress.value = withTiming(1, { 
             duration: 2500, 
             easing: Easing.out(Easing.cubic) 
         });
+    } else if (!startVisible) {
+        // CAS 2 : On n'est pas actif, ET on est en mode "caché par défaut" (Feed)
+        // On force l'invisibilité pour les voisins
+        progress.value = 0; 
     } else {
-        progress.value = 1; // Force l'affichage immédiat si pas d'animation
+        // CAS 3 : On n'est pas animé, mais on doit être visible (Galerie)
+        progress.value = 1;
     }
-  }, [animated, imageUri]); // Se relance si l'image change
+  }, [animated, startVisible, imageUri]);
 
-  // --- 2. PARSING DONNÉES ---
+  // 1. Parsing
   const safePaths = useMemo(() => {
     let data = [];
     if (Array.isArray(canvasData)) data = canvasData;
@@ -51,10 +56,9 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
     return data;
   }, [canvasData]);
 
-  // --- 3. CALCUL ZOOM (Strict Carré) ---
+  // 2. Calcul du Zoom (CONSERVÉ INTACT)
   const transform = useMemo(() => {
     if (!image) return { scale: 1, translateX: 0, translateY: 0 };
-    
     const CANVAS_SIZE = image.height();
     if (CANVAS_SIZE === 0) return { scale: 1, translateX: 0, translateY: 0 };
 
@@ -67,11 +71,9 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
     return <View style={styles.loading}><ActivityIndicator color="#fff" /></View>;
   }
 
-  // --- 4. CALCUL CADRAGE (Le Crop Parfait) ---
+  // 3. Cadrage (CONSERVÉ INTACT)
   const NATIVE_W = image.width();
   const NATIVE_H = image.height();
-  
-  // Centrage horizontal du carré
   const offsetX = (NATIVE_W - NATIVE_H) / 2;
   const offsetY = 0;
 
@@ -86,26 +88,23 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
       <Canvas style={{ flex: 1 }}>
         <Group transform={matrix}>
           
-          {/* IMAGE (Avec le bon crop manuel) */}
           {!transparentMode && (
               <SkiaImage
                 image={image}
-                x={-offsetX} y={-offsetY} // <--- C'est ça qui garde l'image centrée comme à la création
+                x={-offsetX} y={-offsetY}
                 width={NATIVE_W} height={NATIVE_H}
                 fit="none"
               />
           )}
           
-          {/* DESSINS */}
           <Group layer={true}> 
           {safePaths.map((p: any, index: number) => {
              if (!p || !p.svgPath) return null;
-
              try {
                  const path = Skia.Path.MakeFromSVGString(p.svgPath);
                  if (!path) return null;
                  
-                 // ÉPAISSEUR (Adaptée + Affinée)
+                 // 4. Épaisseur (CONSERVÉ INTACT)
                  const baseWidth = p.width || 6;
                  const adjustedWidth = (baseWidth / transform.scale) * 0.6; 
                  
@@ -119,7 +118,7 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
                      strokeCap="round"
                      strokeJoin="round"
                      blendMode={p.isEraser ? "clear" : "srcOver"}
-                     // L'ANIMATION EST ICI 👇
+                     // Animation reliée au progress
                      start={0}
                      end={progress} 
                    />

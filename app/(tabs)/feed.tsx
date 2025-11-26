@@ -14,32 +14,38 @@ export default function FeedPage() {
     const router = useRouter();
     const [drawings, setDrawings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
-    
-    // C'est cette variable qui pilote l'animation
     const [currentIndex, setCurrentIndex] = useState(0);
 
     const { width: screenWidth } = Dimensions.get('window');
     const canvasSize = screenWidth; 
 
     useEffect(() => {
-        fetchDrawings();
+        fetchTodaysFeed();
     }, []);
 
-    const fetchDrawings = async () => {
+    const fetchTodaysFeed = async () => {
         try {
-            const { data, error } = await supabase
-                .from('drawings')
+            const today = new Date().toISOString().split('T')[0];
+            const { data: cloudData, error: cloudError } = await supabase
+                .from('clouds')
                 .select('*')
-                .order('created_at', { ascending: false })
-                .limit(20); 
+                .eq('published_for', today)
+                .maybeSingle();
 
-            if (error) throw error;
-            setDrawings(data || []);
-        } catch (e) {
-            console.error("Erreur feed:", e);
-        } finally {
-            setLoading(false);
-        }
+            if (cloudError) throw cloudError;
+            
+            if (cloudData) {
+                const { data: drawingsData, error: drawingsError } = await supabase
+                    .from('drawings')
+                    .select('*')
+                    .eq('cloud_id', cloudData.id)
+                    .order('created_at', { ascending: false })
+                    .limit(50); 
+
+                if (drawingsError) throw drawingsError;
+                setDrawings(drawingsData || []);
+            }
+        } catch (e) { console.error(e); } finally { setLoading(false); }
     };
 
     if (loading) return <View style={styles.loadingContainer}><ActivityIndicator color="#87CEEB" size="large" /></View>;
@@ -50,7 +56,6 @@ export default function FeedPage() {
     return (
         <View style={styles.container}>
             
-            {/* HEADER */}
             <View style={styles.headerBar}>
                 <Text style={styles.headerText}>sunbim</Text>
                 <TouchableOpacity style={styles.closeBtn} onPress={() => router.back()}>
@@ -58,7 +63,6 @@ export default function FeedPage() {
                 </TouchableOpacity>
             </View>
 
-            {/* SWIPE AREA */}
             <View style={{ width: canvasSize, height: canvasSize, backgroundColor: '#F0F0F0', position: 'relative' }}>
                 
                 {/* FOND FIXE */}
@@ -69,12 +73,11 @@ export default function FeedPage() {
                             canvasData={[]} 
                             viewerSize={canvasSize}
                             transparentMode={false} 
-                            animated={false} // Fond jamais animé
                         />
                     </View>
                 )}
 
-                {/* SWIPE DESSINS */}
+                {/* SWIPE */}
                 {drawings.length > 0 ? (
                     <PagerView 
                         style={{ flex: 1 }} 
@@ -83,9 +86,7 @@ export default function FeedPage() {
                         onPageSelected={(e: any) => setCurrentIndex(e.nativeEvent.position)}
                     >
                         {drawings.map((drawing, index) => {
-                            // ON ACTIVE L'ANIMATION SEULEMENT SI C'EST LA CARTE ACTIVE
                             const isActive = index === currentIndex;
-
                             return (
                                 <View key={drawing.id || index} style={{ flex: 1, backgroundColor: 'transparent' }}>
                                     <DrawingViewer
@@ -93,24 +94,24 @@ export default function FeedPage() {
                                         canvasData={drawing.canvas_data}
                                         viewerSize={canvasSize}
                                         transparentMode={true}
-                                        animated={isActive} // <--- DÉCLENCHEUR
+                                        animated={isActive} 
+                                        startVisible={false} // <--- LE SECRET EST ICI : Invisible par défaut
                                     />
                                 </View>
                             );
                         })}
                     </PagerView>
                 ) : (
-                    <View style={styles.centerBox}><Text style={styles.text}>La galerie est vide.</Text></View>
+                    <View style={styles.centerBox}><Text style={styles.text}>Sois le premier à dessiner !</Text></View>
                 )}
             </View>
 
-            {/* INFOS */}
             <View style={styles.interactions}>
                  <Text style={styles.drawingTitle}>
-                    {activeDrawing ? (activeDrawing.label || `Nuage du ${new Date(activeDrawing.created_at).toLocaleDateString()}`) : ''}
+                    {activeDrawing ? (activeDrawing.label || "Sans titre") : ''}
                  </Text>
                  <Text style={styles.userText}>
-                    Dessin #{currentIndex + 1}
+                    {drawings.length > 0 ? `Dessin ${currentIndex + 1} sur ${drawings.length}` : ''}
                  </Text>
             </View>
         </View>
