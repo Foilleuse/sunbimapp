@@ -3,9 +3,8 @@ import { useEffect, useState, useRef } from 'react';
 import { supabase } from '../src/lib/supabaseClient';
 import { DrawingCanvas, DrawingCanvasRef } from '../src/components/DrawingCanvas';
 import { DrawingControls } from '../src/components/DrawingControls';
-import { SunbimHeader } from '../src/components/SunbimHeader';
 import { useRouter } from 'expo-router';
-import { useAuth } from '../src/contexts/AuthContext'; // <--- IMPORTANT
+import { useAuth } from '../src/contexts/AuthContext';
 
 interface Cloud {
   id: string;
@@ -14,18 +13,17 @@ interface Cloud {
 
 export default function DrawPage() {
   const router = useRouter(); 
-  const { user } = useAuth(); // On récupère l'utilisateur connecté
+  const { user } = useAuth(); 
   
   const [cloud, setCloud] = useState<Cloud | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  // Outils Dessin
   const [strokeColor, setStrokeColor] = useState('#000000');
   const [strokeWidth, setStrokeWidth] = useState(6);
   const [isEraserMode, setIsEraserMode] = useState(false);
   
-  // --- ETATS POUR LE TAG & UPLOAD ---
+  // Etats Tag & Upload
   const [modalVisible, setModalVisible] = useState(false);
   const [tagText, setTagText] = useState('');
   const [isUploading, setIsUploading] = useState(false);
@@ -39,10 +37,11 @@ export default function DrawPage() {
   const fetchTodaysCloud = async () => {
     try {
       setLoading(true);
+      setError(null);
       if (!supabase) throw new Error('Supabase not init');
       const today = new Date().toISOString().split('T')[0];
-      const { data, error } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();
-      if (error) throw error;
+      const { data, error: fetchError } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();
+      if (fetchError) throw fetchError;
       setCloud(data);
     } catch (err: any) {
       setError(err.message);
@@ -54,43 +53,38 @@ export default function DrawPage() {
   const handleRedo = () => canvasRef.current?.redo();
   const toggleEraser = () => setIsEraserMode((prev) => !prev);
 
-  // --- 1. PREMIER CLIC : VÉRIFICATION ---
+  // --- 1. CLIC SHARE ---
   const handleSharePress = () => {
     if (!canvasRef.current) return;
     
-    // A. Vérifier si le dessin existe
     const paths = canvasRef.current.getPaths();
     if (!paths || paths.length === 0) {
         Alert.alert("Oups", "Dessine quelque chose avant de partager !");
         return;
     }
 
-    // B. VÉRIFICATION CONNEXION
+    // Vérification connexion ici uniquement
     if (!user) {
         Alert.alert(
             "Connexion requise",
             "Tu dois avoir un compte pour ajouter ton nuage à la galerie.",
             [
                 { text: "Annuler", style: "cancel" },
-                { 
-                    text: "Se connecter / S'inscrire", 
-                    onPress: () => router.push('/profile') // Envoie vers la page profil
-                }
+                { text: "Se connecter", onPress: () => router.push('/profile') }
             ]
         );
         return;
     }
 
-    // C. Si connecté : Ouvre le formulaire de Tag
     setModalVisible(true);
   };
 
-  // --- 2. VALIDATION FINALE (UPLOAD) ---
+  // --- 2. CONFIRMATION TAG ---
   const confirmShare = async () => {
     if (!canvasRef.current || !cloud || !user) return;
     
     if (tagText.trim().length === 0) {
-        Alert.alert("Tag manquant", "Dis-nous ce que tu as vu ! (ex: Dragon, Lapin...)");
+        Alert.alert("Tag manquant", "Dis-nous ce que tu as vu !");
         return;
     }
 
@@ -103,23 +97,22 @@ export default function DrawPage() {
             .from('drawings')
             .insert({
                 cloud_id: cloud.id,
-                user_id: user.id, // On est sûrs qu'il existe ici
+                user_id: user.id, 
                 canvas_data: pathsData,
                 cloud_image_url: cloud.image_url,
-                label: tagText.trim(), // On sauvegarde le tag
+                label: tagText.trim(),
                 is_shared: true
             });
 
         if (dbError) throw dbError;
 
-        // Reset et Redirection
         setModalVisible(false);
         setTagText('');
         Alert.alert("Succès !", "Ton œuvre est dans les nuages ☁️");
         router.push('/(tabs)/feed');
         
     } catch (e: any) {
-        Alert.alert("Erreur", "Echec de l'envoi: " + e.message);
+        Alert.alert("Erreur", e.message);
     } finally {
         setIsUploading(false);
     }
@@ -132,8 +125,11 @@ export default function DrawPage() {
   return (
     <View style={styles.container}>
       
-      {/* HEADER (Avec bouton profil pour se connecter si besoin) */}
-      <SunbimHeader showCloseButton={false} showProfileButton={true} />
+      {/* HEADER FLOTTANT IMMERSIF (Sans fond blanc) */}
+      <View style={styles.header}>
+        <Text style={styles.headerText}>sunbim</Text>
+        {/* Pas d'icône profil ici */}
+      </View>
 
       <View style={styles.canvasContainer}>
         <DrawingCanvas
@@ -153,88 +149,66 @@ export default function DrawPage() {
             strokeColor={strokeColor} onColorChange={setStrokeColor}
             strokeWidth={strokeWidth} onStrokeWidthChange={setStrokeWidth}
             isEraserMode={isEraserMode} toggleEraser={toggleEraser}
-            onShare={handleSharePress} // <--- Déclenche le process
+            onShare={handleSharePress}
          />
       </View>
 
-      {/* --- MODALE DE TAG (Réintégrée) --- */}
+      {/* MODALE TAG */}
       <Modal
         animationType="fade"
         transparent={true}
         visible={modalVisible}
         onRequestClose={() => setModalVisible(false)}
       >
-        <KeyboardAvoidingView 
-            behavior={Platform.OS === "ios" ? "padding" : "height"}
-            style={styles.modalOverlay}
-        >
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
             <View style={styles.modalContent}>
                 <Text style={styles.modalTitle}>Qu'as-tu vu ?</Text>
                 <Text style={styles.modalSubtitle}>Donne un titre à ton œuvre</Text>
-                
                 <TextInput 
-                    style={styles.input}
-                    placeholder="Ex: Un dragon qui dort..."
-                    placeholderTextColor="#999"
-                    value={tagText}
-                    onChangeText={setTagText}
-                    autoFocus={true}
-                    maxLength={30}
-                    returnKeyType="done"
-                    onSubmitEditing={confirmShare}
+                    style={styles.input} placeholder="Ex: Un dragon qui dort..." placeholderTextColor="#999"
+                    value={tagText} onChangeText={setTagText} autoFocus={true} maxLength={30} returnKeyType="done" onSubmitEditing={confirmShare}
                 />
-
-                <TouchableOpacity 
-                    style={[styles.validateBtn, isUploading && styles.disabledBtn]} 
-                    onPress={confirmShare}
-                    disabled={isUploading}
-                >
-                    {isUploading ? (
-                        <ActivityIndicator color="#FFF" />
-                    ) : (
-                        <Text style={styles.validateText}>Publier</Text>
-                    )}
+                <TouchableOpacity style={[styles.validateBtn, isUploading && styles.disabledBtn]} onPress={confirmShare} disabled={isUploading}>
+                    {isUploading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.validateText}>Publier</Text>}
                 </TouchableOpacity>
-
-                <TouchableOpacity 
-                    style={styles.cancelBtn} 
-                    onPress={() => setModalVisible(false)}
-                    disabled={isUploading}
-                >
+                <TouchableOpacity style={styles.cancelBtn} onPress={() => setModalVisible(false)} disabled={isUploading}>
                     <Text style={styles.cancelText}>Annuler</Text>
                 </TouchableOpacity>
             </View>
         </KeyboardAvoidingView>
       </Modal>
-
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
-  centerContent: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   canvasContainer: { flex: 1, backgroundColor: '#000' },
+  centerContent: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   errorText: { fontSize: 16, color: 'red', textAlign: 'center' },
-  noCloudText: { fontSize: 18, color: '#666', textAlign: 'center' },
+  noCloudText: { fontSize: 18, color: '#666', textAlign: 'center', marginTop: 100 },
 
-  // Styles Modale Tag
-  modalOverlay: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center',
+  // HEADER FLOTTANT
+  header: {
+    position: 'absolute', top: 0, left: 0, right: 0,
+    paddingTop: 60, paddingBottom: 15,
+    alignItems: 'center', justifyContent: 'center',
+    zIndex: 10, pointerEvents: 'none',
+    // Pas de backgroundColor ici !
   },
-  modalContent: {
-    width: '85%', backgroundColor: '#FFF', borderRadius: 20, padding: 25, alignItems: 'center',
+  headerText: {
+    fontSize: 32, fontWeight: '900', color: '#FFFFFF',
+    textShadowColor: 'rgba(0, 0, 0, 0.5)', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 0,
+    letterSpacing: -1,
   },
+
+  // MODALE
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' },
+  modalContent: { width: '85%', backgroundColor: '#FFF', borderRadius: 20, padding: 25, alignItems: 'center' },
   modalTitle: { fontSize: 22, fontWeight: '800', color: '#000', marginBottom: 5 },
   modalSubtitle: { fontSize: 14, color: '#666', marginBottom: 20 },
-  input: {
-    width: '100%', height: 50, borderWidth: 1, borderColor: '#EEE', borderRadius: 12,
-    paddingHorizontal: 15, fontSize: 16, marginBottom: 20, backgroundColor: '#F9F9F9'
-  },
-  validateBtn: {
-    width: '100%', height: 50, backgroundColor: '#000', borderRadius: 12,
-    justifyContent: 'center', alignItems: 'center', marginBottom: 10
-  },
+  input: { width: '100%', height: 50, borderWidth: 1, borderColor: '#EEE', borderRadius: 12, paddingHorizontal: 15, fontSize: 16, marginBottom: 20, backgroundColor: '#F9F9F9' },
+  validateBtn: { width: '100%', height: 50, backgroundColor: '#000', borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
   disabledBtn: { opacity: 0.7 },
   validateText: { color: '#FFF', fontWeight: '700', fontSize: 16 },
   cancelBtn: { padding: 10 },
