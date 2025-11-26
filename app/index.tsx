@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ActivityIndicator, Alert, Modal, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Animated, Dimensions, TouchableWithoutFeedback, Keyboard } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, Alert, Modal, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Animated, Dimensions } from 'react-native';
 import { useEffect, useState, useRef } from 'react';
 import { supabase } from '../src/lib/supabaseClient';
 import { DrawingCanvas, DrawingCanvasRef } from '../src/components/DrawingCanvas';
@@ -32,14 +32,17 @@ export default function DrawPage() {
   const [strokeWidth, setStrokeWidth] = useState(6);
   const [isEraserMode, setIsEraserMode] = useState(false);
   
+  // Modales
   const [modalVisible, setModalVisible] = useState(false);
   const [loginVisible, setLoginVisible] = useState(false);
   
+  // Auth
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
 
+  // Tag
   const [tagText, setTagText] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   
@@ -112,11 +115,7 @@ export default function DrawPage() {
     if (!canvasRef.current) return;
     const paths = canvasRef.current.getPaths();
     if (!paths || paths.length === 0) { Alert.alert("Oups", "Dessine quelque chose !"); return; }
-    
-    if (!user) {
-        setLoginVisible(true);
-        return;
-    }
+    if (!user) { setLoginVisible(true); return; }
     setModalVisible(true);
   };
 
@@ -126,7 +125,6 @@ export default function DrawPage() {
     if (finalTag.length === 0) return;
 
     setIsUploading(true);
-    
     try {
         const pathsData = canvasRef.current.getPaths();
         const { error: dbError } = await supabase.from('drawings').insert({
@@ -135,7 +133,6 @@ export default function DrawPage() {
         if (dbError) throw dbError;
 
         setModalVisible(false);
-
         Animated.timing(fadeWhiteAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start(() => {
             setReplayPaths(pathsData); 
             setTimeout(() => {
@@ -191,13 +188,10 @@ export default function DrawPage() {
 
       {/* --- MODALE LOGIN FIXÉE --- */}
       <Modal animationType="slide" transparent={true} visible={loginVisible} onRequestClose={() => setLoginVisible(false)}>
-        {/* 1. Le Fond est une View normale (fixe) */}
+        {/* FOND FIXE */}
         <View style={styles.modalOverlay}>
-            {/* 2. Le Clavier ne pousse QUE le contenu interne */}
-            <KeyboardAvoidingView 
-                behavior={Platform.OS === "ios" ? "padding" : undefined} 
-                style={styles.keyboardView}
-            >
+            {/* CLAVIER QUI POUSSE JUSTE LA BOÎTE */}
+            <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{width:'100%', alignItems:'center'}}>
                 <View style={styles.modalContent}>
                     <TouchableOpacity style={{position:'absolute', top:15, right:15, padding:5}} onPress={() => setLoginVisible(false)}>
                         <X color="#000" size={24}/>
@@ -220,10 +214,7 @@ export default function DrawPage() {
       {/* --- MODALE TAG FIXÉE --- */}
       <Modal animationType="fade" transparent={true} visible={modalVisible} onRequestClose={() => setModalVisible(false)}>
         <View style={styles.modalOverlay}>
-            <KeyboardAvoidingView 
-                behavior={Platform.OS === "ios" ? "padding" : undefined} 
-                style={styles.keyboardView}
-            >
+            <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{width:'100%', alignItems:'center'}}>
                 <View style={styles.modalContent}>
                     <Text style={styles.modalTitle}>Qu'as-tu vu ?</Text>
                     <TextInput style={styles.input} placeholder="Ex: Un dragon..." value={tagText} onChangeText={setTagText} autoFocus={true} maxLength={30} onSubmitEditing={confirmShare}/>
@@ -261,17 +252,16 @@ const styles = StyleSheet.create({
   noCloudText: { fontSize: 18, color: '#666', textAlign: 'center' },
   errorText: { color: 'red', textAlign: 'center' },
 
-  // MODALES STABLES
+  // MODALES FIXES
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' },
-  keyboardView: { width: '100%', alignItems: 'center' }, // C'est lui qui bouge, pas le fond
-  
   modalContent: { width: '85%', backgroundColor: '#FFF', borderRadius: 20, padding: 25, alignItems: 'center', shadowColor: "#000", shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.25, shadowRadius: 10 },
   modalTitle: { fontSize: 22, fontWeight: '800', color: '#000', marginBottom: 5 },
   modalSubtitle: { fontSize: 14, color: '#666', marginBottom: 20 },
   
-  input: { width: '100%', height: 50, borderWidth: 1, borderColor: '#EEE', borderRadius: 12, paddingHorizontal: 15, fontSize: 16, marginBottom: 20, backgroundColor: '#F9F9F9' },
+  // INPUTS ALIGNÉS
   inputWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F5F5F5', borderRadius: 12, paddingHorizontal: 15, marginBottom: 15, height: 50, width: '100%' },
   inputIcon: { marginRight: 10 },
+  input: { flex: 1, height: '100%', fontSize: 16, color: '#000', paddingTop: 0, paddingBottom: 0 }, // Alignement vertical
 
   validateBtn: { width: '100%', height: 50, backgroundColor: '#000', borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
   validateText: { color: '#FFF', fontWeight: '700', fontSize: 16 },
@@ -280,6 +270,5 @@ const styles = StyleSheet.create({
   authBtn: { backgroundColor: '#000', height: 50, borderRadius: 12, width: '100%', justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
   authBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
   switchText: { textAlign: 'center', marginTop: 15, color: '#666', fontSize: 14, textDecorationLine: 'underline' },
-
   finalTitle: { fontSize: 32, fontWeight: '900', color: '#000', textAlign: 'center', letterSpacing: -1 },
 });

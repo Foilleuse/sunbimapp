@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { supabase } from '../src/lib/supabaseClient';
 import { useAuth } from '../src/contexts/AuthContext';
-import { User, Mail, Lock, LogOut, ChevronLeft, Settings, Heart, MessageCircle, X } from 'lucide-react-native'; 
+import { User, Mail, Lock, LogOut, ChevronLeft, Settings, Heart, MessageCircle, X, AlertCircle } from 'lucide-react-native'; 
 import { DrawingViewer } from '../src/components/DrawingViewer';
 import { CommentsModal } from '../src/components/CommentsModal';
 
@@ -11,14 +11,21 @@ export default function ProfilePage() {
   const router = useRouter();
   const { user, profile, signOut, loading: authLoading } = useAuth();
   
-  const [userDrawings, setUserDrawings] = useState<any[]>([]);
-  const [loadingDrawings, setLoadingDrawings] = useState(true);
+  // --- ETATS ---
+  const [historyItems, setHistoryItems] = useState<any[]>([]); // Liste unifiée
+  const [loadingHistory, setLoadingHistory] = useState(true);
   
+  // Stats calculées
+  const [totalLikes, setTotalLikes] = useState(0);
+  const [drawingCount, setDrawingCount] = useState(0);
+
+  // UI States
   const [selectedDrawing, setSelectedDrawing] = useState<any | null>(null);
   const [isHolding, setIsHolding] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
 
+  // Formulaire
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [formLoading, setFormLoading] = useState(false);
@@ -29,72 +36,90 @@ export default function ProfilePage() {
   const ITEM_SIZE = (screenWidth - SPACING) / 2;
 
   useEffect(() => {
-    if (user) fetchUserDrawings();
+    if (user) fetchHistory();
   }, [user]);
 
-  // --- FONCTION INTELLIGENTE DE REDIRECTION ---
-  const checkStatusAndRedirect = async (userId: string) => {
+  // --- CHARGEMENT INTELLIGENT (FUSION NUAGES + DESSINS) ---
+  const fetchHistory = async () => {
     try {
-        setFormLoading(true); // On garde le loader pendant la vérif
         const today = new Date().toISOString().split('T')[0];
-        
-        // 1. On trouve le nuage du jour
-        const { data: cloudData } = await supabase
+
+        // 1. Tous les nuages passés
+        const { data: clouds, error: cloudsError } = await supabase
             .from('clouds')
-            .select('id')
-            .eq('published_for', today)
-            .maybeSingle();
+            .select('*')
+            .lte('published_for', today)
+            .order('published_for', { ascending: false });
 
-        if (!cloudData) {
-            // Pas de nuage ? On renvoie à l'accueil par défaut
-            router.replace('/'); 
-            return;
-        }
+        if (cloudsError) throw cloudsError;
 
-        // 2. On cherche si l'user a dessiné
-        const { data: existingDrawing } = await supabase
+        // 2. Tous mes dessins
+        const { data: myDrawings, error: drawingsError } = await supabase
             .from('drawings')
-            .select('id')
-            .eq('user_id', userId)
-            .eq('cloud_id', cloudData.id)
-            .maybeSingle();
+            .select('*')
+            .eq('user_id', user?.id);
 
-        if (existingDrawing) {
-            console.log("✅ Déjà joué -> Direction Feed");
-            router.replace('/(tabs)/feed');
-        } else {
-            console.log("🎨 Pas encore joué -> Direction Index");
-            router.replace('/');
-        }
+        if (drawingsError) throw drawingsError;
+
+        // 3. Fusion
+        const history = clouds?.map(cloud => {
+            const drawing = myDrawings?.find(d => d.cloud_id === cloud.id);
+            return {
+                id: cloud.id,
+                type: drawing ? 'drawing' : 'missed', // Type important pour l'affichage
+                date: cloud.published_for,
+                
+                // Infos visuelles
+                cloud_image_url: cloud.image_url,
+                canvas_data: drawing ? drawing.canvas_data : [],
+                
+                // Infos sociales (seulement si dessin)
+                drawing_id: drawing?.id, // ID réel du dessin
+                label: drawing?.label,
+                likes_count: drawing?.likes_count || 0,
+                comments_count: drawing?.comments_count || 0,
+                created_at: drawing ? drawing.created_at : cloud.published_for
+            };
+        });
+
+        setHistoryItems(history || []);
+        
+        // Stats réelles
+        const realDrawings = myDrawings || [];
+        setDrawingCount(realDrawings.length);
+        setTotalLikes(realDrawings.reduce((acc, curr) => acc + (curr.likes_count || 0), 0));
 
     } catch (e) {
-        console.error(e);
-        router.replace('/'); // Fallback
+        console.error("Erreur profil:", e);
     } finally {
-        setFormLoading(false);
+        setLoadingHistory(false);
     }
   };
 
-  // --- FETCH DATA ---
-  useEffect(() => {
-      if (selectedDrawing && user) checkLikeStatus();
-  }, [selectedDrawing]);
-
-  const fetchUserDrawings = async () => {
-    try {
-        const { data, error } = await supabase
-            .from('drawings')
-            .select('*')
-            .eq('user_id', user?.id)
-            .order('created_at', { ascending: false });
-        if (error) throw error;
-        setUserDrawings(data || []);
-    } catch (e) { console.error("Erreur profil:", e); } finally { setLoadingDrawings(false); }
+  // --- INTERACTIONS ---
+  
+  // Quand on clique sur une vignette
+  const handlePressItem = (item: any) => {
+      if (item.type === 'drawing') {
+          // Si c'est un dessin, on l'ouvre
+          setSelectedDrawing(item);
+      } else {
+          // Si c'est un raté, on ne fait rien (ou un petit shake/alert si tu veux)
+          // Pour l'instant on ne fait rien, c'est juste visuel "Tu as raté"
+      }
   };
+
+  // Vérification du like pour le dessin ouvert
+  useEffect(() => {
+      if (selectedDrawing && selectedDrawing.drawing_id && user) {
+          checkLikeStatus();
+      }
+  }, [selectedDrawing]);
 
   const checkLikeStatus = async () => {
     try {
-        const { data } = await supabase.from('likes').select('id').eq('user_id', user?.id).eq('drawing_id', selectedDrawing.id).maybeSingle();
+        const { data } = await supabase.from('likes').select('id')
+            .eq('user_id', user?.id).eq('drawing_id', selectedDrawing.drawing_id).maybeSingle();
         setIsLiked(!!data);
     } catch (e) { console.error(e); }
   };
@@ -105,17 +130,14 @@ export default function ProfilePage() {
       setIsLiked(newLikedState);
       const newCount = (selectedDrawing.likes_count || 0) + (newLikedState ? 1 : -1);
       setSelectedDrawing({...selectedDrawing, likes_count: newCount});
-      setUserDrawings(prev => prev.map(d => d.id === selectedDrawing.id ? {...d, likes_count: newCount} : d));
-
+      
       try {
-          if (newLiked) await supabase.from('likes').insert({ user_id: user.id, drawing_id: selectedDrawing.id });
-          else await supabase.from('likes').delete().eq('user_id', user.id).eq('drawing_id', selectedDrawing.id);
+          if (newLiked) await supabase.from('likes').insert({ user_id: user.id, drawing_id: selectedDrawing.drawing_id });
+          else await supabase.from('likes').delete().eq('user_id', user.id).eq('drawing_id', selectedDrawing.drawing_id);
       } catch (e) { setIsLiked(!newLiked); }
   };
 
-  const totalLikes = userDrawings.reduce((acc, curr) => acc + (curr.likes_count || 0), 0);
-
-  // --- LOGIN / SIGNUP ---
+  // Auth Actions
   const handleEmailAuth = async () => {
     setFormLoading(true);
     try {
@@ -123,39 +145,58 @@ export default function ProfilePage() {
             const { error } = await supabase.auth.signUp({ email, password });
             if (error) throw error;
             Alert.alert("Vérifie tes emails !", "Lien envoyé.");
-            setFormLoading(false);
         } else {
-            const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+            const { error } = await supabase.auth.signInWithPassword({ email, password });
             if (error) throw error;
-            
-            // SUCCÈS -> ON LANCE LA VÉRIFICATION INTELLIGENTE
-            if (data.user) {
-                await checkStatusAndRedirect(data.user.id);
-            }
         }
-    } catch (e: any) { 
-        Alert.alert("Erreur", e.message); 
-        setFormLoading(false);
-    } 
+    } catch (e: any) { Alert.alert("Erreur", e.message); } finally { setFormLoading(false); }
   };
-
   const handleSignOut = async () => { await signOut(); router.replace('/'); };
   const handleEditProfile = () => Alert.alert("Bientôt", "Édition profil à venir");
 
-  const renderItem = ({ item }: { item: any }) => (
-    <TouchableOpacity 
-        activeOpacity={0.9} onPress={() => setSelectedDrawing(item)}
-        style={{ width: ITEM_SIZE, height: ITEM_SIZE, marginBottom: SPACING, backgroundColor: '#F9F9F9', overflow: 'hidden' }}
-    >
-        <DrawingViewer imageUri={item.cloud_image_url} canvasData={item.canvas_data} viewerSize={ITEM_SIZE} transparentMode={false} startVisible={true} animated={false}/>
-    </TouchableOpacity>
-  );
+
+  // --- RENDU VIGNETTE ---
+  const renderItem = ({ item }: { item: any }) => {
+    const isMissed = item.type === 'missed';
+
+    return (
+        <TouchableOpacity 
+            activeOpacity={isMissed ? 1 : 0.9}
+            onPress={() => handlePressItem(item)}
+            style={{ 
+                width: ITEM_SIZE, height: ITEM_SIZE, 
+                marginBottom: SPACING, backgroundColor: '#F9F9F9', overflow: 'hidden',
+                opacity: isMissed ? 0.6 : 1 // Grisé si raté
+            }}
+        >
+            <DrawingViewer
+                imageUri={item.cloud_image_url}
+                canvasData={item.canvas_data} // Sera [] si raté, donc juste le nuage
+                viewerSize={ITEM_SIZE}
+                transparentMode={false} 
+                startVisible={true}
+                animated={false}
+            />
+
+            {/* OVERLAY RATÉ */}
+            {isMissed && (
+                <View style={styles.missedBadge}>
+                    <AlertCircle color="#FFF" size={24} />
+                    <Text style={styles.missedText}>
+                        {new Date(item.date).toLocaleDateString(undefined, {day:'numeric', month:'short'})}
+                    </Text>
+                </View>
+            )}
+        </TouchableOpacity>
+    );
+  };
 
   if (authLoading) return <View style={styles.container}><ActivityIndicator color="#000"/></View>;
 
   return (
     <View style={styles.container}>
        
+       {/* HEADER NAV (Fixe) */}
        <View style={styles.navHeader}>
             <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}>
                 <ChevronLeft color="#000" size={32} />
@@ -170,6 +211,7 @@ export default function ProfilePage() {
 
        {user ? (
             <View style={{flex: 1}}>
+                {/* HEADER PROFIL (Fixe) */}
                 <View style={styles.profileCard}>
                     <View style={styles.profileRow}>
                         <View style={styles.avatarContainer}>
@@ -183,7 +225,7 @@ export default function ProfilePage() {
                             <Text style={styles.displayName}>{profile?.display_name || "Anonyme"}</Text>
                             <Text style={styles.bio}>{profile?.bio || "Chasseur de nuages."}</Text>
                             <View style={styles.miniStats}>
-                                <Text style={styles.miniStatText}>{userDrawings.length} <Text style={styles.miniStatLabel}>dessins</Text></Text>
+                                <Text style={styles.miniStatText}>{drawingCount} <Text style={styles.miniStatLabel}>dessins</Text></Text>
                                 <Text style={styles.miniStatText}>•</Text>
                                 <Text style={styles.miniStatText}>{totalLikes} <Text style={styles.miniStatLabel}>likes</Text></Text>
                             </View>
@@ -192,14 +234,20 @@ export default function ProfilePage() {
                     <View style={styles.divider} />
                 </View>
 
+                {/* LISTE HISTORIQUE */}
                 <FlatList
-                    data={userDrawings} renderItem={renderItem} keyExtractor={(item) => item.id}
-                    numColumns={2} columnWrapperStyle={{ gap: SPACING }} contentContainerStyle={{ paddingBottom: 50 }}
+                    data={historyItems} // <--- Données fusionnées
+                    renderItem={renderItem}
+                    keyExtractor={(item) => item.id}
+                    numColumns={2}
+                    columnWrapperStyle={{ gap: SPACING }}
+                    contentContainerStyle={{ paddingBottom: 50 }}
                     showsVerticalScrollIndicator={false}
-                    ListEmptyComponent={<View style={styles.emptyState}><Text style={styles.emptyText}>Aucun dessin pour l'instant.</Text></View>}
+                    ListEmptyComponent={<View style={styles.emptyState}><Text style={styles.emptyText}>Chargement...</Text></View>}
                 />
             </View>
        ) : (
+            // FORMULAIRE
             <View style={styles.formContainer}>
                 <Text style={styles.welcomeText}>Connecte-toi.</Text>
                 <View style={styles.inputWrapper}><Mail size={20} color="#999" style={styles.inputIcon}/><TextInput placeholder="Email" value={email} onChangeText={setEmail} autoCapitalize="none" style={styles.input} /></View>
@@ -211,6 +259,7 @@ export default function ProfilePage() {
             </View>
        )}
 
+       {/* MODALE ZOOM */}
        {selectedDrawing && (
         <Modal animationType="slide" transparent={false} visible={true} onRequestClose={() => setSelectedDrawing(null)}>
             <View style={styles.modalContainer}>
@@ -221,8 +270,10 @@ export default function ProfilePage() {
                     <DrawingViewer
                         imageUri={selectedDrawing.cloud_image_url}
                         canvasData={isHolding ? [] : selectedDrawing.canvas_data}
-                        viewerSize={screenWidth} transparentMode={false} startVisible={false} animated={true}
+                        viewerSize={screenWidth}
+                        transparentMode={false} startVisible={false} animated={true}
                     />
+                    <Text style={styles.hintText}>Maintenir pour voir l'original</Text>
                 </Pressable>
                 <View style={styles.modalFooter}>
                     <Text style={styles.drawingLabel}>{selectedDrawing.label}</Text>
@@ -236,7 +287,8 @@ export default function ProfilePage() {
                             </TouchableOpacity>
                     </View>
                 </View>
-                <CommentsModal visible={showComments} onClose={() => setShowComments(false)} drawingId={selectedDrawing.id} />
+                
+                <CommentsModal visible={showComments} onClose={() => setShowComments(false)} drawingId={selectedDrawing.drawing_id} />
             </View>
         </Modal>
        )}
@@ -278,4 +330,16 @@ const styles = StyleSheet.create({
   dateText: { fontSize: 14, color: '#999' },
   statsRowSmall: { flexDirection: 'row', alignItems: 'center', gap: 15 },
   statTextSmall: { fontWeight: '600', fontSize: 16 },
+  hintText: { position: 'absolute', bottom: 10, alignSelf: 'center', color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width:1, height:1}, textShadowRadius: 1 },
+  
+  // STYLE MISSED
+  missedBadge: {
+      position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+      backgroundColor: 'rgba(0,0,0,0.3)',
+      justifyContent: 'center', alignItems: 'center',
+  },
+  missedText: {
+      color: '#FFF', fontWeight: '800', marginTop: 5, fontSize: 14,
+      textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width:1, height:1}, textShadowRadius: 1
+  }
 });
