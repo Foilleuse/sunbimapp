@@ -5,7 +5,7 @@ import { Canvas, Path, Image as SkiaImage, useImage, Group, Skia } from '@shopif
 interface DrawingViewerProps {
   imageUri: string;
   canvasData: any; 
-  viewerSize: number;
+  viewerSize: number; // Taille du carré final (ex: 150px)
   transparentMode?: boolean;
 }
 
@@ -19,7 +19,7 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
   const { width: screenWidth } = Dimensions.get('window');
   const image = useImage(imageUri || ""); 
 
-  // 1. Parsing
+  // 1. Parsing des données
   const safePaths = useMemo(() => {
     let data = [];
     if (Array.isArray(canvasData)) data = canvasData;
@@ -29,49 +29,48 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
     return data;
   }, [canvasData]);
 
-  // 2. Calcul du Zoom
+  // 2. Calcul du Zoom (Alignement STRICT 0,0)
   const transform = useMemo(() => {
-    if (!image) return { scale: 1, translateX: 0, translateY: 0 };
+    if (!image) return { scale: 1 };
     
-    const CANVAS_SIZE = image.height(); 
-    if (CANVAS_SIZE === 0) return { scale: 1, translateX: 0, translateY: 0 };
+    // On se base sur la hauteur pour l'échelle (comme à la création)
+    const H = image.height();
+    if (H === 0) return { scale: 1 };
 
-    const fitScale = viewerSize / CANVAS_SIZE;
-    const imgW = image.width ? image.width() : CANVAS_SIZE;
-    const visualWidth = imgW * fitScale;
-    const centerTx = (screenWidth - visualWidth) / 2;
+    // On calcule l'échelle pour que la hauteur de l'image = hauteur du viewer
+    const scale = viewerSize / H;
 
-    return { scale: fitScale, translateX: centerTx, translateY: 0 };
-  }, [image, screenWidth, viewerSize]);
+    return { scale };
+  }, [image, viewerSize]);
 
   if (!image) {
     if (transparentMode) return <View style={{width: viewerSize, height: viewerSize}} />;
-    return <View style={styles.loading}><ActivityIndicator color="#fff" /></View>;
+    return <View style={styles.loading}><ActivityIndicator color="#ccc" /></View>;
   }
 
-  const CANVAS_H = image.height();
-  const CANVAS_W = image.width();
+  // Dimensions natives complètes
+  const NATIVE_W = image.width();
+  const NATIVE_H = image.height();
   
-  const matrix = [
-      { translateX: transform.translateX },
-      { translateY: transform.translateY },
-      { scale: transform.scale }
-  ];
+  const matrix = [{ scale: transform.scale }];
 
   return (
+    // Le View avec overflow: 'hidden' agit comme un cadre carré qui rogne ce qui dépasse
     <View style={[styles.container, {width: viewerSize, height: viewerSize, overflow: 'hidden'}]}>
       <Canvas style={{ flex: 1 }}>
         <Group transform={matrix}>
           
+          {/* IMAGE DE FOND */}
           {!transparentMode && (
               <SkiaImage
                 image={image}
-                x={0} y={0}
-                width={CANVAS_W} height={CANVAS_H}
-                fit="cover"
+                x={0} y={0} // Ancrage strict en haut à gauche
+                width={NATIVE_W} height={NATIVE_H}
+                fit="none" // IMPORTANT: On ne laisse pas Skia redimensionner ou centrer
               />
           )}
           
+          {/* DESSINS */}
           <Group layer={true}> 
           {safePaths.map((p: any, index: number) => {
              if (!p || !p.svgPath) return null;
@@ -80,12 +79,12 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
                  const path = Skia.Path.MakeFromSVGString(p.svgPath);
                  if (!path) return null;
                  
-                 // --- AJUSTEMENT FINESSE ---
+                 // CALCUL ÉPAISSEUR
+                 // 1. On prend la largeur originale
+                 // 2. On la divise par le scale (pour compenser le zoom arrière)
+                 // 3. On multiplie par 0.6 pour affiner le rendu sur les petits écrans
                  const baseWidth = p.width || 6;
-                 
-                 // 1. On compense le zoom (division par scale)
-                 // 2. On multiplie par 0.65 pour affiner le rendu visuel
-                 const adjustedWidth = (baseWidth / transform.scale) * 0.65; 
+                 const adjustedWidth = (baseWidth / transform.scale) * 0.6; 
                  
                  return (
                    <Path
@@ -110,5 +109,5 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
 
 const styles = StyleSheet.create({
   container: { backgroundColor: 'transparent' },
-  loading: { flex: 1, justifyContent: 'center', alignItems: 'center' }
+  loading: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F9F9F9' }
 });
