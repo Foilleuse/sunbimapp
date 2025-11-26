@@ -2,10 +2,11 @@ import { View, Text, StyleSheet, ActivityIndicator, Alert, Modal, TextInput, Tou
 import { useEffect, useState, useRef } from 'react';
 import { supabase } from '../src/lib/supabaseClient';
 import { DrawingCanvas, DrawingCanvasRef } from '../src/components/DrawingCanvas';
-import { DrawingViewer } from '../src/components/DrawingViewer';
+import { DrawingViewer } from '../src/components/DrawingViewer'; 
 import { DrawingControls } from '../src/components/DrawingControls';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../src/contexts/AuthContext';
+import * as Updates from 'expo-updates';
 
 interface Cloud {
   id: string;
@@ -31,12 +32,15 @@ export default function DrawPage() {
   
   const [replayPaths, setReplayPaths] = useState<any[] | null>(null);
   
-  // --- ANIMATIONS ---
-  const fadeWhiteAnim = useRef(new Animated.Value(0)).current; // Fond blanc
-  const drawingOpacityAnim = useRef(new Animated.Value(1)).current; // Dessin
-  const textOpacityAnim = useRef(new Animated.Value(0)).current; // <--- NOUVEAU : Le texte de gloire
+  const fadeWhiteAnim = useRef(new Animated.Value(0)).current; 
+  const drawingOpacityAnim = useRef(new Animated.Value(1)).current; 
+  const textOpacityAnim = useRef(new Animated.Value(0)).current; 
 
   const canvasRef = useRef<DrawingCanvasRef>(null);
+
+  // --- SÉCURITÉ SUR L'UPDATE ID ---
+  // On vérifie si Updates existe et si updateId est défini
+  const updateLabel = (Updates && Updates.updateId) ? `v.${Updates.updateId.substring(0, 6)}` : '';
 
   useEffect(() => {
     fetchTodaysCloud();
@@ -46,7 +50,13 @@ export default function DrawPage() {
     try {
       setLoading(true);
       setError(null);
-      if (!supabase) throw new Error('Supabase not init');
+      // Si supabase n'est pas init, on ignore l'erreur pour l'instant et on continue (pour éviter le crash)
+      if (!supabase) {
+          console.warn('Supabase not init');
+          setLoading(false);
+          return;
+      }
+
       const today = new Date().toISOString().split('T')[0];
       const { data, error: fetchError } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();
       if (fetchError) throw fetchError;
@@ -78,7 +88,6 @@ export default function DrawPage() {
     setModalVisible(true);
   };
 
-  // --- SÉQUENCE CINÉMATIQUE "LE VERNISSAGE" ---
   const confirmShare = async () => {
     if (!canvasRef.current || !cloud || !user) return;
     
@@ -100,25 +109,15 @@ export default function DrawPage() {
         if (dbError) throw dbError;
 
         setModalVisible(false);
-        // On garde le texte en mémoire pour l'animation, mais on vide l'input
-        // setTagText(''); // On le vide plus tard
 
-        // 1. FONDU AU BLANC
         Animated.timing(fadeWhiteAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start(() => {
             
-            // 2. REPLAY
             setReplayPaths(pathsData); 
             
-            // Le tracé dure 1500ms. On attend qu'il finisse pour afficher le texte.
             setTimeout(() => {
-                
-                // 3. APPARITION DU TITRE (Glorification)
                 Animated.timing(textOpacityAnim, { toValue: 1, duration: 800, useNativeDriver: true }).start();
 
-                // 4. ON LAISSE ADMIRER (2 secondes)
                 setTimeout(() => {
-                    
-                    // 5. DISPARITION TOTALE (Vers le Feed)
                     Animated.parallel([
                         Animated.timing(drawingOpacityAnim, { toValue: 0, duration: 800, useNativeDriver: true }),
                         Animated.timing(textOpacityAnim, { toValue: 0, duration: 800, useNativeDriver: true })
@@ -126,7 +125,6 @@ export default function DrawPage() {
                         
                         router.replace('/(tabs)/feed');
                         
-                        // Reset
                         setTimeout(() => {
                             fadeWhiteAnim.setValue(0);
                             drawingOpacityAnim.setValue(1);
@@ -138,9 +136,9 @@ export default function DrawPage() {
                         }, 1000);
                     });
 
-                }, 2500); // Temps d'admiration
+                }, 2500); 
 
-            }, 1500); // Temps du tracé
+            }, 1500); 
         });
         
     } catch (e: any) {
@@ -158,6 +156,8 @@ export default function DrawPage() {
       
       <View style={styles.header}>
         <Text style={styles.headerText}>sunbim</Text>
+        {/* Affichage conditionnel du numéro de version */}
+        {updateLabel ? <Text style={styles.versionText}>{updateLabel}</Text> : null}
       </View>
 
       <View style={styles.canvasContainer}>
@@ -166,9 +166,7 @@ export default function DrawPage() {
                 imageUri={cloud.image_url}
                 canvasData={replayPaths}
                 viewerSize={screenWidth}
-                transparentMode={false} // On peut laisser false si on veut voir le nuage, ou true si on veut juste le trait sur fond blanc
-                // Pour l'effet "Papier Blanc", on mettra transparentMode={true} ci-dessous
-                // Mais comme le voile blanc est par dessus, on met transparentMode={true}
+                transparentMode={false} 
                 animated={true}
                 startVisible={false}
             />
@@ -210,7 +208,6 @@ export default function DrawPage() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* --- ÉCRAN DE FIN (Cinématique) --- */}
       <Animated.View 
         pointerEvents="none"
         style={[
@@ -226,19 +223,17 @@ export default function DrawPage() {
       >
           {replayPaths && (
               <Animated.View style={{ opacity: drawingOpacityAnim, width: screenWidth, alignItems: 'center' }}>
-                  {/* LE DESSIN (Seul, comme une œuvre d'art) */}
                   <View style={{ height: screenWidth, width: screenWidth }}>
                     <DrawingViewer 
                         imageUri={cloud.image_url}
                         canvasData={replayPaths}
                         viewerSize={screenWidth}
-                        transparentMode={true} // FOND TRANSPARENT (Donc Blanc)
+                        transparentMode={true} 
                         animated={true}
                         startVisible={false}
                     />
                   </View>
                   
-                  {/* LE TITRE QUI APPARAÎT EN DESSOUS */}
                   <Animated.View style={{ opacity: textOpacityAnim, marginTop: 40, alignItems: 'center' }}>
                       <Text style={styles.finalTitle}>"{tagText}"</Text>
                       <Text style={styles.finalSubtitle}>Envoyé au ciel</Text>
@@ -258,6 +253,7 @@ const styles = StyleSheet.create({
   centerContent: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: { position: 'absolute', top: 0, left: 0, right: 0, paddingTop: 60, paddingBottom: 15, alignItems: 'center', zIndex: 10, pointerEvents: 'none' },
   headerText: { fontSize: 32, fontWeight: '900', color: '#FFFFFF', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 0 },
+  versionText: { fontSize: 10, color: 'rgba(255,255,255,0.5)', marginTop: 2, textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 1 },
   noCloudText: { fontSize: 18, color: '#666', textAlign: 'center', marginTop: 100 },
   errorText: { color: 'red', textAlign: 'center' },
 
@@ -271,7 +267,6 @@ const styles = StyleSheet.create({
   cancelBtn: { padding: 10 },
   cancelText: { color: '#999', fontWeight: '600' },
 
-  // Styles de la séquence finale
   finalTitle: { fontSize: 32, fontWeight: '900', color: '#000', textAlign: 'center', letterSpacing: -1 },
   finalSubtitle: { fontSize: 16, fontWeight: '500', color: '#888', marginTop: 10, textTransform: 'uppercase', letterSpacing: 2 }
 });
