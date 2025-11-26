@@ -2,10 +2,14 @@ import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions
 import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { X } from 'lucide-react-native';
-// CORRECTION DES IMPORTS (../../)
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
-import PagerView from 'react-native-pager-view';
+
+// Import dynamique PagerView
+let PagerView: any;
+if (Platform.OS !== 'web') {
+    try { PagerView = require('react-native-pager-view').default; } catch (e) { PagerView = View; }
+} else { PagerView = View; }
 
 export default function FeedPage() {
     const router = useRouter();
@@ -39,6 +43,9 @@ export default function FeedPage() {
 
     if (loading) return <View style={styles.loadingContainer}><ActivityIndicator color="#87CEEB" size="large" /></View>;
     
+    // On récupère l'image de fond depuis le premier dessin (ils partagent le même nuage)
+    // S'il n'y a pas de dessin, pas d'image de fond.
+    const backgroundUrl = drawings.length > 0 ? drawings[0].cloud_image_url : null;
     const activeDrawing = drawings[currentIndex];
 
     return (
@@ -47,24 +54,40 @@ export default function FeedPage() {
             {/* HEADER */}
             <View style={styles.headerBar}>
                 <Text style={styles.headerText}>sunbim</Text>
-                {/* Le bouton X ne sert plus trop ici car on navigue par tabs, mais on peut le garder ou l'enlever */}
             </View>
 
-            {/* SWIPE */}
-            <View style={{ width: canvasSize, height: canvasSize, backgroundColor: '#F0F0F0' }}>
+            {/* ZONE PRINCIPALE (Superposition) */}
+            <View style={{ width: canvasSize, height: canvasSize, backgroundColor: '#F0F0F0', position: 'relative' }}>
+                
+                {/* COUCHE 1 : FOND FIXE (Statique) */}
+                {/* On affiche le viewer avec l'image, mais AUCUNE donnée de dessin */}
+                {backgroundUrl && (
+                    <View style={StyleSheet.absoluteFill}>
+                        <DrawingViewer
+                            imageUri={backgroundUrl}
+                            canvasData={[]} // Vide ! Juste pour l'image
+                            viewerSize={canvasSize}
+                            transparentMode={false} // Affiche l'image
+                        />
+                    </View>
+                )}
+
+                {/* COUCHE 2 : SWIPE DES DESSINS (Par dessus) */}
+                {/* PagerView est transparent et glisse au dessus du fond */}
                 {drawings.length > 0 ? (
                     <PagerView 
                         style={{ flex: 1 }} 
                         initialPage={0}
                         orientation="horizontal"
-                        onPageSelected={(e) => setCurrentIndex(e.nativeEvent.position)}
+                        onPageSelected={(e: any) => setCurrentIndex(e.nativeEvent.position)}
                     >
                         {drawings.map((drawing, index) => (
-                            <View key={drawing.id || index} style={{ flex: 1 }}>
+                            <View key={drawing.id || index} style={{ flex: 1, backgroundColor: 'transparent' }}>
                                 <DrawingViewer
-                                    imageUri={drawing.cloud_image_url}
-                                    canvasData={drawing.canvas_data}
+                                    imageUri={drawing.cloud_image_url} // Nécessaire pour calculer l'échelle
+                                    canvasData={drawing.canvas_data}   // Les traits
                                     viewerSize={canvasSize}
+                                    transparentMode={true} // <--- MAGIE : N'affiche QUE les traits, pas l'image
                                 />
                             </View>
                         ))}
@@ -82,9 +105,10 @@ export default function FeedPage() {
                     {activeDrawing ? `Nuage du ${new Date(activeDrawing.created_at).toLocaleDateString()}` : ''}
                  </Text>
                  <Text style={styles.userText}>
-                    Dessin #{currentIndex + 1}
+                    Dessin #{currentIndex + 1} sur {drawings.length}
                  </Text>
             </View>
+
         </View>
     );
 }
