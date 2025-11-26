@@ -246,27 +246,27 @@ export default function DrawPage() {
       </Modal>
 
       {/* VOILE BLANC */}
+      // ...
       <Animated.View 
         pointerEvents="none"
-        style={[
-            StyleSheet.absoluteFill, 
-            { backgroundColor: 'white', opacity: fadeWhiteAnim, zIndex: 9999, justifyContent: 'center', alignItems: 'center' }
-        ]} 
+        style={[ StyleSheet.absoluteFill, { backgroundColor: 'white', opacity: fadeWhiteAnim, zIndex: 9999, justifyContent: 'center', alignItems: 'center' } ]} 
       >
           {replayPaths && (
               <Animated.View style={{ opacity: drawingOpacityAnim, width: screenWidth, alignItems: 'center' }}>
-                  
-                  {/* LE REPLAY EST RENDU ICI (DESSUS LE VOILE) */}
                   <View style={{ height: screenWidth, width: screenWidth }}>
+                    
                     <DrawingViewer 
                         imageUri={cloud.image_url}
                         canvasData={replayPaths}
                         viewerSize={screenWidth}
-                        transparentMode={true}
+                        transparentMode={true} 
                         animated={true}
                         startVisible={false}
-                        autoCenter={true} // <--- ZOOM AUTO
+                        
+                        // ✅ ON ACTIVE LE ZOOM AUTOMATIQUE ICI
+                        autoCenter={true} 
                     />
+                  
                   </View>
                   
                   <Animated.View style={{ opacity: textOpacityAnim, marginTop: 40, alignItems: 'center' }}>
@@ -275,6 +275,7 @@ export default function DrawPage() {
               </Animated.View>
           )}
       </Animated.View>
+// ...
     </View>
   );
 }

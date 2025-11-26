@@ -10,7 +10,7 @@ interface DrawingViewerProps {
   transparentMode?: boolean;
   animated?: boolean;
   startVisible?: boolean;
-  autoCenter?: boolean; 
+  autoCenter?: boolean; // <--- L'option pour l'animation centrée
 }
 
 export const DrawingViewer: React.FC<DrawingViewerProps> = ({ 
@@ -25,7 +25,6 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
   
   const image = useImage(imageUri || "https://via.placeholder.com/1000"); 
 
-  // --- ANIMATION ---
   const progress = useSharedValue(startVisible ? 1 : 0);
 
   useEffect(() => {
@@ -49,53 +48,59 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
     return data;
   }, [canvasData]);
 
-  // 2. LOGIQUE D'AFFICHAGE
+  // 2. CALCUL DE LA MATRICE (Position & Zoom)
   const displayLogic = useMemo(() => {
       const m = Skia.Matrix();
-      if (!image) return { matrix: m, scale: 1, useMatrix: false };
       
-      const NATIVE_SIZE = image.height(); // Référence absolue : LA HAUTEUR
-      if (NATIVE_SIZE === 0) return { matrix: m, scale: 1, useMatrix: false };
+      // Par défaut, si pas d'image, scale 1
+      if (!image) return { matrix: m, scale: 1 };
+      
+      const NATIVE_SIZE = image.height();
+      if (NATIVE_SIZE === 0) return { matrix: m, scale: 1 };
 
-      // --- CAS A : ZOOM AUTOMATIQUE (Animation Fin Index) ---
+      // Echelle standard (Feed/Galerie)
+      const fitScale = viewerSize / NATIVE_SIZE;
+
+      // --- MODE AUTO-CENTER (Pour l'animation de fin uniquement) ---
       if (autoCenter && safePaths.length > 0) {
           try {
               const combinedPath = Skia.Path.Make();
-              let valid = false;
+              let hasPaths = false;
               safePaths.forEach(p => {
                   if (p.svgPath) {
                       const path = Skia.Path.MakeFromSVGString(p.svgPath);
-                      if (path) { combinedPath.addPath(path); valid = true; }
+                      if (path) { combinedPath.addPath(path); hasPaths = true; }
                   }
               });
 
-              if (valid) {
+              if (hasPaths) {
                   const bounds = combinedPath.getBounds();
+                  // Si le dessin a une taille correcte
                   if (bounds.width > 10 && bounds.height > 10) {
                       const padding = 40;
                       const targetSize = viewerSize - padding;
-                      const focusScale = Math.min(targetSize / Math.max(bounds.width, bounds.height), 3);
+                      
+                      // On calcule le zoom pour remplir l'écran avec le DESSIN
+                      const focusScale = Math.min(targetSize / Math.max(bounds.width, bounds.height), 5); // Max zoom x5
 
-                      const translateX = (viewerSize - bounds.width * focusScale) / 2 - bounds.x * focusScale;
-                      const translateY = (viewerSize - bounds.height * focusScale) / 2 - bounds.y * focusScale;
+                      // On centre le dessin dans le viewer
+                      const tx = (viewerSize - bounds.width * focusScale) / 2 - bounds.x * focusScale;
+                      const ty = (viewerSize - bounds.height * focusScale) / 2 - bounds.y * focusScale;
 
-                      m.translate(translateX, translateY);
+                      m.translate(tx, ty);
                       m.scale(focusScale, focusScale);
                       
-                      return { matrix: m, scale: focusScale, useMatrix: true };
+                      // ON RENVOIE CETTE ÉCHELLE SPÉCIALE
+                      return { matrix: m, scale: focusScale };
                   }
               }
           } catch (e) {}
       }
 
-      // --- CAS B : AFFICHAGE STANDARD (Feed / Galerie) ---
-      // On calcule juste le ratio pour passer de "Taille Native" à "Taille Viewer"
-      const simpleScale = viewerSize / NATIVE_SIZE;
-      
-      // On applique ce ratio à tout le monde
-      m.scale(simpleScale, simpleScale);
-      
-      return { matrix: m, scale: simpleScale, useMatrix: false };
+      // --- MODE STANDARD (Feed/Galerie) ---
+      // On cale l'image sur le coin haut-gauche et on resize
+      m.scale(fitScale, fitScale);
+      return { matrix: m, scale: fitScale };
 
   }, [image, viewerSize, autoCenter, safePaths]);
 
@@ -104,59 +109,59 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
     return <View style={styles.loading}><ActivityIndicator color="#fff" /></View>;
   }
 
-  // --- LE SECRET : ON REPRODUIT LE CADRE DE CRÉATION ---
-  // À la création, on a forcé width = height = image.height()
+  // Dimensions pour l'image de fond
   const SQUARE_SIZE = image.height();
 
   return (
     <View style={[styles.container, {width: viewerSize, height: viewerSize, overflow: 'hidden'}]}>
       <Canvas style={{ flex: 1 }}>
-        
-        {/* GROUPE GLOBAL : Tout le monde subit la même réduction */}
         <Group matrix={displayLogic.matrix}>
-             
-             {/* IMAGE DE FOND */}
-             {/* On lui donne les mêmes contraintes qu'à la création : Carré + Cover */}
-             {!transparentMode && (
-                <SkiaImage
-                    image={image}
-                    x={0} y={0}
-                    width={SQUARE_SIZE} height={SQUARE_SIZE} // <--- IMPORTANT : Carré basé sur la hauteur
-                    fit="cover"
-                />
-             )}
+          
+          {/* IMAGE DE FOND (Seulement si pas en mode AutoCenter, car AutoCenter décalerait l'image) */}
+          {!transparentMode && !autoCenter && (
+              <SkiaImage
+                image={image}
+                x={0} y={0}
+                width={SQUARE_SIZE} height={SQUARE_SIZE}
+                fit="cover"
+              />
+          )}
+          
+          {/* DESSINS */}
+          <Group layer={true}> 
+          {safePaths.map((p: any, index: number) => {
+             if (!p || !p.svgPath) return null;
 
-             {/* DESSINS */}
-             <Group layer={true}> 
-                {safePaths.map((p: any, index: number) => {
-                    if (!p || !p.svgPath) return null;
-                    try {
-                        const path = Skia.Path.MakeFromSVGString(p.svgPath);
-                        if (!path) return null;
-                        
-                        // Épaisseur adaptée au scale du groupe
-                        const baseWidth = p.width || 6;
-                        const adjustedWidth = (baseWidth / displayLogic.scale) * 0.65; 
-                        
-                        return (
-                        <Path
-                            key={index}
-                            path={path}
-                            color={p.isEraser ? "#000000" : (p.color || "#000000")}
-                            style="stroke"
-                            strokeWidth={adjustedWidth} 
-                            strokeCap="round"
-                            strokeJoin="round"
-                            blendMode={p.isEraser ? "clear" : "srcOver"}
-                            start={0}
-                            end={progress} 
-                        />
-                        );
-                    } catch (e) { return null; }
-                })}
-             </Group>
+             try {
+                 const path = Skia.Path.MakeFromSVGString(p.svgPath);
+                 if (!path) return null;
+                 
+                 // --- MAGIE DE L'ÉPAISSEUR ---
+                 const baseWidth = p.width || 6;
+                 
+                 // On divise par l'échelle actuelle (qu'elle soit standard ou zoomée)
+                 // Résultat : Le trait garde toujours la même épaisseur VISUELLE (environ 4-5px sur l'écran)
+                 // peu importe le niveau de zoom.
+                 const adjustedWidth = (baseWidth / displayLogic.scale) * 0.7; 
+                 
+                 return (
+                   <Path
+                     key={index}
+                     path={path}
+                     color={p.isEraser ? "#000000" : (p.color || "#000000")}
+                     style="stroke"
+                     strokeWidth={adjustedWidth} 
+                     strokeCap="round"
+                     strokeJoin="round"
+                     blendMode={p.isEraser ? "clear" : "srcOver"}
+                     start={0}
+                     end={progress} 
+                   />
+                 );
+             } catch (e) { return null; }
+          })}
+          </Group>
         </Group>
-
       </Canvas>
     </View>
   );
