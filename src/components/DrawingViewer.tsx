@@ -17,30 +17,27 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
 }) => {
   
   const { width: screenWidth } = Dimensions.get('window');
-  // Protection contre URI vide
-  const image = useImage(imageUri || "https://via.placeholder.com/1000");
+  const image = useImage(imageUri || ""); 
 
-  // --- 1. PARSING ROBUSTE DES DONNÉES ---
+  // 1. PARSING + DEBUG LOGS
   const safePaths = useMemo(() => {
-    if (!canvasData) return [];
+    let data = [];
     
-    // Cas 1 : C'est déjà un tableau d'objets (Supabase a bien fait le job)
-    if (Array.isArray(canvasData)) return canvasData;
-    
-    // Cas 2 : C'est une chaine de caractères (String JSON)
-    if (typeof canvasData === 'string') {
-        try {
-            // On tente de parser. Si c'est du JSON valide, ça devient un tableau.
-            const parsed = JSON.parse(canvasData);
-            return Array.isArray(parsed) ? parsed : [];
-        } catch (e) {
-            console.warn("DrawingViewer: Impossible de parser le JSON", e);
-            return [];
-        }
+    // Décodage
+    if (Array.isArray(canvasData)) {
+        data = canvasData;
+    } else if (typeof canvasData === 'string') {
+        try { data = JSON.parse(canvasData); } catch (e) { data = []; }
     }
-    
-    // Cas 3 : Format inconnu
-    return [];
+
+    // Log pour vérifier ce qu'on reçoit
+    if (data.length > 0) {
+        console.log(`🎨 DrawingViewer: Affichage de ${data.length} traits.`);
+    } else {
+        console.log("⚠️ DrawingViewer: Aucune donnée de dessin trouvée.");
+    }
+
+    return data;
   }, [canvasData]);
 
   const transform = useMemo(() => {
@@ -50,9 +47,7 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
     if (CANVAS_SIZE === 0) return { scale: 1, translateX: 0, translateY: 0 };
 
     const fitScale = viewerSize / CANVAS_SIZE;
-    // On utilise la largeur réelle si dispo, sinon on assume carré
     const imgW = image.width ? image.width() : CANVAS_SIZE;
-    
     const visualWidth = imgW * fitScale;
     const centerTx = (screenWidth - visualWidth) / 2;
 
@@ -64,7 +59,7 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
     return <View style={styles.loading}><ActivityIndicator color="#fff" /></View>;
   }
 
-  const CANVAS_SIZE = image.height();
+  const CANVAS_H = image.height();
   const CANVAS_W = image.width();
   
   const matrix = [
@@ -82,22 +77,24 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
               <SkiaImage
                 image={image}
                 x={0} y={0}
-                width={CANVAS_W} height={CANVAS_SIZE}
+                width={CANVAS_W} height={CANVAS_H}
                 fit="cover"
               />
           )}
           
           <Group layer={true}> 
           {safePaths.map((p: any, index: number) => {
-             // Vérification de sécurité
+             if (!Skia || !Skia.Path) return null;
              if (!p || !p.svgPath || typeof p.svgPath !== 'string') return null;
 
              try {
                  const path = Skia.Path.MakeFromSVGString(p.svgPath);
                  if (!path) return null;
                  
-                 // Calcul de l'épaisseur pour qu'elle soit visuellement identique à l'original
-                 const adjustedWidth = p.width ? (p.width / transform.scale) : 2;
+                 // --- CORRECTION MAJEURE ICI ---
+                 // On utilise l'épaisseur brute stockée (car la matrice 'scale' va la réduire visuellement)
+                 // Si on divise encore, ça fait l'inverse (traits énormes).
+                 const width = p.width || 5; 
                  
                  return (
                    <Path
@@ -105,7 +102,7 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
                      path={path}
                      color={p.isEraser ? "#000000" : p.color}
                      style="stroke"
-                     strokeWidth={adjustedWidth}
+                     strokeWidth={width} // On utilise la largeur native directe
                      strokeCap="round"
                      strokeJoin="round"
                      blendMode={p.isEraser ? "clear" : "srcOver"}
