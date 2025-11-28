@@ -12,7 +12,7 @@ if (Platform.OS !== 'web') {
     try { PagerView = require('react-native-pager-view').default; } catch (e) { PagerView = View; }
 } else { PagerView = View; }
 
-// --- COMPOSANT CARTE MÉMOÏSÉ (Permet de ne pas re-render si props inchangées) ---
+// --- COMPOSANT CARTE MÉMOÏSÉ ---
 const FeedCard = memo(({ drawing, canvasSize, isActive }: { drawing: any, canvasSize: number, isActive: boolean }) => {
     const [isLiked, setIsLiked] = useState(false);
     
@@ -20,23 +20,17 @@ const FeedCard = memo(({ drawing, canvasSize, isActive }: { drawing: any, canvas
     const commentsCount = drawing.comments_count || 0;
     const author = drawing.users;
 
-    // OPTIMISATION CRITIQUE :
-    // Si la carte n'est pas active (pas visible), on ne rend PAS le DrawingViewer lourd.
-    // On pourrait afficher une image placeholder, ou rien si on veut économiser max de ressources.
-    // Ici, on le rend quand même pour la fluidité immédiate, mais on désactive l'animation si pas actif.
-    
     return (
         <View style={styles.cardContainer}>
-            <View style={{ width: canvasSize, height: canvasSize, backgroundColor: '#f0f0f0' }}>
-                {/* On ne monte le Viewer que si on est proche de l'index actif pour économiser la RAM */}
+            {/* CORRECTION ICI : backgroundColor 'transparent' au lieu de '#f0f0f0' */}
+            <View style={{ width: canvasSize, height: canvasSize, backgroundColor: 'transparent' }}>
                 <DrawingViewer
                     imageUri={drawing.cloud_image_url}
                     canvasData={drawing.canvas_data}
                     viewerSize={canvasSize}
-                    transparentMode={true} 
-                    // On anime SEULEMENT si c'est la carte active
+                    transparentMode={true} // Le Viewer est transparent pour laisser voir l'image de fond du Feed
                     animated={isActive}
-                    startVisible={!isActive} // Si pas actif, on affiche tout de suite (pas d'anim)
+                    startVisible={!isActive}
                 />
             </View>
             <View style={styles.cardInfo}>
@@ -70,8 +64,6 @@ const FeedCard = memo(({ drawing, canvasSize, isActive }: { drawing: any, canvas
         </View>
     );
 }, (prev, next) => {
-    // Fonction de comparaison pour React.memo
-    // On ne re-render que si isActive change ou si l'ID change
     return prev.drawing.id === next.drawing.id && prev.isActive === next.isActive;
 });
 
@@ -94,7 +86,7 @@ export default function FeedPage() {
                     .select('*, users(display_name, avatar_url)') 
                     .eq('cloud_id', cloudData.id)
                     .order('created_at', { ascending: false })
-                    .limit(20); // On réduit la limite initiale pour charger plus vite
+                    .limit(20);
 
                 if (drawingsError) throw drawingsError;
                 setDrawings(drawingsData || []);
@@ -110,7 +102,7 @@ export default function FeedPage() {
         <View style={styles.container}>
             <SunbimHeader showCloseButton={false} />
             <View style={{ flex: 1, position: 'relative' }}>
-                {/* Image de fond fixe pour éviter de la recharger dans chaque carte */}
+                {/* Image de fond fixe (Optimisation) */}
                 {backgroundUrl && (
                     <View style={{ position: 'absolute', top: 0, width: screenWidth, height: screenWidth, zIndex: -1 }}>
                        <Image source={{uri: backgroundUrl}} style={{width: screenWidth, height: screenWidth}} resizeMode="cover" />
@@ -122,7 +114,6 @@ export default function FeedPage() {
                         style={{ flex: 1 }} 
                         initialPage={0} 
                         onPageSelected={(e: any) => setCurrentIndex(e.nativeEvent.position)}
-                        // Optimisation Android: charge moins de pages adjacentes
                         offscreenPageLimit={1} 
                     >
                         {drawings.map((drawing, index) => (
@@ -130,7 +121,6 @@ export default function FeedPage() {
                                 <FeedCard 
                                     drawing={drawing} 
                                     canvasSize={screenWidth} 
-                                    // On ne rend "actif" que la carte visible
                                     isActive={index === currentIndex} 
                                 />
                             </View>
