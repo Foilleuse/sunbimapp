@@ -78,13 +78,29 @@ export default function GalleryPage() {
                         </View>
                     </View>
                     {loading && !refreshing ? (<View style={styles.loadingContainer}><ActivityIndicator size="large" color="#000" /></View>) : (
-                        <FlatList
-                            data={drawings} renderItem={renderItem} keyExtractor={(item) => item.id}
-                            numColumns={2} columnWrapperStyle={{ gap: SPACING }} contentContainerStyle={{ paddingBottom: 100 }}
-                            showsVerticalScrollIndicator={false}
-                            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#000"/>}
-                            ListEmptyComponent={<View style={styles.emptyState}><Text style={styles.emptyText}>Galerie vide.</Text></View>}
-                        />
+                       <FlatList
+                    data={drawings}
+                    renderItem={renderItem}
+                    keyExtractor={(item) => item.id}
+                    numColumns={2}
+                    columnWrapperStyle={{ gap: SPACING }}
+                    contentContainerStyle={{ paddingBottom: 100 }}
+                    showsVerticalScrollIndicator={false}
+                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#000"/>}
+                    
+                    // --- OPTIMISATIONS MEMOIRE ---
+                    initialNumToRender={8}    // Affiche vite les 8 premiers
+                    maxToRenderPerBatch={8}   // Charge par paquet de 8
+                    windowSize={5}            // Garde en mémoire 5 écrans de hauteur (le reste est nettoyé)
+                    removeClippedSubviews={true} // Supprime les vues hors écran (Android)
+                    // -----------------------------
+
+                    ListEmptyComponent={
+                        <View style={styles.emptyState}>
+                            <Text style={styles.emptyText}>{searchText ? `Aucun résultat` : "Galerie vide."}</Text>
+                        </View>
+                    }
+                />
                     )}
                 </View>
 
