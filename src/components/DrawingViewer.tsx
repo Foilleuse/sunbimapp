@@ -13,7 +13,7 @@ interface DrawingViewerProps {
   autoCenter?: boolean; 
 }
 
-// On sort le parsing pour éviter de le refaire dans le render
+// Fonction utilitaire sortie du composant pour éviter sa redéfinition à chaque render
 const getSkiaPath = (svgString: string): SkPath | null => {
     try {
         return Skia.Path.MakeFromSVGString(svgString);
@@ -22,7 +22,8 @@ const getSkiaPath = (svgString: string): SkPath | null => {
     }
 };
 
-export const DrawingViewer: React.FC<DrawingViewerProps> = ({ 
+// --- COMPOSANT INTERNE (Logique d'affichage) ---
+const DrawingViewerContent: React.FC<DrawingViewerProps> = ({ 
   imageUri, 
   canvasData, 
   viewerSize, 
@@ -33,10 +34,13 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
 }) => {
   
   const image = useImage(imageUri); 
+  
+  // Initialisation : Si on doit animer, on commence TOUJOURS à 0 (startVisible est ignoré si animated=true au montage grâce au reset par key)
   const progress = useSharedValue(startVisible ? 1 : 0);
 
   useEffect(() => {
     if (animated) {
+        // On force à 0 immédiatement puis on lance l'animation
         progress.value = 0;
         progress.value = withTiming(1, { duration: 1500, easing: Easing.out(Easing.cubic) });
     } else {
@@ -44,8 +48,7 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
     }
   }, [animated, startVisible]);
 
-  // --- OPTIMISATION MAJEURE ---
-  // On transforme les strings en objets Skia une seule fois par changement de données
+  // --- OPTIMISATION 1 : Mémoïsation des chemins ---
   const skiaPaths = useMemo(() => {
     let rawData = [];
     if (Array.isArray(canvasData)) rawData = canvasData;
@@ -59,7 +62,7 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
     })).filter((p: any) => p.skPath !== null);
   }, [canvasData]);
 
-  // Logique Matrice (Zoom/Centrage) - Mémoïsée aussi
+  // --- OPTIMISATION 2 : Mémoïsation de la matrice ---
   const matrixTransform = useMemo(() => {
       const m = Skia.Matrix();
       if (!image) return m;
@@ -131,6 +134,20 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
         </Group>
       </Canvas>
     </View>
+  );
+};
+
+// --- COMPOSANT WRAPPER (Pour gérer le Reset sans flash) ---
+export const DrawingViewer: React.FC<DrawingViewerProps> = (props) => {
+  // L'astuce est ici : on utilise une `key` basée sur `animated`.
+  // Quand on passe de "Statique" (animated=false) à "Animé" (animated=true),
+  // React démonte et remonte le composant Content.
+  // Cela force `useSharedValue` à s'initialiser directement à 0, sans garder la valeur 1 précédente en mémoire.
+  return (
+    <DrawingViewerContent 
+      key={props.animated ? 'anim-mode' : 'static-mode'} 
+      {...props} 
+    />
   );
 };
 
