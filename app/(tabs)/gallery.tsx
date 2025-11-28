@@ -1,10 +1,33 @@
 import { View, Text, StyleSheet, FlatList, Dimensions, TouchableOpacity, ActivityIndicator, RefreshControl, TextInput, Keyboard, Modal, Pressable, Image } from 'react-native';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, memo } from 'react';
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
 import { useFocusEffect } from 'expo-router';
 import { Search, Heart, Cloud, CloudOff, XCircle, User, MessageCircle } from 'lucide-react-native';
+
+// --- ITEM DE LISTE OPTIMISÉ ---
+const GalleryItem = memo(({ item, itemSize, showClouds, onPress }: any) => {
+    return (
+        <TouchableOpacity 
+            activeOpacity={0.9} onPress={() => onPress(item)}
+            style={{ width: itemSize, height: itemSize, marginBottom: 1, backgroundColor: '#F9F9F9', overflow: 'hidden' }}
+        >
+            {/* On utilise une version statique pure sans animation pour la liste */}
+            <DrawingViewer
+                imageUri={item.cloud_image_url} 
+                canvasData={item.canvas_data} 
+                viewerSize={itemSize}
+                transparentMode={!showClouds} 
+                startVisible={true} 
+                animated={false}
+            />
+        </TouchableOpacity>
+    );
+}, (prev, next) => {
+    // Ne re-render que si le mode nuage change ou si l'item change
+    return prev.item.id === next.item.id && prev.showClouds === next.showClouds;
+});
 
 export default function GalleryPage() {
     const [drawings, setDrawings] = useState<any[]>([]);
@@ -24,7 +47,6 @@ export default function GalleryPage() {
         try {
             let query = supabase
                 .from('drawings')
-                // AJOUT DE LA JOINTURE ICI AUSSI
                 .select('*, users(display_name, avatar_url)') 
                 .order('created_at', { ascending: false })
                 .limit(50);
@@ -43,23 +65,20 @@ export default function GalleryPage() {
     const handleSearchSubmit = () => { setLoading(true); fetchGallery(); Keyboard.dismiss(); };
     const clearSearch = () => { setSearchText(''); setLoading(true); fetchGallery(''); Keyboard.dismiss(); };
 
-    const openViewer = (drawing: any) => setSelectedDrawing(drawing);
+    const openViewer = useCallback((drawing: any) => setSelectedDrawing(drawing), []);
     const closeViewer = () => setSelectedDrawing(null);
 
-    // Variables pour l'affichage du détail
     const author = selectedDrawing?.users;
 
-    const renderItem = ({ item }: { item: any }) => (
-        <TouchableOpacity 
-            activeOpacity={0.9} onPress={() => openViewer(item)}
-            style={{ width: ITEM_SIZE, height: ITEM_SIZE, marginBottom: SPACING, backgroundColor: '#F9F9F9', overflow: 'hidden' }}
-        >
-            <DrawingViewer
-                imageUri={item.cloud_image_url} canvasData={item.canvas_data} viewerSize={ITEM_SIZE}
-                transparentMode={!showClouds} startVisible={true} animated={false}
-            />
-        </TouchableOpacity>
-    );
+    // Utilisation de renderItem optimisé avec useCallback
+    const renderItem = useCallback(({ item }: { item: any }) => (
+        <GalleryItem 
+            item={item} 
+            itemSize={ITEM_SIZE} 
+            showClouds={showClouds} 
+            onPress={openViewer} 
+        />
+    ), [showClouds, ITEM_SIZE, openViewer]);
 
     return (
         <View style={styles.container}>
@@ -79,10 +98,18 @@ export default function GalleryPage() {
                     </View>
                     {loading && !refreshing ? (<View style={styles.loadingContainer}><ActivityIndicator size="large" color="#000" /></View>) : (
                         <FlatList
-                            data={drawings} renderItem={renderItem} keyExtractor={(item) => item.id}
-                            numColumns={2} columnWrapperStyle={{ gap: SPACING }} contentContainerStyle={{ paddingBottom: 100 }}
+                            data={drawings} 
+                            renderItem={renderItem} 
+                            keyExtractor={(item) => item.id}
+                            numColumns={2} 
+                            columnWrapperStyle={{ gap: SPACING }} 
+                            contentContainerStyle={{ paddingBottom: 100 }}
                             showsVerticalScrollIndicator={false}
                             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#000"/>}
+                            // Optimisations FlatList standard
+                            initialNumToRender={6}
+                            windowSize={5}
+                            removeClippedSubviews={Platform.OS === 'android'}
                             ListEmptyComponent={<View style={styles.emptyState}><Text style={styles.emptyText}>Galerie vide.</Text></View>}
                         />
                     )}
