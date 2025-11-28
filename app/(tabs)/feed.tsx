@@ -19,27 +19,30 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
     const author = drawing.users;
 
     const isActive = index === currentIndex; 
-    const isPast = index < currentIndex;
-    const isFuture = index > currentIndex;
 
-    // Si la carte est dans le futur, on ne l'affiche tout simplement pas.
-    // Cela empêche tout flash visuel pendant le swipe.
-    const shouldRenderDrawing = !isFuture;
+    // --- CORRECTION DÉFINITIVE ---
+    // On ne rend le composant de dessin QUE si c'est la carte active.
+    // Cela garantit que :
+    // 1. Les cartes futures (Next) sont vides pendant le swipe.
+    // 2. Les cartes passées (Previous) sont vides aussi si on revient dessus.
+    // Résultat : L'animation se lance proprement à chaque fois qu'on s'arrête sur une carte.
+    const shouldRenderDrawing = isActive;
 
     return (
         <View style={styles.cardContainer}>
             <View style={{ width: canvasSize, height: canvasSize, backgroundColor: 'transparent' }}>
                 {shouldRenderDrawing && (
                     <DrawingViewer
-                        // On ajoute isActive dans la clé pour forcer le remount quand elle devient active
+                        // La clé force le rechargement si nécessaire, mais avec shouldRenderDrawing c'est moins critique
                         key={`${drawing.id}-${isActive}`} 
                         imageUri={drawing.cloud_image_url}
                         canvasData={drawing.canvas_data}
                         viewerSize={canvasSize}
                         transparentMode={true} 
                         
-                        animated={isActive} 
-                        startVisible={!isActive} 
+                        // Puisqu'on ne l'affiche que quand isActive est true, animated est forcément true
+                        animated={true} 
+                        startVisible={false} 
                     />
                 )}
             </View>
