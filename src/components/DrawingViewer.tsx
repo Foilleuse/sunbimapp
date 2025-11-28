@@ -32,9 +32,12 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
 }) => {
   
   const image = useImage(imageUri); 
-  // Sécurité anti-flash : on n'affiche rien tant que le composant n'est pas "monté" et configuré
+  
+  // SÉCURITÉ ANTI-FLASH :
+  // On n'affiche rien tant que le composant n'est pas parfaitement synchronisé.
   const [isReady, setIsReady] = useState(false); 
   
+  // Initialisation de la valeur d'animation
   const progress = useSharedValue(animated ? 0 : (startVisible ? 1 : 0));
 
   useEffect(() => {
@@ -46,8 +49,8 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
         progress.value = startVisible ? 1 : 0;
     }
     
-    // Une fois la valeur initiale bien calée, on autorise l'affichage
-    // Cela évite le glitch de la "frame 0"
+    // C'est ici que la magie opère :
+    // On attend que le useEffect s'exécute (donc que progress soit bien à 0) avant d'autoriser l'affichage.
     setIsReady(true);
   }, [animated, startVisible]);
 
@@ -116,7 +119,7 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
               />
           )}
           
-          {/* On n'affiche le groupe de traits que si on est "prêt" (useEffect passé) */}
+          {/* CONDITION CRITIQUE : Si pas prêt, on n'affiche PAS les traits */}
           {isReady && (
             <Group layer={true}> 
             {skiaPaths.map((p: any, index: number) => (
@@ -144,6 +147,7 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
 export const DrawingViewer: React.FC<DrawingViewerProps> = (props) => {
   return (
     <DrawingViewerContent 
+      // Force le rechargement complet si on passe d'animé à statique pour éviter les résidus
       key={props.animated ? 'anim-mode' : 'static-mode'} 
       {...props} 
     />

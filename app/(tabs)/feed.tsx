@@ -5,6 +5,7 @@ import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
 
+// Import conditionnel PagerView
 let PagerView: any;
 if (Platform.OS !== 'web') {
     try { PagerView = require('react-native-pager-view').default; } catch (e) { PagerView = View; }
@@ -21,7 +22,8 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
     const isPast = index < currentIndex;
     const isFuture = index > currentIndex;
 
-    // Logique stricte : Si futur, on ne rend RIEN.
+    // Si la carte est dans le futur, on ne l'affiche tout simplement pas.
+    // Cela empêche tout flash visuel pendant le swipe.
     const shouldRenderDrawing = !isFuture;
 
     return (
@@ -29,7 +31,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
             <View style={{ width: canvasSize, height: canvasSize, backgroundColor: 'transparent' }}>
                 {shouldRenderDrawing && (
                     <DrawingViewer
-                        // FIX: On ajoute isActive dans la clé pour forcer un RESET complet quand la carte devient active
+                        // On ajoute isActive dans la clé pour forcer le remount quand elle devient active
                         key={`${drawing.id}-${isActive}`} 
                         imageUri={drawing.cloud_image_url}
                         canvasData={drawing.canvas_data}
