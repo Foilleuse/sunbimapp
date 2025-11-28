@@ -5,7 +5,7 @@ import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
 
-// Import conditionnel PagerView pour éviter les erreurs sur le web
+// Import conditionnel PagerView
 let PagerView: any;
 if (Platform.OS !== 'web') {
     try { PagerView = require('react-native-pager-view').default; } catch (e) { PagerView = View; }
@@ -19,36 +19,34 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
     const commentsCount = drawing.comments_count || 0;
     const author = drawing.users;
 
-    // --- LOGIQUE DE VISIBILITÉ STRICTE ---
+    // --- LOGIQUE DE VISIBILITÉ ---
     const isActive = index === currentIndex; 
-    const isPast = index < currentIndex;     
-    
-    // CORRECTION "FLASH" :
-    // On cache visuellement (opacity 0) tout dessin qui n'est pas encore passé ou actif.
-    // Les cartes "futures" (à droite) sont donc invisibles jusqu'au moment où elles arrivent au centre.
-    const isVisible = isActive || isPast;
+    const isPast = index < currentIndex;
+    const isFuture = index > currentIndex;
+
+    // Si c'est une carte future, on ne veut RIEN voir du dessin (pas de flash).
+    // Si c'est une carte passée ou active, on affiche le composant.
+    const shouldRenderDrawing = !isFuture;
 
     return (
         <View style={styles.cardContainer}>
-            {/* Conteneur du dessin avec gestion d'opacité */}
-            <View style={{ 
-                width: canvasSize, 
-                height: canvasSize, 
-                backgroundColor: 'transparent',
-                opacity: isVisible ? 1 : 0 // <--- C'EST ICI QUE LA MAGIE OPÈRE
-            }}>
-                <DrawingViewer
-                    imageUri={drawing.cloud_image_url}
-                    canvasData={drawing.canvas_data}
-                    viewerSize={canvasSize}
-                    transparentMode={true} 
-                    
-                    // Animation seulement si actif
-                    animated={isActive} 
+            <View style={{ width: canvasSize, height: canvasSize, backgroundColor: 'transparent' }}>
+                {/* CORRECTION ULTIME : On ne monte le composant que s'il n'est pas dans le futur */}
+                {shouldRenderDrawing && (
+                    <DrawingViewer
+                        imageUri={drawing.cloud_image_url}
+                        canvasData={drawing.canvas_data}
+                        viewerSize={canvasSize}
+                        transparentMode={true} 
+                        
+                        // Si c'est la carte active, on anime. 
+                        // Sinon (c'est donc une carte passée), on n'anime pas.
+                        animated={isActive} 
 
-                    // Si c'est passé, on affiche direct. Si futur, on n'affiche rien.
-                    startVisible={isPast} 
-                />
+                        // Si on n'anime pas (carte passée), on affiche le résultat tout de suite.
+                        startVisible={!isActive} 
+                    />
+                )}
             </View>
             
             <View style={styles.cardInfo}>
