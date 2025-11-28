@@ -10,7 +10,7 @@ interface DrawingViewerProps {
   transparentMode?: boolean;
   animated?: boolean;
   startVisible?: boolean;
-  autoCenter?: boolean; 
+  autoCenter?: boolean; // Option pour l'index
 }
 
 const DrawingViewerComponent: React.FC<DrawingViewerProps> = ({ 
@@ -47,64 +47,58 @@ const DrawingViewerComponent: React.FC<DrawingViewerProps> = ({
     return data;
   }, [canvasData]);
 
+  // --- LE CERVEAU DU POSITIONNEMENT ---
   const displayLogic = useMemo(() => {
       const m = Skia.Matrix();
+      
+      // Sécurité de base
       if (!image) return { matrix: m, scale: 1 };
-      
-      const IMG_W = image.width();
       const IMG_H = image.height();
-      
-      if (IMG_W === 0 || IMG_H === 0) return { matrix: m, scale: 1 };
+      if (IMG_H === 0) return { matrix: m, scale: 1 };
 
-      // --- CAS A : ZOOM AUTOMATIQUE (Animation) ---
+      // --- MODE A : AUTO-CENTER (Pour l'animation de fin sur l'Index) ---
+      // On ignore l'image, on veut juste que le DESSIN remplisse l'écran blanc
       if (autoCenter && safePaths.length > 0) {
           try {
               const combinedPath = Skia.Path.Make();
-              let valid = false;
+              let hasPath = false;
               safePaths.forEach(p => {
                   if (p.svgPath) {
                       const path = Skia.Path.MakeFromSVGString(p.svgPath);
-                      if (path) { combinedPath.addPath(path); valid = true; }
+                      if (path) { combinedPath.addPath(path); hasPath = true; }
                   }
               });
 
-              if (valid) {
+              if (hasPath) {
                   const bounds = combinedPath.getBounds();
+                  // On vérifie que le dessin n'est pas minuscule (évite division par zéro)
                   if (bounds.width > 10 && bounds.height > 10) {
                       const padding = 40;
                       const targetSize = viewerSize - padding;
+                      // Zoom max x4 pour pas que ça pixelise trop
                       const focusScale = Math.min(targetSize / Math.max(bounds.width, bounds.height), 4);
+                      
                       const tx = (viewerSize - bounds.width * focusScale) / 2 - bounds.x * focusScale;
                       const ty = (viewerSize - bounds.height * focusScale) / 2 - bounds.y * focusScale;
-                      
+
                       m.translate(tx, ty);
                       m.scale(focusScale, focusScale);
                       return { matrix: m, scale: focusScale };
                   }
               }
-          } catch (e) {}
+          } catch (e) {
+              console.log("Erreur AutoCenter, repli sur standard");
+          }
       }
 
-      // --- CAS B : STANDARD (Feed / Galerie) ---
-      // On veut couvrir un carré de taille viewerSize x viewerSize
+      // --- MODE B : STANDARD (Feed / Galerie) ---
+      // On veut que l'image soit calée parfaitement (Hauteur Image = Hauteur Viewer)
+      // C'est ce qui garantit que le dessin est au bon endroit sur la photo.
       
-      // 1. Calcul du scale (Cover)
-      const scale = Math.max(viewerSize / IMG_W, viewerSize / IMG_H);
-
-      // 2. Calcul du décalage pour centrer l'image ZOOMÉE dans le carré
-      const scaledW = IMG_W * scale;
-      const scaledH = IMG_H * scale;
+      const fitScale = viewerSize / IMG_H;
+      m.scale(fitScale, fitScale);
       
-      const dx = (viewerSize - scaledW) / 2;
-      const dy = (viewerSize - scaledH) / 2;
-
-      // 3. APPLICATION DE LA MATRICE (ORDRE CORRIGÉ)
-      // On déplace d'abord le point d'origine (Translation)
-      m.translate(dx, dy);
-      // Puis on zoome (Scale)
-      m.scale(scale, scale);
-      
-      return { matrix: m, scale: scale };
+      return { matrix: m, scale: fitScale };
 
   }, [image, viewerSize, autoCenter, safePaths]);
 
@@ -113,6 +107,7 @@ const DrawingViewerComponent: React.FC<DrawingViewerProps> = ({
     return <View style={styles.loading}><ActivityIndicator color="#fff" /></View>;
   }
 
+  // Dimensions natives pour l'affichage de l'image
   const IMG_W = image.width();
   const IMG_H = image.height();
 
@@ -126,7 +121,7 @@ const DrawingViewerComponent: React.FC<DrawingViewerProps> = ({
                 image={image}
                 x={0} y={0}
                 width={IMG_W} height={IMG_H}
-                fit="none" // On laisse la matrice gérer
+                fit="none" // IMPORTANT : On laisse la matrice gérer le zoom
               />
           )}
           
@@ -137,9 +132,12 @@ const DrawingViewerComponent: React.FC<DrawingViewerProps> = ({
                  const path = Skia.Path.MakeFromSVGString(p.svgPath);
                  if (!path) return null;
                  
-                 // Épaisseur relative (0.6%)
-                 // On divise par le scale pour contrer l'effet de loupe de la matrice
-                 const baseWidth = p.width || (IMG_W * 0.006);
+                 // Épaisseur "Intelligente"
+                 // On prend l'épaisseur enregistrée (ou 0.5% de l'image si manquante)
+                 const baseWidth = p.width || (IMG_W * 0.005);
+                 
+                 // On divise par le scale pour que visuellement, le trait ne soit pas énorme
+                 // Multiplié par 0.6 pour la finesse esthétique
                  const adjustedWidth = (baseWidth / displayLogic.scale) * 0.6; 
                  
                  return (
