@@ -5,7 +5,7 @@ import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
 
-// Import conditionnel PagerView pour éviter les erreurs sur le web, utile si vous lancez en web
+// Import conditionnel PagerView pour éviter les erreurs sur le web
 let PagerView: any;
 if (Platform.OS !== 'web') {
     try { PagerView = require('react-native-pager-view').default; } catch (e) { PagerView = View; }
@@ -19,31 +19,38 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
     const commentsCount = drawing.comments_count || 0;
     const author = drawing.users;
 
-    // --- LOGIQUE DE VISIBILITÉ ---
-    const isActive = index === currentIndex; // La carte actuelle (au centre)
-    const isPast = index < currentIndex;     // Les cartes déjà passées (à gauche)
-    // Les cartes futures (à droite) ont isActive = false et isPast = false.
+    // --- LOGIQUE DE VISIBILITÉ STRICTE ---
+    const isActive = index === currentIndex; 
+    const isPast = index < currentIndex;     
+    
+    // CORRECTION "FLASH" :
+    // On cache visuellement (opacity 0) tout dessin qui n'est pas encore passé ou actif.
+    // Les cartes "futures" (à droite) sont donc invisibles jusqu'au moment où elles arrivent au centre.
+    const isVisible = isActive || isPast;
 
     return (
         <View style={styles.cardContainer}>
-            {/* Fond transparent pour voir le nuage de fond commun */}
-            <View style={{ width: canvasSize, height: canvasSize, backgroundColor: 'transparent' }}>
+            {/* Conteneur du dessin avec gestion d'opacité */}
+            <View style={{ 
+                width: canvasSize, 
+                height: canvasSize, 
+                backgroundColor: 'transparent',
+                opacity: isVisible ? 1 : 0 // <--- C'EST ICI QUE LA MAGIE OPÈRE
+            }}>
                 <DrawingViewer
                     imageUri={drawing.cloud_image_url}
                     canvasData={drawing.canvas_data}
                     viewerSize={canvasSize}
                     transparentMode={true} 
                     
-                    // 1. Animation : Active SEULEMENT si c'est la carte actuelle.
+                    // Animation seulement si actif
                     animated={isActive} 
 
-                    // 2. Visibilité initiale :
-                    // - Cartes passées (isPast=true) -> startVisible=true (Dessin affiché direct)
-                    // - Cartes futures (isPast=false) -> startVisible=false (Dessin invisible)
-                    // - Carte active (isActive=true) -> startVisible est ignoré car animated prend le dessus (commence à 0)
+                    // Si c'est passé, on affiche direct. Si futur, on n'affiche rien.
                     startVisible={isPast} 
                 />
             </View>
+            
             <View style={styles.cardInfo}>
                 <View style={styles.headerInfo}>
                     <Text style={styles.drawingTitle}>{drawing.label || "Sans titre"}</Text>
@@ -75,7 +82,6 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
         </View>
     );
 }, (prev, next) => {
-    // Optimisation : On ne re-render que si l'index change (swipe) ou si l'ID du dessin change
     return prev.drawing.id === next.drawing.id && 
            prev.index === next.index && 
            prev.currentIndex === next.currentIndex;
@@ -116,7 +122,6 @@ export default function FeedPage() {
         <View style={styles.container}>
             <SunbimHeader showCloseButton={false} />
             <View style={{ flex: 1, position: 'relative' }}>
-                {/* Image de fond unique pour tout le feed */}
                 {backgroundUrl && (
                     <View style={{ position: 'absolute', top: 0, width: screenWidth, height: screenWidth, zIndex: -1 }}>
                        <Image source={{uri: backgroundUrl}} style={{width: screenWidth, height: screenWidth}} resizeMode="cover" />
