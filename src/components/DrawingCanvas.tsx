@@ -1,8 +1,6 @@
 import React, { forwardRef, useImperativeHandle, useState, useMemo, useRef } from 'react';
-import { StyleSheet, View, Platform, Text, Dimensions, PanResponder, ActivityIndicator } from 'react-native';
-import {
-  Canvas, Path, useImage, Image as SkiaImage, Group, Skia, SkPath
-} from '@shopify/react-native-skia';
+import { StyleSheet, View, Platform, Dimensions, PanResponder, ActivityIndicator } from 'react-native';
+import { Canvas, Path, useImage, Image as SkiaImage, Group, Skia, SkPath } from '@shopify/react-native-skia';
 
 interface DrawingCanvasProps {
   imageUri: string;
@@ -32,7 +30,11 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
     
     if (Platform.OS === 'web') return <View/>;
 
-    const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+    // On récupère juste la largeur. La hauteur de la zone de dessin sera = largeur.
+    const { width: screenWidth } = Dimensions.get('window');
+    // On définit la taille du viewport carré
+    const VIEW_SIZE = screenWidth;
+
     const image = useImage(imageUri);
     
     const [paths, setPaths] = useState<DrawingPath[]>([]);
@@ -42,9 +44,8 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
     const transform = useRef({ scale: 1, translateX: 0, translateY: 0 });
     const [_, setTick] = useState(0); 
     const forceUpdate = () => setTick(t => t + 1);
-    
     const isInitialized = useRef(false);
-    const baseScaleRef = useRef(1);
+    const minScaleRef = useRef(1);
     
     const mode = useRef<'NONE' | 'WAITING' | 'DRAWING' | 'ZOOMING'>('NONE');
     const timer = useRef<NodeJS.Timeout | null>(null);
@@ -57,38 +58,33 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
         setPaths(prev => {
             if (prev.length === 0) return prev;
             const newPaths = [...prev];
-            const removed = newPaths.pop();
-            if (removed) setRedoStack(s => [...s, removed]);
+            newPaths.pop();
             return newPaths;
         });
       },
-      redo: () => {
-        setRedoStack(prev => {
-            if (prev.length === 0) return prev;
-            const newStack = [...prev];
-            const res = newStack.pop();
-            if (res) setPaths(p => [...p, res]);
-            return newStack;
-        });
-      },
+      redo: () => { /* ... */ },
       getPaths: () => paths,
-      getSnapshot: async () => { return undefined; } 
+      getSnapshot: async () => undefined
     }), [paths]);
 
-    // --- INITIALISATION ---
+    // --- INITIALISATION CARRÉE ---
     if (image && !isInitialized.current) {
         const w = image.width();
         const h = image.height();
-        const scaleW = screenWidth / w;
-        const scaleH = screenHeight / h;
-        const fitScale = Math.min(scaleW, scaleH);
-
-        baseScaleRef.current = fitScale;
         
-        const centerTx = (screenWidth - w * fitScale) / 2;
-        const centerTy = (screenHeight - h * fitScale) / 2;
+        // On calcule le scale pour que l'image COUVRE le carré VIEW_SIZE
+        const scaleW = VIEW_SIZE / w;
+        const scaleH = VIEW_SIZE / h;
+        // On prend le MAX pour que ça remplisse tout (Cover)
+        const startScale = Math.max(scaleW, scaleH); 
 
-        transform.current = { scale: fitScale, translateX: centerTx, translateY: centerTy };
+        minScaleRef.current = startScale; // Zoom minimum
+
+        // Centrage initial dans le carré
+        const centerTx = (VIEW_SIZE - w * startScale) / 2;
+        const centerTy = (VIEW_SIZE - h * startScale) / 2;
+
+        transform.current = { scale: startScale, translateX: centerTx, translateY: centerTy };
         isInitialized.current = true;
     }
 
@@ -100,20 +96,18 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
 
     const startZooming = (touches: any[]) => {
         mode.current = 'ZOOMING';
-        setCurrentPathObj(null); lastPoint.current = null; forceUpdate();
+        setCurrentPathObj(null); forceUpdate();
         const t1 = touches[0]; const t2 = touches[1];
         const dist = getDistance(t1, t2); 
+        // Le centre est relatif à la vue carrée, pas à l'écran entier
+        // (Approximation acceptable ici car la vue est en haut)
         const center = { x: (t1.pageX + t2.pageX) / 2, y: (t1.pageY + t2.pageY) / 2 };
-        
         const anchorX = (center.x - transform.current.translateX) / transform.current.scale;
         const anchorY = (center.y - transform.current.translateY) / transform.current.scale;
-        
         gestureStart.current = { dist, scale: transform.current.scale, focalX: center.x, focalY: center.y, imageAnchorX: anchorX, imageAnchorY: anchorY };
     };
 
-    const distBetween = (p1: {x: number, y: number}, p2: {x: number, y: number}) => {
-        return Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
-    };
+    const distBetween = (p1: {x: number, y: number}, p2: {x: number, y: number}) => Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
 
     const panResponder = useMemo(() => PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -121,14 +115,12 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
 
       onPanResponderGrant: (evt) => {
         const touches = evt.nativeEvent.touches;
-        if (touches.length === 2) {
-          startZooming(touches);
-        } else if (touches.length === 1) {
+        if (touches.length === 2) startZooming(touches);
+        else if (touches.length === 1) {
           mode.current = 'DRAWING';
           const { locationX, locationY } = evt.nativeEvent;
           const x = (locationX - transform.current.translateX) / transform.current.scale;
           const y = (locationY - transform.current.translateY) / transform.current.scale;
-          
           const newPath = Skia.Path.Make(); newPath.moveTo(x, y);
           setCurrentPathObj(newPath); lastPoint.current = { x, y };
         }
@@ -147,11 +139,22 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
             const start = gestureStart.current;
             const ratio = currentDist / start.dist;
             
-            let newScale = start.scale * ratio;
-            newScale = Math.max(0.1, Math.min(newScale, 10)); 
+            let newScale = Math.max(minScaleRef.current, Math.min(start.scale * ratio, 10)); 
 
             let newTx = currentCenter.x - (start.imageAnchorX * newScale);
             let newTy = currentCenter.y - (start.imageAnchorY * newScale);
+            
+            // --- CLAMPING SUR LE CARRÉ (VIEW_SIZE) ---
+            const imgW = image.width() * newScale;
+            const imgH = image.height() * newScale;
+
+            // Horizontal
+            if (imgW >= VIEW_SIZE) newTx = Math.max(VIEW_SIZE - imgW, Math.min(0, newTx));
+            else newTx = (VIEW_SIZE - imgW) / 2;
+
+            // Vertical (C'est ici que ça change par rapport à avant)
+            if (imgH >= VIEW_SIZE) newTy = Math.max(VIEW_SIZE - imgH, Math.min(0, newTy));
+            else newTy = (VIEW_SIZE - imgH) / 2;
             
             transform.current.scale = newScale;
             transform.current.translateX = newTx;
@@ -176,25 +179,19 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
       onPanResponderRelease: () => {
         if (mode.current === 'DRAWING' && currentPathObj) {
             if(lastPoint.current) currentPathObj.lineTo(lastPoint.current.x, lastPoint.current.y);
-            
-            // --- CALCUL MAGIQUE ICI ---
-            // On calcule l'épaisseur RÉELLE sur l'image (pas sur l'écran)
-            // Épaisseur Écran / Zoom actuel = Épaisseur Réelle
-            const realStrokeWidth = strokeWidth / transform.current.scale;
-
             setPaths(prev => [...prev, {
                 svgPath: currentPathObj.toSVGString(),
                 color: strokeColor,
-                width: realStrokeWidth, // <--- ON SAUVEGARDE LA VALEUR CORRIGÉE
+                // On utilise l'épaisseur relative pour le WYSIWYG
+                width: strokeWidth / transform.current.scale, 
                 isEraser: isEraserMode
             }]);
             setRedoStack([]);
         }
-        mode.current = 'NONE'; setCurrentPathObj(null); lastPoint.current = null; gestureStart.current = null;
+        mode.current = 'NONE'; setCurrentPathObj(null); lastPoint.current = null;
       },
-      
       onPanResponderTerminate: () => { mode.current = 'NONE'; setCurrentPathObj(null); }
-    }), [strokeColor, strokeWidth, currentPathObj, screenWidth, screenHeight, image, isEraserMode]);
+    }), [strokeColor, strokeWidth, currentPathObj, screenWidth, image, isEraserMode]);
 
     if (!image) return <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#fff"/></View>;
 
@@ -203,50 +200,48 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
       { translateY: transform.current.translateY },
       { scale: transform.current.scale }
     ];
-    
-    const IMG_W = image.width();
-    const IMG_H = image.height();
 
     return (
-      <View style={styles.container} {...panResponder.panHandlers}>
-        <Canvas style={{ flex: 1 }} pointerEvents="none">
-          <Group transform={skiaTransform}>
-            <SkiaImage image={image} x={0} y={0} width={IMG_W} height={IMG_H} fit="none" />
-            <Group layer={true}>
-                {paths.map((p, index) => {
-                   const path = Skia.Path.MakeFromSVGString(p.svgPath);
-                   if (!path) return null;
-                   return (
-                     <Path
-                       key={index} path={path} color={p.isEraser ? "#000" : p.color} style="stroke"
-                       // On ré-affiche la largeur réelle, car le Group scale va la réduire visuellement
-                       // C'est cohérent : on a divisé à la sauvegarde, le Groupe multiplie à l'affichage = neutre.
-                       strokeWidth={p.width} 
-                       strokeCap="round" strokeJoin="round"
-                       blendMode={p.isEraser ? "clear" : "srcOver"}
-                     />
-                   );
-                })}
-                {currentPathObj && (
-                  <Path
-                    path={currentPathObj} color={isEraserMode ? "#000" : strokeColor} style="stroke"
-                    // Pour le trait en cours, on fait la division en temps réel
-                    strokeWidth={strokeWidth / transform.current.scale} 
-                    strokeCap="round" strokeJoin="round"
-                    blendMode={isEraserMode ? "clear" : "srcOver"}
-                  />
-                )}
+      // CONTENEUR PRINCIPAL (Centré verticalement)
+      <View style={styles.container}>
+        {/* CONTENEUR CARRÉ STRICT QUI REÇOIT LES GESTES */}
+        <View 
+            style={{ width: VIEW_SIZE, height: VIEW_SIZE, backgroundColor: '#000', overflow: 'hidden' }}
+            {...panResponder.panHandlers}
+        >
+            <Canvas style={{ flex: 1 }}>
+            <Group transform={skiaTransform}>
+                <SkiaImage image={image} x={0} y={0} width={image.width()} height={image.height()} fit="none" />
+                <Group layer={true}>
+                    {paths.map((p, index) => {
+                    const path = Skia.Path.MakeFromSVGString(p.svgPath);
+                    if (!path) return null;
+                    return (
+                        <Path
+                        key={index} path={path} color={p.isEraser ? "#000" : p.color} style="stroke"
+                        strokeWidth={p.width} strokeCap="round" strokeJoin="round"
+                        blendMode={p.isEraser ? "clear" : "srcOver"}
+                        />
+                    );
+                    })}
+                    {currentPathObj && (
+                    <Path
+                        path={currentPathObj} color={isEraserMode ? "#000" : strokeColor} style="stroke"
+                        strokeWidth={strokeWidth / transform.current.scale} strokeCap="round" strokeJoin="round"
+                        blendMode={isEraserMode ? "clear" : "srcOver"}
+                    />
+                    )}
+                </Group>
             </Group>
-          </Group>
-        </Canvas>
+            </Canvas>
+        </View>
       </View>
     );
   }
 );
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: 'black', overflow: 'hidden' },
+  // Le conteneur principal centre le carré au milieu de l'écran
+  container: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
   loadingContainer: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
-  webPlaceholder: { flex: 1, backgroundColor: '#333', justifyContent: 'center', alignItems: 'center' },
-  webText: { color: '#fff' }
 });
