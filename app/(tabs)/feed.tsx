@@ -5,13 +5,11 @@ import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
 
-// Import conditionnel PagerView
 let PagerView: any;
 if (Platform.OS !== 'web') {
     try { PagerView = require('react-native-pager-view').default; } catch (e) { PagerView = View; }
 } else { PagerView = View; }
 
-// --- COMPOSANT CARTE MÉMOÏSÉ ---
 const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: any, canvasSize: number, index: number, currentIndex: number }) => {
     const [isLiked, setIsLiked] = useState(false);
     
@@ -19,31 +17,26 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
     const commentsCount = drawing.comments_count || 0;
     const author = drawing.users;
 
-    // --- LOGIQUE DE VISIBILITÉ ---
     const isActive = index === currentIndex; 
     const isPast = index < currentIndex;
     const isFuture = index > currentIndex;
 
-    // Si c'est une carte future, on ne veut RIEN voir du dessin (pas de flash).
-    // Si c'est une carte passée ou active, on affiche le composant.
+    // Logique stricte : Si futur, on ne rend RIEN.
     const shouldRenderDrawing = !isFuture;
 
     return (
         <View style={styles.cardContainer}>
             <View style={{ width: canvasSize, height: canvasSize, backgroundColor: 'transparent' }}>
-                {/* CORRECTION ULTIME : On ne monte le composant que s'il n'est pas dans le futur */}
                 {shouldRenderDrawing && (
                     <DrawingViewer
+                        // FIX: On ajoute isActive dans la clé pour forcer un RESET complet quand la carte devient active
+                        key={`${drawing.id}-${isActive}`} 
                         imageUri={drawing.cloud_image_url}
                         canvasData={drawing.canvas_data}
                         viewerSize={canvasSize}
                         transparentMode={true} 
                         
-                        // Si c'est la carte active, on anime. 
-                        // Sinon (c'est donc une carte passée), on n'anime pas.
                         animated={isActive} 
-
-                        // Si on n'anime pas (carte passée), on affiche le résultat tout de suite.
                         startVisible={!isActive} 
                     />
                 )}

@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 import { View, StyleSheet, ActivityIndicator } from 'react-native';
 import { Canvas, Path, Image as SkiaImage, useImage, Group, Skia, SkPath } from '@shopify/react-native-skia';
 import { useSharedValue, withTiming, Easing } from 'react-native-reanimated';
@@ -13,7 +13,6 @@ interface DrawingViewerProps {
   autoCenter?: boolean; 
 }
 
-// Fonction utilitaire sortie du composant pour éviter sa redéfinition à chaque render
 const getSkiaPath = (svgString: string): SkPath | null => {
     try {
         return Skia.Path.MakeFromSVGString(svgString);
@@ -22,7 +21,6 @@ const getSkiaPath = (svgString: string): SkPath | null => {
     }
 };
 
-// --- COMPOSANT INTERNE (Logique d'affichage) ---
 const DrawingViewerContent: React.FC<DrawingViewerProps> = ({ 
   imageUri, 
   canvasData, 
@@ -34,24 +32,25 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
 }) => {
   
   const image = useImage(imageUri); 
+  // Sécurité anti-flash : on n'affiche rien tant que le composant n'est pas "monté" et configuré
+  const [isReady, setIsReady] = useState(false); 
   
-  // CORRECTION MAJEURE ICI :
-  // Si 'animated' est true, on force l'initialisation à 0, peu importe la valeur de startVisible.
-  // Cela empêche le dessin d'apparaître complet pendant une frame avant le début de l'animation.
   const progress = useSharedValue(animated ? 0 : (startVisible ? 1 : 0));
 
   useEffect(() => {
     if (animated) {
-        // On s'assure d'être à 0 et on lance l'animation
         progress.value = 0;
+        // On lance l'animation
         progress.value = withTiming(1, { duration: 1500, easing: Easing.out(Easing.cubic) });
     } else {
-        // Mode statique : on respecte startVisible
         progress.value = startVisible ? 1 : 0;
     }
+    
+    // Une fois la valeur initiale bien calée, on autorise l'affichage
+    // Cela évite le glitch de la "frame 0"
+    setIsReady(true);
   }, [animated, startVisible]);
 
-  // --- OPTIMISATION 1 : Mémoïsation des chemins ---
   const skiaPaths = useMemo(() => {
     let rawData = [];
     if (Array.isArray(canvasData)) rawData = canvasData;
@@ -65,7 +64,6 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
     })).filter((p: any) => p.skPath !== null);
   }, [canvasData]);
 
-  // --- OPTIMISATION 2 : Mémoïsation de la matrice ---
   const matrixTransform = useMemo(() => {
       const m = Skia.Matrix();
       if (!image) return m;
@@ -118,34 +116,32 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
               />
           )}
           
-          <Group layer={true}> 
-          {skiaPaths.map((p: any, index: number) => (
-             <Path
-               key={index}
-               path={p.skPath}
-               color={p.isEraser ? "#000000" : (p.color || "#000000")}
-               style="stroke"
-               strokeWidth={p.width || 15}
-               strokeCap="round"
-               strokeJoin="round"
-               blendMode={p.isEraser ? "clear" : "srcOver"}
-               start={0}
-               end={progress} 
-             />
-          ))}
-          </Group>
+          {/* On n'affiche le groupe de traits que si on est "prêt" (useEffect passé) */}
+          {isReady && (
+            <Group layer={true}> 
+            {skiaPaths.map((p: any, index: number) => (
+              <Path
+                key={index}
+                path={p.skPath}
+                color={p.isEraser ? "#000000" : (p.color || "#000000")}
+                style="stroke"
+                strokeWidth={p.width || 15}
+                strokeCap="round"
+                strokeJoin="round"
+                blendMode={p.isEraser ? "clear" : "srcOver"}
+                start={0}
+                end={progress} 
+              />
+            ))}
+            </Group>
+          )}
         </Group>
       </Canvas>
     </View>
   );
 };
 
-// --- COMPOSANT WRAPPER (Pour gérer le Reset sans flash) ---
 export const DrawingViewer: React.FC<DrawingViewerProps> = (props) => {
-  // L'astuce est ici : on utilise une `key` basée sur `animated`.
-  // Quand on passe de "Statique" (animated=false) à "Animé" (animated=true),
-  // React démonte et remonte le composant Content.
-  // Cela force `useSharedValue` à s'initialiser directement à 0.
   return (
     <DrawingViewerContent 
       key={props.animated ? 'anim-mode' : 'static-mode'} 
