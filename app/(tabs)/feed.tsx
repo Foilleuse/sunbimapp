@@ -5,33 +5,41 @@ import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
 
-// Import conditionnel PagerView pour éviter les crashs web
+// Import conditionnel PagerView pour le web
 let PagerView: any;
 if (Platform.OS !== 'web') {
     try { PagerView = require('react-native-pager-view').default; } catch (e) { PagerView = View; }
 } else { PagerView = View; }
 
-// --- COMPOSANT CARTE OPTIMISÉ ---
-// React.memo empêche le re-render inutile si les props ne changent pas
-const FeedCard = memo(({ drawing, canvasSize, isActive }: { drawing: any, canvasSize: number, isActive: boolean }) => {
+// --- COMPOSANT CARTE MÉMOÏSÉ ---
+const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: any, canvasSize: number, index: number, currentIndex: number }) => {
     const [isLiked, setIsLiked] = useState(false);
     
     const likesCount = drawing.likes_count || 0;
     const commentsCount = drawing.comments_count || 0;
     const author = drawing.users;
 
+    // --- LOGIQUE DE VISIBILITÉ ---
+    const isActive = index === currentIndex; // C'est la carte qu'on regarde
+    const isPast = index < currentIndex;     // C'est une carte déjà passée (à gauche)
+
     return (
         <View style={styles.cardContainer}>
-            {/* Fond transparent pour voir le nuage derrière */}
+            {/* backgroundColor transparent pour voir le nuage de fond commun */}
             <View style={{ width: canvasSize, height: canvasSize, backgroundColor: 'transparent' }}>
                 <DrawingViewer
                     imageUri={drawing.cloud_image_url}
                     canvasData={drawing.canvas_data}
                     viewerSize={canvasSize}
                     transparentMode={true} 
-                    // On anime SEULEMENT si c'est la carte active
-                    animated={isActive}
-                    startVisible={!isActive} // Si pas actif, on affiche direct sans anim
+                    
+                    // Si c'est la carte active -> On anime.
+                    // Si c'est une carte future -> Pas d'anim.
+                    animated={isActive} 
+
+                    // Si c'est une carte passée -> On affiche le résultat direct.
+                    // Si c'est une carte future -> On n'affiche rien (false).
+                    startVisible={isPast} 
                 />
             </View>
             <View style={styles.cardInfo}>
@@ -65,8 +73,10 @@ const FeedCard = memo(({ drawing, canvasSize, isActive }: { drawing: any, canvas
         </View>
     );
 }, (prev, next) => {
-    // Comparaison personnalisée : on ne re-render que si l'état 'actif' change ou si l'ID change
-    return prev.drawing.id === next.drawing.id && prev.isActive === next.isActive;
+    // On re-render si l'index actuel change (pour mettre à jour isActive/isPast) ou si le dessin change
+    return prev.drawing.id === next.drawing.id && 
+           prev.index === next.index && 
+           prev.currentIndex === next.currentIndex;
 });
 
 export default function FeedPage() {
@@ -104,7 +114,7 @@ export default function FeedPage() {
         <View style={styles.container}>
             <SunbimHeader showCloseButton={false} />
             <View style={{ flex: 1, position: 'relative' }}>
-                {/* Image de fond fixe : évite de recharger l'image dans chaque carte */}
+                {/* Image de fond unique pour tout le feed (évite le chargement par carte) */}
                 {backgroundUrl && (
                     <View style={{ position: 'absolute', top: 0, width: screenWidth, height: screenWidth, zIndex: -1 }}>
                        <Image source={{uri: backgroundUrl}} style={{width: screenWidth, height: screenWidth}} resizeMode="cover" />
@@ -123,7 +133,8 @@ export default function FeedPage() {
                                 <FeedCard 
                                     drawing={drawing} 
                                     canvasSize={screenWidth} 
-                                    isActive={index === currentIndex} 
+                                    index={index}
+                                    currentIndex={currentIndex}
                                 />
                             </View>
                         ))}
