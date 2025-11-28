@@ -47,7 +47,6 @@ const DrawingViewerComponent: React.FC<DrawingViewerProps> = ({
     return data;
   }, [canvasData]);
 
-  // --- LE CALCUL DE PRÉCISION ---
   const displayLogic = useMemo(() => {
       const m = Skia.Matrix();
       if (!image) return { matrix: m, scale: 1 };
@@ -57,7 +56,7 @@ const DrawingViewerComponent: React.FC<DrawingViewerProps> = ({
       
       if (IMG_W === 0 || IMG_H === 0) return { matrix: m, scale: 1 };
 
-      // 1. MODE ANIMATION (Zoom sur le dessin)
+      // --- CAS A : ZOOM AUTOMATIQUE (Animation) ---
       if (autoCenter && safePaths.length > 0) {
           try {
               const combinedPath = Skia.Path.Make();
@@ -74,13 +73,10 @@ const DrawingViewerComponent: React.FC<DrawingViewerProps> = ({
                   if (bounds.width > 10 && bounds.height > 10) {
                       const padding = 40;
                       const targetSize = viewerSize - padding;
-                      // On zoome pour que le DESSIN remplisse l'écran (max x4)
                       const focusScale = Math.min(targetSize / Math.max(bounds.width, bounds.height), 4);
-
-                      // On centre le dessin
                       const tx = (viewerSize - bounds.width * focusScale) / 2 - bounds.x * focusScale;
                       const ty = (viewerSize - bounds.height * focusScale) / 2 - bounds.y * focusScale;
-
+                      
                       m.translate(tx, ty);
                       m.scale(focusScale, focusScale);
                       return { matrix: m, scale: focusScale };
@@ -89,26 +85,25 @@ const DrawingViewerComponent: React.FC<DrawingViewerProps> = ({
           } catch (e) {}
       }
 
-      // 2. MODE STANDARD (Feed/Galerie) : "COVER" MANUEL
-      // On veut que l'image remplisse le viewerSize (carré)
-      // On calcule le ratio nécessaire pour la largeur et la hauteur
-      const scaleW = viewerSize / IMG_W;
-      const scaleH = viewerSize / IMG_H;
+      // --- CAS B : STANDARD (Feed / Galerie) ---
+      // On veut couvrir un carré de taille viewerSize x viewerSize
       
-      // Pour faire un "Cover", on prend le plus GRAND des deux ratios
-      const scale = Math.max(scaleW, scaleH);
+      // 1. Calcul du scale (Cover)
+      const scale = Math.max(viewerSize / IMG_W, viewerSize / IMG_H);
 
-      // On calcule la taille finale de l'image une fois zoomée
-      const targetW = IMG_W * scale;
-      const targetH = IMG_H * scale;
+      // 2. Calcul du décalage pour centrer l'image ZOOMÉE dans le carré
+      const scaledW = IMG_W * scale;
+      const scaledH = IMG_H * scale;
+      
+      const dx = (viewerSize - scaledW) / 2;
+      const dy = (viewerSize - scaledH) / 2;
 
-      // On centre : (TailleEcran - TailleImage) / 2
-      const dx = (viewerSize - targetW) / 2;
-      const dy = (viewerSize - targetH) / 2;
-
+      // 3. APPLICATION DE LA MATRICE (ORDRE CORRIGÉ)
+      // On déplace d'abord le point d'origine (Translation)
       m.translate(dx, dy);
+      // Puis on zoome (Scale)
       m.scale(scale, scale);
-
+      
       return { matrix: m, scale: scale };
 
   }, [image, viewerSize, autoCenter, safePaths]);
@@ -124,7 +119,6 @@ const DrawingViewerComponent: React.FC<DrawingViewerProps> = ({
   return (
     <View style={[styles.container, {width: viewerSize, height: viewerSize, overflow: 'hidden'}]}>
       <Canvas style={{ flex: 1 }}>
-        {/* GROUPE UNIQUE : Image et Traits bougent ensemble */}
         <Group matrix={displayLogic.matrix}>
           
           {!transparentMode && (
@@ -132,7 +126,7 @@ const DrawingViewerComponent: React.FC<DrawingViewerProps> = ({
                 image={image}
                 x={0} y={0}
                 width={IMG_W} height={IMG_H}
-                fit="none" // IMPORTANT : On désactive l'auto-layout de Skia, c'est notre matrice qui gère
+                fit="none" // On laisse la matrice gérer
               />
           )}
           
@@ -143,10 +137,9 @@ const DrawingViewerComponent: React.FC<DrawingViewerProps> = ({
                  const path = Skia.Path.MakeFromSVGString(p.svgPath);
                  if (!path) return null;
                  
-                 // COMPENSATION ÉPAISSEUR
-                 // On divise par le scale pour que le trait garde une taille humaine à l'écran
-                 const baseWidth = p.width || 10;
-                 // Facteur 0.6 pour affiner le rendu
+                 // Épaisseur relative (0.6%)
+                 // On divise par le scale pour contrer l'effet de loupe de la matrice
+                 const baseWidth = p.width || (IMG_W * 0.006);
                  const adjustedWidth = (baseWidth / displayLogic.scale) * 0.6; 
                  
                  return (
