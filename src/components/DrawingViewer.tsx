@@ -35,15 +35,18 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
   
   const image = useImage(imageUri); 
   
-  // Initialisation : Si on doit animer, on commence TOUJOURS à 0 (startVisible est ignoré si animated=true au montage grâce au reset par key)
-  const progress = useSharedValue(startVisible ? 1 : 0);
+  // CORRECTION MAJEURE ICI :
+  // Si 'animated' est true, on force l'initialisation à 0, peu importe la valeur de startVisible.
+  // Cela empêche le dessin d'apparaître complet pendant une frame avant le début de l'animation.
+  const progress = useSharedValue(animated ? 0 : (startVisible ? 1 : 0));
 
   useEffect(() => {
     if (animated) {
-        // On force à 0 immédiatement puis on lance l'animation
+        // On s'assure d'être à 0 et on lance l'animation
         progress.value = 0;
         progress.value = withTiming(1, { duration: 1500, easing: Easing.out(Easing.cubic) });
     } else {
+        // Mode statique : on respecte startVisible
         progress.value = startVisible ? 1 : 0;
     }
   }, [animated, startVisible]);
@@ -142,7 +145,7 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = (props) => {
   // L'astuce est ici : on utilise une `key` basée sur `animated`.
   // Quand on passe de "Statique" (animated=false) à "Animé" (animated=true),
   // React démonte et remonte le composant Content.
-  // Cela force `useSharedValue` à s'initialiser directement à 0, sans garder la valeur 1 précédente en mémoire.
+  // Cela force `useSharedValue` à s'initialiser directement à 0.
   return (
     <DrawingViewerContent 
       key={props.animated ? 'anim-mode' : 'static-mode'} 
