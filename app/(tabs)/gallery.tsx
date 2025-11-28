@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, FlatList, Dimensions, TouchableOpacity, ActivityIndicator, RefreshControl, TextInput, Keyboard, Modal, Pressable, Image } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Dimensions, TouchableOpacity, ActivityIndicator, RefreshControl, TextInput, Keyboard, Pressable, Image } from 'react-native';
 import { useEffect, useState, useCallback, memo } from 'react';
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
@@ -13,19 +13,18 @@ const GalleryItem = memo(({ item, itemSize, showClouds, onPress }: any) => {
             activeOpacity={0.9} onPress={() => onPress(item)}
             style={{ width: itemSize, height: itemSize, marginBottom: 1, backgroundColor: '#F9F9F9', overflow: 'hidden' }}
         >
-            {/* On utilise une version statique pure sans animation pour la liste */}
+            {/* Version statique (animated={false}) pour la liste : beaucoup plus rapide */}
             <DrawingViewer
                 imageUri={item.cloud_image_url} 
                 canvasData={item.canvas_data} 
                 viewerSize={itemSize}
                 transparentMode={!showClouds} 
                 startVisible={true} 
-                animated={false}
+                animated={false} 
             />
         </TouchableOpacity>
     );
 }, (prev, next) => {
-    // Ne re-render que si le mode nuage change ou si l'item change
     return prev.item.id === next.item.id && prev.showClouds === next.showClouds;
 });
 
@@ -70,7 +69,6 @@ export default function GalleryPage() {
 
     const author = selectedDrawing?.users;
 
-    // Utilisation de renderItem optimisé avec useCallback
     const renderItem = useCallback(({ item }: { item: any }) => (
         <GalleryItem 
             item={item} 

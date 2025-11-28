@@ -1,18 +1,18 @@
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform, Image } from 'react-native';
-import { useEffect, useState, useMemo, memo } from 'react';
-import { useRouter } from 'expo-router';
+import { useEffect, useState, memo } from 'react';
 import { Heart, MessageCircle, User, Share2 } from 'lucide-react-native';
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
 
-// Import conditionnel PagerView
+// Import conditionnel PagerView pour éviter les crashs web
 let PagerView: any;
 if (Platform.OS !== 'web') {
     try { PagerView = require('react-native-pager-view').default; } catch (e) { PagerView = View; }
 } else { PagerView = View; }
 
-// --- COMPOSANT CARTE MÉMOÏSÉ ---
+// --- COMPOSANT CARTE OPTIMISÉ ---
+// React.memo empêche le re-render inutile si les props ne changent pas
 const FeedCard = memo(({ drawing, canvasSize, isActive }: { drawing: any, canvasSize: number, isActive: boolean }) => {
     const [isLiked, setIsLiked] = useState(false);
     
@@ -22,15 +22,16 @@ const FeedCard = memo(({ drawing, canvasSize, isActive }: { drawing: any, canvas
 
     return (
         <View style={styles.cardContainer}>
-            {/* CORRECTION ICI : backgroundColor 'transparent' au lieu de '#f0f0f0' */}
+            {/* Fond transparent pour voir le nuage derrière */}
             <View style={{ width: canvasSize, height: canvasSize, backgroundColor: 'transparent' }}>
                 <DrawingViewer
                     imageUri={drawing.cloud_image_url}
                     canvasData={drawing.canvas_data}
                     viewerSize={canvasSize}
-                    transparentMode={true} // Le Viewer est transparent pour laisser voir l'image de fond du Feed
+                    transparentMode={true} 
+                    // On anime SEULEMENT si c'est la carte active
                     animated={isActive}
-                    startVisible={!isActive}
+                    startVisible={!isActive} // Si pas actif, on affiche direct sans anim
                 />
             </View>
             <View style={styles.cardInfo}>
@@ -64,6 +65,7 @@ const FeedCard = memo(({ drawing, canvasSize, isActive }: { drawing: any, canvas
         </View>
     );
 }, (prev, next) => {
+    // Comparaison personnalisée : on ne re-render que si l'état 'actif' change ou si l'ID change
     return prev.drawing.id === next.drawing.id && prev.isActive === next.isActive;
 });
 
@@ -102,7 +104,7 @@ export default function FeedPage() {
         <View style={styles.container}>
             <SunbimHeader showCloseButton={false} />
             <View style={{ flex: 1, position: 'relative' }}>
-                {/* Image de fond fixe (Optimisation) */}
+                {/* Image de fond fixe : évite de recharger l'image dans chaque carte */}
                 {backgroundUrl && (
                     <View style={{ position: 'absolute', top: 0, width: screenWidth, height: screenWidth, zIndex: -1 }}>
                        <Image source={{uri: backgroundUrl}} style={{width: screenWidth, height: screenWidth}} resizeMode="cover" />
@@ -114,7 +116,7 @@ export default function FeedPage() {
                         style={{ flex: 1 }} 
                         initialPage={0} 
                         onPageSelected={(e: any) => setCurrentIndex(e.nativeEvent.position)}
-                        offscreenPageLimit={1} 
+                        offscreenPageLimit={1} // Garde seulement 1 page en mémoire de chaque côté
                     >
                         {drawings.map((drawing, index) => (
                             <View key={drawing.id} style={{ flex: 1 }}>

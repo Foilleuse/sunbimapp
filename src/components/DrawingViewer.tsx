@@ -32,7 +32,6 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
   autoCenter = false
 }) => {
   
-  // Optimisation Image: On utilise une clé unique pour éviter le scintillement
   const image = useImage(imageUri); 
   const progress = useSharedValue(startVisible ? 1 : 0);
 
@@ -41,12 +40,11 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
         progress.value = 0;
         progress.value = withTiming(1, { duration: 1500, easing: Easing.out(Easing.cubic) });
     } else {
-        // Si on change startVisible, on met à jour immédiatement sans animation
         progress.value = startVisible ? 1 : 0;
     }
-  }, [animated, startVisible]); // Retrait de imageUri des dépendances pour éviter reset
+  }, [animated, startVisible]);
 
-  // 1. Parsing & Memoization des Paths (C'EST ICI LE GAIN DE PERF)
+  // --- OPTIMISATION MAJEURE ---
   // On transforme les strings en objets Skia une seule fois par changement de données
   const skiaPaths = useMemo(() => {
     let rawData = [];
@@ -61,7 +59,7 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
     })).filter((p: any) => p.skPath !== null);
   }, [canvasData]);
 
-  // 2. Logique Matrice (Zoom/Centrage)
+  // Logique Matrice (Zoom/Centrage) - Mémoïsée aussi
   const matrixTransform = useMemo(() => {
       const m = Skia.Matrix();
       if (!image) return m;
@@ -69,7 +67,6 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
       const NATIVE_SIZE = image.height();
       if (NATIVE_SIZE === 0) return m;
 
-      // CAS A : ZOOM AUTOMATIQUE
       if (autoCenter && skiaPaths.length > 0) {
           const combinedPath = Skia.Path.Make();
           skiaPaths.forEach((p: any) => combinedPath.addPath(p.skPath));
@@ -89,7 +86,6 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
           }
       }
 
-      // CAS B : STANDARD (Fit Cover/Contain)
       const fitScale = viewerSize / NATIVE_SIZE;
       m.scale(fitScale, fitScale);
       return m;
