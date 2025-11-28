@@ -7,10 +7,10 @@ import {
 import { useDrawing, DrawingPath } from '../hooks/useDrawing';
 
 // ---------------------------------------------------------
-// VERSION V21 - REFACTORISÉE & PROPRE
-// - Logique : Déportée dans useDrawing.ts
-// - Moteur : PanResponder (Stable)
-// - Layout : Carré 1:1 (Cover)
+// VERSION V19 - RESTAURÉE & REFACTORISÉE
+// - Comportement : Carré 1:1 au centre de l'écran
+// - Logique Zoom : Manuelle (Cover) + fit="none"
+// - Architecture : Hook useDrawing
 // ---------------------------------------------------------
 
 interface DrawingCanvasProps {
@@ -46,10 +46,9 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
     const image = useImage(imageUri);
     
     // --- UTILISATION DU HOOK ---
-    // On récupère tout ce qui concerne les données ici
     const { paths, addPath, undo, redo, clear } = useDrawing();
 
-    // Etats locaux pour l'interaction immédiate (le trait en cours de tracé)
+    // Etats locaux pour l'interaction immédiate
     const [currentPathObj, setCurrentPathObj] = useState<SkPath | null>(null);
     
     const transform = useRef({ scale: 1, translateX: 0, translateY: 0 });
@@ -58,34 +57,33 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
     
     const isInitialized = useRef(false);
     const baseScaleRef = useRef(1);
-    const squareSizeRef = useRef<number>(1000); 
     
     const mode = useRef<'NONE' | 'WAITING' | 'DRAWING' | 'ZOOMING'>('NONE');
     const timer = useRef<NodeJS.Timeout | null>(null);
     const gestureStart = useRef<any>(null);
     const lastPoint = useRef<{x: number, y: number} | null>(null);
 
-    // On connecte le Hook aux fonctions exposées
     useImperativeHandle(ref, () => ({
       clearCanvas: () => { clear(); setCurrentPathObj(null); },
       undo: undo,
       redo: redo,
-      getPaths: () => paths, // Renvoie les objets complets
+      getPaths: () => paths,
       getSnapshot: async () => { return undefined; } 
     }), [paths, undo, redo, clear]);
 
-    // --- INITIALISATION ---
+    // --- INITIALISATION (Logique V19 Carré) ---
     if (image && !isInitialized.current) {
         const w = image.width();
         const h = image.height();
         
-        // Logique Cover Carré
+        // On calcule le scale pour que l'image COUVRE le carré VIEW_SIZE
         const scaleW = VIEW_SIZE / w;
         const scaleH = VIEW_SIZE / h;
-        const startScale = Math.max(scaleW, scaleH); 
+        const startScale = Math.max(scaleW, scaleH); // Cover (Max)
 
         baseScaleRef.current = startScale; 
         
+        // Centrage initial dans le carré
         const centerTx = (VIEW_SIZE - w * startScale) / 2;
         const centerTy = (VIEW_SIZE - h * startScale) / 2;
 
@@ -99,7 +97,6 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
         const dy = t1.pageY - t2.pageY;
         return Math.sqrt(dx*dx + dy*dy);
     };
-    const getCenter = (t1: any, t2: any) => ({ x: (t1.pageX+t2.pageX)/2, y: (t1.pageY+t2.pageY)/2 });
 
     const startZooming = (touches: any[]) => {
         mode.current = 'ZOOMING';
@@ -154,7 +151,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
             let newTx = currentCenter.x - (start.imageAnchorX * newScale);
             let newTy = currentCenter.y - (start.imageAnchorY * newScale);
             
-            // Clamping Carré
+            // Clamping Carré (Logique V19)
             const imgW = image.width() * newScale;
             const imgH = image.height() * newScale;
 
@@ -189,7 +186,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
         if (mode.current === 'DRAWING' && currentPathObj) {
             if(lastPoint.current) currentPathObj.lineTo(lastPoint.current.x, lastPoint.current.y);
             
-            // ICI : On utilise le Hook pour ajouter le trait
+            // ICI : Utilisation du Hook
             addPath({
                 svgPath: currentPathObj.toSVGString(),
                 color: strokeColor,
@@ -209,16 +206,29 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
       { translateY: transform.current.translateY },
       { scale: transform.current.scale }
     ];
+    
+    // Dimensions natives pour fit="none"
+    const IMG_W = image.width();
+    const IMG_H = image.height();
 
     return (
       <View style={styles.container}>
+        {/* CARRÉ AU MILIEU (justifyContent: center du container parent) */}
         <View 
             style={{ width: VIEW_SIZE, height: VIEW_SIZE, backgroundColor: '#000', overflow: 'hidden' }}
             {...panResponder.panHandlers}
         >
             <Canvas style={{ flex: 1 }}>
             <Group transform={skiaTransform}>
-                <SkiaImage image={image} x={0} y={0} width={image.width()} height={image.height()} fit="none" />
+                
+                {/* Image RAW avec fit="none" (Logique V19 restaurée) */}
+                <SkiaImage 
+                    image={image} 
+                    x={0} y={0} 
+                    width={IMG_W} height={IMG_H} 
+                    fit="none" 
+                />
+                
                 <Group layer={true}>
                     {paths.map((p, index) => {
                     const path = Skia.Path.MakeFromSVGString(p.svgPath);
@@ -248,6 +258,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
 );
 
 const styles = StyleSheet.create({
+  // Ce container centre le carré au milieu de l'écran
   container: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
   loadingContainer: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
   webPlaceholder: { flex: 1, backgroundColor: '#333', justifyContent: 'center', alignItems: 'center' },
