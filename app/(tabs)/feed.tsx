@@ -5,7 +5,7 @@ import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
 
-// Import conditionnel PagerView pour le web
+// Import conditionnel PagerView pour éviter les erreurs sur le web, utile si vous lancez en web
 let PagerView: any;
 if (Platform.OS !== 'web') {
     try { PagerView = require('react-native-pager-view').default; } catch (e) { PagerView = View; }
@@ -20,12 +20,13 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
     const author = drawing.users;
 
     // --- LOGIQUE DE VISIBILITÉ ---
-    const isActive = index === currentIndex; // C'est la carte qu'on regarde
-    const isPast = index < currentIndex;     // C'est une carte déjà passée (à gauche)
+    const isActive = index === currentIndex; // La carte actuelle (au centre)
+    const isPast = index < currentIndex;     // Les cartes déjà passées (à gauche)
+    // Les cartes futures (à droite) ont isActive = false et isPast = false.
 
     return (
         <View style={styles.cardContainer}>
-            {/* backgroundColor transparent pour voir le nuage de fond commun */}
+            {/* Fond transparent pour voir le nuage de fond commun */}
             <View style={{ width: canvasSize, height: canvasSize, backgroundColor: 'transparent' }}>
                 <DrawingViewer
                     imageUri={drawing.cloud_image_url}
@@ -33,12 +34,13 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
                     viewerSize={canvasSize}
                     transparentMode={true} 
                     
-                    // Si c'est la carte active -> On anime.
-                    // Si c'est une carte future -> Pas d'anim.
+                    // 1. Animation : Active SEULEMENT si c'est la carte actuelle.
                     animated={isActive} 
 
-                    // Si c'est une carte passée -> On affiche le résultat direct.
-                    // Si c'est une carte future -> On n'affiche rien (false).
+                    // 2. Visibilité initiale :
+                    // - Cartes passées (isPast=true) -> startVisible=true (Dessin affiché direct)
+                    // - Cartes futures (isPast=false) -> startVisible=false (Dessin invisible)
+                    // - Carte active (isActive=true) -> startVisible est ignoré car animated prend le dessus (commence à 0)
                     startVisible={isPast} 
                 />
             </View>
@@ -73,7 +75,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
         </View>
     );
 }, (prev, next) => {
-    // On re-render si l'index actuel change (pour mettre à jour isActive/isPast) ou si le dessin change
+    // Optimisation : On ne re-render que si l'index change (swipe) ou si l'ID du dessin change
     return prev.drawing.id === next.drawing.id && 
            prev.index === next.index && 
            prev.currentIndex === next.currentIndex;
@@ -114,7 +116,7 @@ export default function FeedPage() {
         <View style={styles.container}>
             <SunbimHeader showCloseButton={false} />
             <View style={{ flex: 1, position: 'relative' }}>
-                {/* Image de fond unique pour tout le feed (évite le chargement par carte) */}
+                {/* Image de fond unique pour tout le feed */}
                 {backgroundUrl && (
                     <View style={{ position: 'absolute', top: 0, width: screenWidth, height: screenWidth, zIndex: -1 }}>
                        <Image source={{uri: backgroundUrl}} style={{width: screenWidth, height: screenWidth}} resizeMode="cover" />
@@ -126,7 +128,7 @@ export default function FeedPage() {
                         style={{ flex: 1 }} 
                         initialPage={0} 
                         onPageSelected={(e: any) => setCurrentIndex(e.nativeEvent.position)}
-                        offscreenPageLimit={1} // Garde seulement 1 page en mémoire de chaque côté
+                        offscreenPageLimit={1} 
                     >
                         {drawings.map((drawing, index) => (
                             <View key={drawing.id} style={{ flex: 1 }}>
