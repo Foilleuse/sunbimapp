@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, FlatList, Dimensions, TouchableOpacity, ActivityIndicator, RefreshControl, TextInput, Keyboard, Pressable, Image } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Dimensions, TouchableOpacity, ActivityIndicator, RefreshControl, TextInput, Keyboard, Pressable, Image, Platform } from 'react-native';
 import { useEffect, useState, useCallback, memo } from 'react';
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
@@ -13,7 +13,6 @@ const GalleryItem = memo(({ item, itemSize, showClouds, onPress }: any) => {
             activeOpacity={0.9} onPress={() => onPress(item)}
             style={{ width: itemSize, height: itemSize, marginBottom: 1, backgroundColor: '#F9F9F9', overflow: 'hidden' }}
         >
-            {/* Version statique (animated={false}) pour la liste : beaucoup plus rapide */}
             <DrawingViewer
                 imageUri={item.cloud_image_url} 
                 canvasData={item.canvas_data} 
@@ -44,17 +43,38 @@ export default function GalleryPage() {
 
     const fetchGallery = async (searchQuery = searchText) => {
         try {
+            // 1. Récupérer le nuage d'aujourd'hui
+            const today = new Date().toISOString().split('T')[0];
+            const { data: cloudData } = await supabase
+                .from('clouds')
+                .select('id')
+                .eq('published_for', today)
+                .maybeSingle();
+
+            // Si pas de nuage aujourd'hui, la galerie est vide
+            if (!cloudData) {
+                setDrawings([]);
+                return;
+            }
+
+            // 2. Récupérer SEULEMENT les dessins liés à ce nuage (filtre jour)
             let query = supabase
                 .from('drawings')
                 .select('*, users(display_name, avatar_url)') 
-                .order('created_at', { ascending: false })
-                .limit(50);
+                .eq('cloud_id', cloudData.id) // <--- LE FILTRE CRITIQUE EST ICI
+                .order('created_at', { ascending: false });
 
             if (searchQuery.trim().length > 0) query = query.ilike('label', `%${searchQuery.trim()}%`);
+            
             const { data, error } = await query;
             if (error) throw error;
             setDrawings(data || []);
-        } catch (e) { console.error(e); } finally { setLoading(false); setRefreshing(false); }
+        } catch (e) { 
+            console.error(e); 
+        } finally { 
+            setLoading(false); 
+            setRefreshing(false); 
+        }
     };
 
     useEffect(() => { fetchGallery(); }, []);
@@ -78,6 +98,10 @@ export default function GalleryPage() {
         />
     ), [showClouds, ITEM_SIZE, openViewer]);
 
+    // Filtrage local optionnel pour les Likes (si besoin plus tard)
+    // Pour l'instant on affiche tout ce qui correspond au filtre de date/recherche
+    const filteredDrawings = drawings; 
+
     return (
         <View style={styles.container}>
             <SunbimHeader showCloseButton={selectedDrawing !== null} onClose={closeViewer} showProfileButton={true} />
@@ -86,7 +110,7 @@ export default function GalleryPage() {
                     <View style={styles.toolsContainer}>
                         <View style={styles.searchBar}>
                             <Search color="#999" size={18} />
-                            <TextInput placeholder="Rechercher..." placeholderTextColor="#999" style={styles.searchInput} value={searchText} onChangeText={setSearchText} onSubmitEditing={handleSearchSubmit} returnKeyType="search" />
+                            <TextInput placeholder="Rechercher aujourd'hui..." placeholderTextColor="#999" style={styles.searchInput} value={searchText} onChangeText={setSearchText} onSubmitEditing={handleSearchSubmit} returnKeyType="search" />
                             {searchText.length > 0 && <TouchableOpacity onPress={clearSearch}><XCircle color="#CCC" size={18} /></TouchableOpacity>}
                         </View>
                         <View style={styles.actionsRow}>
@@ -96,7 +120,7 @@ export default function GalleryPage() {
                     </View>
                     {loading && !refreshing ? (<View style={styles.loadingContainer}><ActivityIndicator size="large" color="#000" /></View>) : (
                         <FlatList
-                            data={drawings} 
+                            data={filteredDrawings} 
                             renderItem={renderItem} 
                             keyExtractor={(item) => item.id}
                             numColumns={2} 
@@ -104,11 +128,10 @@ export default function GalleryPage() {
                             contentContainerStyle={{ paddingBottom: 100 }}
                             showsVerticalScrollIndicator={false}
                             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#000"/>}
-                            // Optimisations FlatList standard
                             initialNumToRender={6}
                             windowSize={5}
                             removeClippedSubviews={Platform.OS === 'android'}
-                            ListEmptyComponent={<View style={styles.emptyState}><Text style={styles.emptyText}>Galerie vide.</Text></View>}
+                            ListEmptyComponent={<View style={styles.emptyState}><Text style={styles.emptyText}>Aucun dessin pour ce nuage.</Text></View>}
                         />
                     )}
                 </View>
@@ -123,9 +146,7 @@ export default function GalleryPage() {
                             <Text style={styles.hintText}>Maintenir pour voir l'original</Text>
                         </Pressable>
 
-                        {/* INFO FOOTER */}
                         <View style={styles.detailsFooter}>
-                            
                             <View style={styles.userInfoRow}>
                                 <View style={styles.profilePlaceholder}>
                                     {author?.avatar_url ? (
