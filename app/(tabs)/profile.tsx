@@ -173,10 +173,8 @@ export default function ProfilePage() {
   // --- CONNECTÉ ---
   return (
     <View style={styles.container}>
-      {/* HEADER PROFIL REDESIGNÉ */}
       <View style={styles.header}>
           <View style={styles.profileInfoContainer}>
-              {/* Photo à gauche */}
               {profile?.avatar_url ? (
                   <Image source={{uri: profile.avatar_url}} style={styles.profileAvatar} />
               ) : (
@@ -185,7 +183,6 @@ export default function ProfilePage() {
                   </View>
               )}
               
-              {/* Pseudo et Bio à droite */}
               <View style={styles.profileTextContainer}>
                   <Text style={styles.displayName}>{profile?.display_name || "Anonyme"}</Text>
                   <Text style={styles.bio} numberOfLines={3}>
@@ -194,21 +191,23 @@ export default function ProfilePage() {
               </View>
           </View>
 
-          {/* BARRE DE BOUTONS (Modifier, Amis, Déco) */}
+          {/* BARRE DE BOUTONS REDESIGNÉE */}
           <View style={styles.profileActions}>
-              <TouchableOpacity style={styles.actionButton} onPress={() => Alert.alert("Bientôt", "Édition de profil")}>
-                  <Settings color="#000" size={18} />
-                  <Text style={styles.actionButtonText}>Modifier</Text>
-              </TouchableOpacity>
               
-              <TouchableOpacity style={styles.actionButton} onPress={() => Alert.alert("Bientôt", "Gestion des amis")}>
+              {/* 1. AMIS (Large, Texte) */}
+              <TouchableOpacity style={[styles.actionButton, styles.primaryBtn]} onPress={() => Alert.alert("Bientôt", "Gestion des amis")}>
                   <UserPlus color="#000" size={18} />
                   <Text style={styles.actionButtonText}>Amis</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={[styles.actionButton, styles.logoutButton]} onPress={signOut}>
-                  <LogOut color="#FF3B30" size={18} />
-                  <Text style={[styles.actionButtonText, styles.logoutText]}>Sortir</Text>
+              {/* 2. MODIFIER (Carré, Icône seule) */}
+              <TouchableOpacity style={styles.iconOnlyBtn} onPress={() => Alert.alert("Bientôt", "Édition de profil")}>
+                  <Settings color="#000" size={20} />
+              </TouchableOpacity>
+
+              {/* 3. DÉCONNEXION (Carré, Icône seule) */}
+              <TouchableOpacity style={[styles.iconOnlyBtn, styles.logoutButton]} onPress={signOut}>
+                  <LogOut color="#FF3B30" size={20} />
               </TouchableOpacity>
           </View>
       </View>
@@ -311,7 +310,6 @@ const styles = StyleSheet.create({
       backgroundColor: '#FFF'
   },
   
-  // NOUVEAU LAYOUT PROFIL
   profileInfoContainer: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -349,8 +347,8 @@ const styles = StyleSheet.create({
       flexDirection: 'row',
       gap: 10,
   },
+  // Bouton Large (Amis)
   actionButton: {
-      flex: 1,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
@@ -359,6 +357,18 @@ const styles = StyleSheet.create({
       borderRadius: 10,
       gap: 6
   },
+  primaryBtn: {
+      flex: 1, // Prend tout l'espace restant
+  },
+  // Boutons Carrés (Modifier, Déco)
+  iconOnlyBtn: {
+      width: 45, // Largeur fixe
+      height: 45, // Hauteur fixe pour faire un carré (ajusté selon le padding de l'autre bouton)
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#F5F5F5',
+      borderRadius: 10,
+  },
   actionButtonText: {
       fontSize: 13,
       fontWeight: '600',
@@ -366,10 +376,6 @@ const styles = StyleSheet.create({
   },
   logoutButton: {
       backgroundColor: '#FFF0F0',
-      flex: 0.8 // Un peu plus petit si besoin ou égal
-  },
-  logoutText: {
-      color: '#FF3B30'
   },
   
   historySection: { flex: 1, paddingTop: 15 },
