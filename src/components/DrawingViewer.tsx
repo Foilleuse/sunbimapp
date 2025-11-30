@@ -49,9 +49,9 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
   useEffect(() => {
     if (animated) {
         progress.value = 0;
-        // MODIFICATION ICI : Easing.linear pour une vitesse constante
+        // Animation linéaire sur 2200ms
         progress.value = withTiming(1, { 
-            duration: 2500, // Durée ajustée pour bien voir le tracé (2.5s)
+            duration: 2200, 
             easing: Easing.linear 
         });
     } else {
