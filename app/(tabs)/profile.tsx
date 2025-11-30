@@ -219,7 +219,6 @@ export default function ProfilePage() {
       </View>
 
       <View style={styles.historySection}>
-          {/* SUPPRESSION DU TITRE "CALENDRIER" ICI */}
           
           {loadingHistory ? (
               <ActivityIndicator style={{marginTop: 20}} />
@@ -241,7 +240,7 @@ export default function ProfilePage() {
           )}
       </View>
 
-      {/* MODALE DÉTAIL */}
+      {/* MODALE DÉTAIL DESSIN */}
       <Modal visible={!!selectedDrawing} animationType="slide" presentationStyle="pageSheet">
           {selectedDrawing && (
               <View style={styles.modalContainer}>
@@ -298,13 +297,11 @@ export default function ProfilePage() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFF' },
   
-  // MODIF: Padding ajusté car le SunbimHeader gère le top
+  // MODIF: Padding ajusté, Suppression de la bordure inférieure
   profileBlock: { 
       paddingTop: 10, 
       paddingBottom: 20, 
       paddingHorizontal: 20, 
-      borderBottomWidth: 1, 
-      borderBottomColor: '#F5F5F5',
       backgroundColor: '#FFF'
   },
   
