@@ -31,7 +31,10 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
   ({ imageUri, strokeColor, strokeWidth, isEraserMode }, ref) => {
     if (Platform.OS === 'web') return <View />;
 
-    const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+    // --- DIMENSIONS 3:4 ---
+    const { width: screenWidth } = Dimensions.get('window');
+    const CANVAS_HEIGHT = screenWidth * (4 / 3);
+
     const image = useImage(imageUri);
 
     const [paths, setPaths] = useState<DrawingPath[]>([]);
@@ -79,19 +82,16 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
 
     // --- INITIALISATION ---
     if (image && !isInitialized.current) {
-      const SIZE = image.height();
-      squareSizeRef.current = SIZE;
+      // On utilise la hauteur de l'image comme base de référence pour le système de coordonnées
+      const BASE_SIZE = image.height();
+      squareSizeRef.current = BASE_SIZE;
       
-      // On calcule l'échelle pour que l'image COUVRE l'écran (Fit Height généralement pour portrait)
-      const fitScale = screenHeight / SIZE; 
+      // On calcule l'échelle pour que l'image remplisse la largeur de l'écran initialement
+      const fitScale = screenWidth / BASE_SIZE; 
       
       baseScaleRef.current = fitScale;
       
-      // On centre horizontalement
-      const visualWidth = SIZE * fitScale;
-      const centerTx = (screenWidth - visualWidth) / 2;
-      
-      transform.current = { scale: fitScale, translateX: centerTx, translateY: 0 };
+      transform.current = { scale: fitScale, translateX: 0, translateY: 0 };
       isInitialized.current = true;
     }
 
@@ -108,9 +108,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
     });
 
     const startZooming = (touches: any[]) => {
-      // Passage immédiat en mode ZOOM
       mode.current = 'ZOOMING';
-      // Annulation du trait en cours s'il y en a un (pour éviter de dessiner en zoomant)
       setCurrentPathObj(null); 
       lastPoint.current = null;
       
@@ -119,7 +117,6 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
       const dist = getDistance(t1, t2); 
       const center = getCenter(t1, t2);
       
-      // Point d'ancrage local dans l'image
       const anchorX = (center.x - transform.current.translateX) / transform.current.scale;
       const anchorY = (center.y - transform.current.translateY) / transform.current.scale;
       
@@ -159,13 +156,11 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
       onPanResponderMove: (evt) => {
         const touches = evt.nativeEvent.touches;
 
-        // DÉTECTION DYNAMIQUE : Si 2 doigts apparaissent, on force le mode ZOOM
         if (touches.length === 2) {
             if (mode.current !== 'ZOOMING') {
                 startZooming(touches);
             }
             
-            // --- LOGIQUE ZOOM ---
             const t1 = touches[0]; 
             const t2 = touches[1];
             const currentDist = getDistance(t1, t2); 
@@ -174,38 +169,35 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
             
             if (!start) return;
 
-            // 1. Calcul du nouveau scale
+            // 1. Zoom
             const ratio = currentDist / start.dist;
             let newScale = start.scale * ratio;
-            // Limites : Min = BaseScale (Plein écran), Max = 5x
             newScale = Math.max(baseScaleRef.current, Math.min(newScale, baseScaleRef.current * 5));
 
-            // 2. Calcul du nouveau Translate (Pan)
-            // On veut que le point sous les doigts reste visuellement fixe
+            // 2. Pan
             let newTx = currentCenter.x - (start.imageAnchorX * newScale);
             let newTy = currentCenter.y - (start.imageAnchorY * newScale);
 
-            // 3. CLAMPING (Bordures strictes)
+            // 3. CLAMPING (Adapté pour 3:4)
             const width = squareSizeRef.current * newScale;
-            const height = squareSizeRef.current * newScale;
+            // La hauteur virtuelle de l'image est aussi en 3:4 dans le repère Skia
+            const height = (squareSizeRef.current * (4/3)) * newScale;
             
-            // Min/Max pour ne pas voir de noir sur les bords
             const minTx = screenWidth - width;
             const maxTx = 0;
-            const minTy = screenHeight - height;
+            const minTy = CANVAS_HEIGHT - height; // On utilise la hauteur 3:4 ici
             const maxTy = 0;
 
-            // Si l'image est plus large que l'écran, on clamp. Sinon on centre.
             if (width > screenWidth) {
                 newTx = Math.min(maxTx, Math.max(minTx, newTx));
             } else {
                 newTx = (screenWidth - width) / 2; 
             }
 
-            if (height > screenHeight) {
+            if (height > CANVAS_HEIGHT) {
                 newTy = Math.min(maxTy, Math.max(minTy, newTy));
             } else {
-                newTy = (screenHeight - height) / 2; 
+                newTy = (CANVAS_HEIGHT - height) / 2; 
             }
 
             transform.current = { scale: newScale, translateX: newTx, translateY: newTy };
@@ -213,7 +205,6 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
             return;
         }
 
-        // --- LOGIQUE DESSIN (1 DOIGT) ---
         if (mode.current === 'DRAWING' && touches.length === 1 && currentPathObj && lastPoint.current) {
           const { locationX, locationY } = evt.nativeEvent;
           const x = (locationX - transform.current.translateX) / transform.current.scale;
@@ -231,7 +222,6 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
 
       onPanResponderRelease: () => {
         if (mode.current === 'DRAWING' && currentPathObj && lastPoint.current) {
-          // Fin du trait
           currentPathObj.lineTo(lastPoint.current.x, lastPoint.current.y);
           setPaths(prev => [...prev, {
             svgPath: currentPathObj.toSVGString(),
@@ -241,7 +231,6 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
           }]);
           setRedoStack([]);
         }
-        // Reset complet
         mode.current = 'NONE'; 
         setCurrentPathObj(null); 
         lastPoint.current = null; 
@@ -252,7 +241,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
           mode.current = 'NONE'; 
           setCurrentPathObj(null); 
       }
-    }), [strokeColor, strokeWidth, currentPathObj, screenWidth, screenHeight, image, isEraserMode]);
+    }), [strokeColor, strokeWidth, currentPathObj, screenWidth, CANVAS_HEIGHT, image, isEraserMode]);
 
     if (!image) return <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#fff" /></View>;
 
@@ -261,18 +250,25 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
       { translateY: transform.current.translateY },
       { scale: transform.current.scale }
     ];
+    // Base de référence (Largeur virtuelle)
     const DISPLAY_SIZE = squareSizeRef.current;
 
     return (
-      <View style={styles.container} {...panResponder.panHandlers}>
+      <View style={{ width: screenWidth, height: CANVAS_HEIGHT, backgroundColor: 'black', overflow: 'hidden' }} {...panResponder.panHandlers}>
         <Canvas style={{ flex: 1 }} pointerEvents="none">
           <Group transform={skiaTransform}>
-            <SkiaImage image={image} x={0} y={0} width={DISPLAY_SIZE} height={DISPLAY_SIZE} fit="cover" />
+            {/* L'image est affichée dans un rectangle 3:4 */}
+            <SkiaImage 
+                image={image} 
+                x={0} y={0} 
+                width={DISPLAY_SIZE} 
+                height={DISPLAY_SIZE * (4/3)} 
+                fit="cover" 
+            />
             <Group layer={true}>
               {paths.map((p, index) => {
                 const path = Skia.Path.MakeFromSVGString(p.svgPath);
                 if (!path) return null;
-                // Ajustement de l'épaisseur du trait selon le zoom de base pour garder la cohérence visuelle
                 const adjustedWidth = p.width / baseScaleRef.current;
                 return (
                   <Path
@@ -298,6 +294,5 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
 );
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: 'black', overflow: 'hidden' },
   loadingContainer: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
 });
