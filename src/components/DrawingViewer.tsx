@@ -1,5 +1,5 @@
 import React, { useMemo, useEffect, useState } from 'react';
-import { View, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, ActivityIndicator, Dimensions } from 'react-native';
 import { Canvas, Path, Image as SkiaImage, useImage, Group, Skia, SkPath } from '@shopify/react-native-skia';
 import { useSharedValue, withTiming, Easing } from 'react-native-reanimated';
 
@@ -37,15 +37,18 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
   const [isReady, setIsReady] = useState(false); 
   const progress = useSharedValue(animated ? 0 : (startVisible ? 1 : 0));
 
-  // --- 1. DÉFINITION DU "PAPIER" (Même logique que DrawingCanvas) ---
-  // On crée une surface virtuelle en 3:4 basée sur la largeur du viewer.
-  // C'est dans ce repère que les traits ont été enregistrés.
-  const PAPER_W = viewerSize;
-  const PAPER_H = viewerSize * (4/3);
+  // --- DIMENSIONS DE REFERENCE ---
+  // On suppose que le dessin a été fait sur un écran de largeur standard (le téléphone actuel)
+  // C'est la base de coordonnées des traits.
+  const SCREEN_WIDTH = Dimensions.get('window').width;
+  
+  // Le "Papier" virtuel 3:4 sur lequel on a dessiné
+  const REF_PAPER_W = SCREEN_WIDTH;
+  const REF_PAPER_H = SCREEN_WIDTH * (4/3);
 
-  // --- 2. DÉFINITION DE LA CIBLE (Viewport) ---
-  // Hauteur réelle d'affichage (si pas fournie, on reste en 3:4)
-  const TARGET_H = viewerHeight || PAPER_H;
+  // La zone cible d'affichage (Ex: 180px dans la galerie)
+  const TARGET_W = viewerSize;
+  const TARGET_H = viewerHeight || (viewerSize * (4/3));
 
   useEffect(() => {
     if (animated) {
@@ -74,7 +77,7 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
   const transforms = useMemo(() => {
       if (!image) return [];
       
-      // Logique Auto-Center (Zoom sur l'encre)
+      // 1. Zoom Auto (Pour le Replay centré sur l'encre)
       if (autoCenter && skiaPaths.length > 0) {
           const combinedPath = Skia.Path.Make();
           skiaPaths.forEach((p: any) => combinedPath.addPath(p.skPath));
@@ -82,53 +85,49 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
           
           if (bounds.width > 10 && bounds.height > 10) {
               const padding = 40;
-              // On calcule le zoom pour faire tenir la bounding box des traits dans le viewer
-              const focusScale = Math.min((viewerSize - padding) / Math.max(bounds.width, bounds.height), 5);
+              const focusScale = Math.min((TARGET_W - padding) / Math.max(bounds.width, bounds.height), 5);
               
-              const tx = (viewerSize - bounds.width * focusScale) / 2 - bounds.x * focusScale;
+              const tx = (TARGET_W - bounds.width * focusScale) / 2 - bounds.x * focusScale;
               const ty = (TARGET_H - bounds.height * focusScale) / 2 - bounds.y * focusScale;
 
               return [{ translateX: tx }, { translateY: ty }, { scale: focusScale }];
           }
       }
 
-      // Logique STANDARD (Cover Screen)
-      // On doit faire rentrer notre PAPIER 3:4 dans le Viewport TARGET (Plein écran ou autre)
-      // en mode "Cover" (remplir tout).
+      // 2. Mode STANDARD (Galerie & Feed)
+      // On calcule l'échelle nécessaire pour faire entrer notre "Papier de référence" 
+      // dans la "Zone cible" (viewerSize).
       
-      const scaleW = viewerSize / PAPER_W; // = 1
-      const scaleH = TARGET_H / PAPER_H;
-      const scale = Math.max(scaleW, scaleH);
+      // Ratio : PetiteCase / ÉcranLargeur
+      const scale = TARGET_W / REF_PAPER_W;
 
-      // Centrage
-      const scaledW = PAPER_W * scale;
-      const scaledH = PAPER_H * scale;
+      // On centre le résultat (normalement tx/ty seront 0 si les ratios sont respectés)
+      const scaledW = REF_PAPER_W * scale;
+      const scaledH = REF_PAPER_H * scale;
       
-      const translateX = (viewerSize - scaledW) / 2;
+      const translateX = (TARGET_W - scaledW) / 2;
       const translateY = (TARGET_H - scaledH) / 2;
 
       return [{ translateX }, { translateY }, { scale }];
 
-  }, [image, viewerSize, TARGET_H, autoCenter, skiaPaths]);
+  }, [image, TARGET_W, TARGET_H, REF_PAPER_W, REF_PAPER_H, autoCenter, skiaPaths]);
 
   if (!image) {
-    if (transparentMode) return <View style={{width: viewerSize, height: TARGET_H}} />;
+    if (transparentMode) return <View style={{width: TARGET_W, height: TARGET_H}} />;
     return <View style={styles.loading}><ActivityIndicator color="#000" /></View>;
   }
 
   return (
-    <View style={[styles.container, {width: viewerSize, height: TARGET_H, overflow: 'hidden'}]}>
+    <View style={[styles.container, {width: TARGET_W, height: TARGET_H, overflow: 'hidden'}]}>
       <Canvas style={{ flex: 1 }}>
-        {/* On transforme le groupe entier (Papier + Image + Traits) */}
         <Group transform={transforms}>
           
-          {/* IMPORTANT : On affiche l'image DANS le cadre 3:4 (comme à la création) */}
           {!transparentMode && (
               <SkiaImage
                 image={image}
                 x={0} y={0}
-                width={PAPER_W} 
-                height={PAPER_H} 
+                width={REF_PAPER_W} 
+                height={REF_PAPER_H} 
                 fit="cover" 
               />
           )}
