@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { supabase } from '../../src/lib/supabaseClient';
 import { useAuth } from '../../src/contexts/AuthContext';
-import { User, Mail, Lock, LogOut, X, Heart, MessageCircle, AlertCircle } from 'lucide-react-native'; 
+import { User, Mail, Lock, LogOut, X, Heart, MessageCircle, AlertCircle, Settings, UserPlus } from 'lucide-react-native'; 
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { CommentsModal } from '../../src/components/CommentsModal';
 
@@ -57,16 +57,14 @@ export default function ProfilePage() {
 
         if (drawingsError) throw drawingsError;
 
-        // 3. Fusionner : Pour chaque nuage, a-t-on un dessin ?
+        // 3. Fusionner
         const combinedHistory = allClouds?.map(cloud => {
             const drawing = userDrawings?.find(d => d.cloud_id === cloud.id);
             if (drawing) {
-                // C'est un dessin réalisé
-                return { ...drawing, type: 'drawing', id: drawing.id }; // ID du dessin prioritaire
+                return { ...drawing, type: 'drawing', id: drawing.id }; 
             } else {
-                // C'est un nuage raté
                 return { 
-                    id: `missed-${cloud.id}`, // Faux ID unique pour la liste
+                    id: `missed-${cloud.id}`, 
                     type: 'missed', 
                     cloud_image_url: cloud.image_url, 
                     date: cloud.published_for 
@@ -101,20 +99,16 @@ export default function ProfilePage() {
   const openDrawing = (drawing: any) => setSelectedDrawing(drawing);
   const closeDrawing = () => setSelectedDrawing(null);
 
-  // --- RENDER ITEM (Gère les deux cas : Dessin ou Raté) ---
+  // --- RENDER ITEM ---
   const renderItem = ({ item }: { item: any }) => {
-      // CAS 1 : C'est un dessin RATÉ (Nuage manqué)
       if (item.type === 'missed') {
           return (
             <View style={{ width: ITEM_SIZE, aspectRatio: 3/4, marginBottom: SPACING, backgroundColor: '#EEE', position: 'relative' }}>
-                {/* Image du nuage en fond, légèrement estompée */}
                 <Image 
                     source={{ uri: item.cloud_image_url }} 
                     style={{ width: '100%', height: '100%', opacity: 0.6 }} 
                     resizeMode="cover" 
                 />
-                
-                {/* Overlay "!" et Date */}
                 <View style={styles.missedOverlay}>
                     <AlertCircle color="#000" size={32} style={{ marginBottom: 5 }} />
                     <Text style={styles.missedDate}>
@@ -125,7 +119,6 @@ export default function ProfilePage() {
           );
       }
 
-      // CAS 2 : C'est un dessin RÉALISÉ
       return (
         <TouchableOpacity 
             onPress={() => openDrawing(item)} 
@@ -180,22 +173,44 @@ export default function ProfilePage() {
   // --- CONNECTÉ ---
   return (
     <View style={styles.container}>
+      {/* HEADER PROFIL REDESIGNÉ */}
       <View style={styles.header}>
-          <View style={styles.avatarSection}>
+          <View style={styles.profileInfoContainer}>
+              {/* Photo à gauche */}
               {profile?.avatar_url ? (
                   <Image source={{uri: profile.avatar_url}} style={styles.profileAvatar} />
               ) : (
                   <View style={[styles.profileAvatar, styles.placeholderAvatar]}>
-                      <User color="#666" size={40} />
+                      <User color="#666" size={35} />
                   </View>
               )}
-              <Text style={styles.displayName}>{profile?.display_name || "Artiste"}</Text>
-              <Text style={styles.email}>{user.email}</Text>
+              
+              {/* Pseudo et Bio à droite */}
+              <View style={styles.profileTextContainer}>
+                  <Text style={styles.displayName}>{profile?.display_name || "Anonyme"}</Text>
+                  <Text style={styles.bio} numberOfLines={3}>
+                      {profile?.bio || "Aucune bio pour le moment."}
+                  </Text>
+              </View>
           </View>
-          
-          <TouchableOpacity style={styles.logoutBtn} onPress={signOut}>
-              <LogOut color="#FF3B30" size={20} />
-          </TouchableOpacity>
+
+          {/* BARRE DE BOUTONS (Modifier, Amis, Déco) */}
+          <View style={styles.profileActions}>
+              <TouchableOpacity style={styles.actionButton} onPress={() => Alert.alert("Bientôt", "Édition de profil")}>
+                  <Settings color="#000" size={18} />
+                  <Text style={styles.actionButtonText}>Modifier</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity style={styles.actionButton} onPress={() => Alert.alert("Bientôt", "Gestion des amis")}>
+                  <UserPlus color="#000" size={18} />
+                  <Text style={styles.actionButtonText}>Amis</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={[styles.actionButton, styles.logoutButton]} onPress={signOut}>
+                  <LogOut color="#FF3B30" size={18} />
+                  <Text style={[styles.actionButtonText, styles.logoutText]}>Sortir</Text>
+              </TouchableOpacity>
+          </View>
       </View>
 
       <View style={styles.historySection}>
@@ -287,20 +302,81 @@ const styles = StyleSheet.create({
   authBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
   switchText: { textAlign: 'center', marginTop: 20, color: '#666', fontSize: 14 },
   
-  header: { paddingTop: 60, paddingBottom: 20, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
-  avatarSection: { alignItems: 'center', marginBottom: 10 },
-  profileAvatar: { width: 80, height: 80, borderRadius: 40 },
-  placeholderAvatar: { backgroundColor: '#F0F0F0', justifyContent: 'center', alignItems: 'center' },
-  displayName: { fontSize: 20, fontWeight: 'bold', marginTop: 10 },
-  email: { fontSize: 14, color: '#999' },
-  logoutBtn: { position: 'absolute', top: 60, right: 20, padding: 10 },
+  header: { 
+      paddingTop: 60, 
+      paddingBottom: 20, 
+      paddingHorizontal: 20, 
+      borderBottomWidth: 1, 
+      borderBottomColor: '#F5F5F5',
+      backgroundColor: '#FFF'
+  },
+  
+  // NOUVEAU LAYOUT PROFIL
+  profileInfoContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 20,
+  },
+  profileAvatar: { 
+      width: 80, 
+      height: 80, 
+      borderRadius: 40,
+      marginRight: 15 
+  },
+  placeholderAvatar: { 
+      backgroundColor: '#F0F0F0', 
+      justifyContent: 'center', 
+      alignItems: 'center' 
+  },
+  profileTextContainer: {
+      flex: 1,
+      justifyContent: 'center'
+  },
+  displayName: { 
+      fontSize: 22, 
+      fontWeight: '900', 
+      color: '#000',
+      marginBottom: 4
+  },
+  bio: { 
+      fontSize: 14, 
+      color: '#666',
+      lineHeight: 20
+  },
+
+  // BARRE BOUTONS
+  profileActions: {
+      flexDirection: 'row',
+      gap: 10,
+  },
+  actionButton: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#F5F5F5',
+      paddingVertical: 10,
+      borderRadius: 10,
+      gap: 6
+  },
+  actionButtonText: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: '#000'
+  },
+  logoutButton: {
+      backgroundColor: '#FFF0F0',
+      flex: 0.8 // Un peu plus petit si besoin ou égal
+  },
+  logoutText: {
+      color: '#FF3B30'
+  },
   
   historySection: { flex: 1, paddingTop: 15 },
   sectionTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15, paddingHorizontal: 20 },
   emptyState: { marginTop: 50, alignItems: 'center' },
   emptyText: { color: '#999', marginTop: 10 },
   
-  // Style pour les nuages manqués
   missedOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.4)' },
   missedDate: { fontSize: 16, fontWeight: '700', color: '#000', backgroundColor: 'rgba(255,255,255,0.8)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, overflow: 'hidden' },
 
