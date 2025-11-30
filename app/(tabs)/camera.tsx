@@ -4,11 +4,17 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import { Cloud } from 'lucide-react-native';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
+// Ajout des imports nécessaires pour Supabase
+import { supabase } from '../../src/lib/supabaseClient';
+import { useAuth } from '../../src/contexts/AuthContext';
 
 export default function CameraPage() {
+  const { user } = useAuth();
   const [permission, requestPermission] = useCameraPermissions();
   const [zoom, setZoom] = useState(0);
-  const [isTakingPhoto, setIsTakingPhoto] = useState(false); // État pour éviter le double-clic
+  const [isTakingPhoto, setIsTakingPhoto] = useState(false);
+  const [isUploading, setIsUploading] = useState(false); // État pour le chargement de l'upload
+  
   const cameraRef = useRef<CameraView>(null);
   const router = useRouter();
 
@@ -28,9 +34,9 @@ export default function CameraPage() {
   if (!permission.granted) {
     return (
       <View style={styles.container}>
-        <Text style={styles.message}>Permission caméra requise.</Text>
+        <Text style={styles.message}>Permission caméra requise pour capturer les nuages.</Text>
         <TouchableOpacity style={styles.permissionBtn} onPress={requestPermission}>
-          <Text style={styles.permissionText}>Accorder</Text>
+          <Text style={styles.permissionText}>Accorder la permission</Text>
         </TouchableOpacity>
       </View>
     );
@@ -45,31 +51,77 @@ export default function CameraPage() {
       }
   };
 
+  // --- FONCTION D'UPLOAD ---
+  const uploadToSupabase = async (uri: string) => {
+      if (!user) {
+          Alert.alert("Oups", "Connecte-toi pour envoyer tes nuages !");
+          return;
+      }
+
+      setIsUploading(true);
+      try {
+          // 1. Préparation du fichier
+          const response = await fetch(uri);
+          const blob = await response.blob();
+          const fileExt = uri.split('.').pop();
+          const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+          const filePath = `${fileName}`;
+
+          // 2. Upload vers le Storage 'cloud-submissions'
+          const { error: uploadError } = await supabase.storage
+              .from('cloud-submissions')
+              .upload(filePath, blob);
+
+          if (uploadError) throw uploadError;
+
+          // 3. Récupération de l'URL publique
+          const { data: { publicUrl } } = supabase.storage
+              .from('cloud-submissions')
+              .getPublicUrl(filePath);
+
+          // 4. Sauvegarde dans la table SQL 'cloud_submissions'
+          const { error: dbError } = await supabase
+              .from('cloud_submissions')
+              .insert({
+                  user_id: user.id,
+                  image_url: publicUrl,
+                  status: 'pending' // En attente de validation
+              });
+
+          if (dbError) throw dbError;
+
+          Alert.alert("Envoyé !", "Ton nuage a bien été reçu.", [
+              { text: "Super", onPress: () => router.back() }
+          ]);
+
+      } catch (e: any) {
+          console.error("Erreur upload:", e);
+          Alert.alert("Erreur", "Impossible d'envoyer le nuage. Vérifie ta connexion.");
+      } finally {
+          setIsUploading(false);
+      }
+  };
+
   const takePicture = async () => {
-    if (cameraRef.current && !isTakingPhoto) {
-        setIsTakingPhoto(true); // On verrouille le bouton
+    if (cameraRef.current && !isTakingPhoto && !isUploading) {
+        setIsTakingPhoto(true);
         try {
             const photo = await cameraRef.current.takePictureAsync({
-                quality: 0.8,
+                quality: 0.7,
                 base64: false,
                 skipProcessing: true, 
                 shutterSound: true,
             });
             
-            // VÉRIFICATION STRICTE ICI
             if (photo && photo.uri) {
-                console.log("Photo capturée :", photo.uri);
-                Alert.alert("Photo prise !", `Chemin : ${photo.uri}`);
-                // Ici, vous ajouterez la logique d'envoi ou de navigation
-            } else {
-                throw new Error("Aucune image retournée par la caméra.");
+                // Au lieu d'alerter le chemin local, on lance l'upload
+                await uploadToSupabase(photo.uri);
             }
-
-        } catch (e: any) {
+        } catch (e) {
             console.error("Erreur capture:", e);
-            Alert.alert("Erreur", e.message || "Impossible de prendre la photo.");
+            Alert.alert("Erreur", "Impossible de prendre la photo.");
         } finally {
-            setIsTakingPhoto(false); // On déverrouille
+            setIsTakingPhoto(false);
         }
     }
   };
@@ -109,14 +161,22 @@ export default function CameraPage() {
                     );
                 })}
             </View>
+
+            {/* Overlay de chargement pendant l'upload */}
+            {isUploading && (
+                <View style={styles.loadingOverlay}>
+                    <ActivityIndicator size="large" color="#FFF" />
+                    <Text style={styles.loadingText}>Envoi du nuage...</Text>
+                </View>
+            )}
         </View>
 
         <View style={styles.controlsContainer}>
             <TouchableOpacity 
-                style={[styles.captureBtn, isTakingPhoto && { opacity: 0.5 }]} 
+                style={[styles.captureBtn, (isTakingPhoto || isUploading) && { opacity: 0.5 }]} 
                 onPress={takePicture} 
                 activeOpacity={0.7}
-                disabled={isTakingPhoto}
+                disabled={isTakingPhoto || isUploading}
             >
                 {isTakingPhoto ? (
                     <ActivityIndicator color="#FFF" />
@@ -182,5 +242,19 @@ const styles = StyleSheet.create({
       justifyContent: 'center',
       alignItems: 'center',
       padding: 10,
+  },
+  
+  // Nouveau style pour l'overlay de chargement
+  loadingOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: 'rgba(0,0,0,0.7)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      zIndex: 10
+  },
+  loadingText: {
+      color: '#FFF',
+      marginTop: 10,
+      fontWeight: '600'
   }
 });
