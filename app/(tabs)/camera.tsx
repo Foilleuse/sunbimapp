@@ -3,7 +3,7 @@ import { useState, useRef } from 'react';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import { GestureDetector, Gesture, GestureHandlerRootView } from 'react-native-gesture-handler';
-import { Zap, ZapOff } from 'lucide-react-native'; // Retrait de RotateCcw
+import { Zap, ZapOff } from 'lucide-react-native';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
 
 export default function CameraPage() {
@@ -13,17 +13,30 @@ export default function CameraPage() {
   const cameraRef = useRef<CameraView>(null);
   const router = useRouter();
 
-  // --- DIMENSIONS 3:4 ---
+  // On stocke le zoom "courant" dans une ref pour le calcul du pinch
+  // Cela évite les sauts brusques lors du geste
+  const baseZoom = useRef(0);
+
   const { width: screenWidth } = Dimensions.get('window');
-  // Hauteur calculée pour un ratio 4:3 (Portrait)
   const CAMERA_HEIGHT = screenWidth * (4 / 3);
 
   // --- GESTION DU ZOOM (PINCH) ---
   const pinchGesture = Gesture.Pinch()
+    .onStart(() => {
+      // Au début du geste, on mémorise le zoom actuel
+      baseZoom.current = zoom;
+    })
     .onUpdate((e) => {
-      const velocity = e.velocity / 20; 
-      let newZoom = zoom + velocity * 0.01;
+      // e.scale commence à 1. 
+      // Si scale > 1 (zoom in), on augmente. Si scale < 1 (zoom out), on diminue.
+      // On utilise un facteur multiplicateur pour rendre le zoom naturel.
+      
+      // Formule : NouveauZoom = ZoomInitial + (Scale - 1) * Sensibilité
+      let newZoom = baseZoom.current + (e.scale - 1) * 0.1; // 0.1 est la sensibilité
+
+      // Borner entre 0 et 1 (Expo Camera gère le zoom de 0 à 1)
       newZoom = Math.max(0, Math.min(1, newZoom));
+      
       setZoom(newZoom);
     });
 
@@ -65,36 +78,37 @@ export default function CameraPage() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
         <View style={styles.container}>
-            {/* Header simple */}
             <SunbimHeader showCloseButton={true} onClose={() => router.back()} />
 
-            {/* ZONE CAMÉRA 3:4 */}
             <View style={[styles.cameraContainer, { width: screenWidth, height: CAMERA_HEIGHT }]}>
+                {/* Le GestureDetector doit englober la CameraView */}
                 <GestureDetector gesture={pinchGesture}>
-                    <CameraView 
-                        ref={cameraRef}
-                        style={{ flex: 1 }} 
-                        facing="back" // Forcé en 'back' caméra
-                        flash={flash}
-                        zoom={zoom}
-                        animateShutter={false}
-                    />
+                    <View style={{ flex: 1 }}> 
+                        <CameraView 
+                            ref={cameraRef}
+                            style={{ flex: 1 }} 
+                            facing="back"
+                            flash={flash}
+                            zoom={zoom}
+                            animateShutter={false}
+                        />
+                        
+                        {/* Overlay Flash (Doit être DANS le GestureDetector pour recevoir les touches si besoin, ou au dessus) */}
+                        <View style={styles.overlay} pointerEvents="box-none">
+                            <TouchableOpacity style={styles.iconBtn} onPress={toggleFlash}>
+                                {flash === 'on' ? <Zap color="#FFF" size={24} /> : <ZapOff color="#FFF" size={24} />}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
                 </GestureDetector>
-
-                {/* OVERLAY INTERFACE (Juste le flash maintenant) */}
-                <View style={styles.overlay}>
-                    <TouchableOpacity style={styles.iconBtn} onPress={toggleFlash}>
-                        {flash === 'on' ? <Zap color="#FFF" size={24} /> : <ZapOff color="#FFF" size={24} />}
-                    </TouchableOpacity>
-                </View>
             </View>
 
-            {/* BARRE DE CONTROLE (Zone noire en bas) */}
             <View style={styles.controlsContainer}>
                 <TouchableOpacity style={styles.captureBtn} onPress={takePicture}>
                     <View style={styles.captureInner} />
                 </TouchableOpacity>
-                <Text style={styles.zoomText}>Zoom: {(zoom * 10).toFixed(1)}x</Text>
+                {/* Affichage du zoom en % pour être plus parlant */}
+                <Text style={styles.zoomText}>Zoom: {Math.round(zoom * 100)}%</Text>
             </View>
         </View>
     </GestureHandlerRootView>
@@ -128,8 +142,7 @@ const styles = StyleSheet.create({
       position: 'absolute',
       top: 20,
       right: 20,
-      flexDirection: 'column',
-      gap: 20,
+      // Important : box-none permet de cliquer sur le bouton flash sans bloquer le pinch en dessous
   },
   iconBtn: {
       width: 40,
