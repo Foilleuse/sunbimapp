@@ -39,7 +39,9 @@ export default function CameraPage() {
   }, [hasPermission]);
 
   if (!hasPermission) return <View style={styles.container} />;
-  if (device == null) return <View style={styles.container}><Text style={styles.message}>Pas de caméra</Text></View>;
+  
+  // Si pas de device, on affiche un message (évite écran noir silencieux)
+  if (device == null) return <View style={styles.container}><Text style={styles.message}>Chargement caméra...</Text></View>;
 
   // --- ACTIONS ---
   const toggleFlash = () => {
@@ -47,14 +49,16 @@ export default function CameraPage() {
   };
 
   const handleZoom = (factor: number) => {
-      // On s'assure que le device supporte le zoom demandé
-      const maxZoom = device.maxZoom || 1;
-      const minZoom = device.minZoom || 1;
+      if (!device) return;
       
-      // On applique le zoom s'il est dans les bornes du téléphone
-      if (factor >= minZoom && factor <= maxZoom) {
-          setZoom(factor);
-      }
+      const minZoom = device.minZoom ?? 1;
+      const maxZoom = device.maxZoom ?? 1;
+      
+      // On s'assure que le zoom demandé est possible pour cet appareil
+      // (Ex: si on demande x2 mais que le max est x1.5)
+      const targetZoom = Math.max(minZoom, Math.min(factor, maxZoom));
+      
+      setZoom(targetZoom);
   };
 
   const takePicture = async () => {
@@ -68,6 +72,7 @@ export default function CameraPage() {
             console.log("Photo path:", photo.path);
         } catch (e) {
             console.error("Erreur capture:", e);
+            Alert.alert("Erreur", "La photo n'a pas pu être prise.");
         }
     }
   };
@@ -77,31 +82,31 @@ export default function CameraPage() {
         <SunbimHeader showCloseButton={true} onClose={() => router.back()} />
 
         <View style={[styles.cameraContainer, { width: screenWidth, height: CAMERA_HEIGHT }]}>
-            {/* Suppression du GestureDetector : On utilise uniquement la CameraView simple */}
             <Camera
                 ref={cameraRef}
                 style={StyleSheet.absoluteFill}
                 device={device}
                 isActive={isActive}
                 photo={true}
-                zoom={zoom} // Piloté uniquement par les boutons
-                enableZoomGesture={false} // Désactive le zoom natif au pincement
+                zoom={zoom} // Piloté par les boutons
+                enableZoomGesture={false} // Désactive le pinch natif pour éviter les conflits
             />
             
             {/* Overlay Flash */}
-            <View style={styles.overlay}>
+            <View style={styles.overlay} pointerEvents="box-none">
                 <TouchableOpacity style={styles.iconBtn} onPress={toggleFlash}>
                     {flash === 'on' ? <Zap color="#FFF" size={24} /> : <ZapOff color="#FFF" size={24} />}
                 </TouchableOpacity>
             </View>
 
-            {/* BARRE DE ZOOM (Boutons) */}
+            {/* BARRE DE ZOOM (Boutons) - Sécurisé avec zIndex */}
             <View style={styles.zoomContainer}>
                 {[1, 1.5, 2].map((z) => (
                     <TouchableOpacity 
                         key={z} 
                         style={[styles.zoomBtn, zoom === z && styles.zoomBtnActive]} 
                         onPress={() => handleZoom(z)}
+                        activeOpacity={0.7}
                     >
                         <Text style={[styles.zoomText, zoom === z && styles.zoomTextActive]}>
                             {z}x
@@ -135,6 +140,7 @@ const styles = StyleSheet.create({
       position: 'absolute',
       top: 20,
       right: 20,
+      zIndex: 10, // S'assure que c'est au-dessus
   },
   iconBtn: {
       width: 40,
@@ -151,15 +157,16 @@ const styles = StyleSheet.create({
       bottom: 20, 
       alignSelf: 'center',
       flexDirection: 'row',
-      backgroundColor: 'rgba(0,0,0,0.5)',
-      borderRadius: 20,
-      padding: 4,
-      gap: 8
+      backgroundColor: 'rgba(0,0,0,0.6)',
+      borderRadius: 25,
+      padding: 6,
+      gap: 10,
+      zIndex: 20, // Très important pour être cliquable
   },
   zoomBtn: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
+      width: 34,
+      height: 34,
+      borderRadius: 17,
       justifyContent: 'center',
       alignItems: 'center',
       backgroundColor: 'transparent'
@@ -174,7 +181,8 @@ const styles = StyleSheet.create({
   },
   zoomTextActive: {
       color: '#FFF', 
-      fontWeight: 'bold'
+      fontWeight: 'bold',
+      fontSize: 13
   },
 
   controlsContainer: {
