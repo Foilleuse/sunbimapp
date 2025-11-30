@@ -22,7 +22,8 @@ const FALLBACK_CLOUD = {
 export default function DrawPage() {
   const router = useRouter(); 
   const { user } = useAuth(); 
-  const { width: screenWidth } = Dimensions.get('window');
+  // ON RECUPERE LA HAUTEUR EGALEMENT
+  const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
   
   const [cloud, setCloud] = useState<Cloud | null>(null);
   const [loading, setLoading] = useState(true);
@@ -181,6 +182,8 @@ export default function DrawPage() {
                 imageUri={cloud.image_url}
                 canvasData={replayPaths}
                 viewerSize={screenWidth}
+                // MODIF ICI : On passe la hauteur plein écran pour le replay
+                viewerHeight={screenHeight}
                 transparentMode={false} 
                 animated={true}
                 startVisible={false}
@@ -246,7 +249,7 @@ export default function DrawPage() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* ANIMATION FINALE 3:4 */}
+      {/* ANIMATION DE FIN PLEIN ECRAN */}
       <Animated.View 
         pointerEvents="none"
         style={[
@@ -255,19 +258,22 @@ export default function DrawPage() {
         ]} 
       >
           {replayPaths && (
-              <Animated.View style={{ opacity: drawingOpacityAnim, width: screenWidth, alignItems: 'center' }}>
-                  <View style={{ width: screenWidth, aspectRatio: 3/4 }}>
+              <Animated.View style={{ opacity: drawingOpacityAnim, width: screenWidth, height: screenHeight, alignItems: 'center', justifyContent: 'center' }}>
+                  {/* Conteneur plein écran pour le Replay final */}
+                  <View style={{ width: screenWidth, height: screenHeight }}>
                     <DrawingViewer 
                         imageUri={cloud.image_url}
                         canvasData={replayPaths}
                         viewerSize={screenWidth}
+                        viewerHeight={screenHeight} // <--- Important pour l'alignement
                         transparentMode={true} 
                         animated={true}
                         startVisible={false}
                         autoCenter={true} 
                     />
                   </View>
-                  <Animated.View style={{ opacity: textOpacityAnim, marginTop: 40, alignItems: 'center' }}>
+                  {/* Titre centré par dessus ou ajusté */}
+                  <Animated.View style={{ opacity: textOpacityAnim, position: 'absolute', bottom: 150, alignSelf: 'center' }}>
                       <Text style={styles.finalTitle}>{tagText}</Text>
                   </Animated.View>
               </Animated.View>
@@ -295,5 +301,5 @@ const styles = StyleSheet.create({
   cancelBtn: { padding: 10, marginTop: 5 },
   cancelText: { color: '#999', fontWeight: '600' },
   switchText: { color: '#666', fontSize: 14, textDecorationLine: 'underline' },
-  finalTitle: { fontSize: 32, fontWeight: '900', color: '#000', textAlign: 'center', letterSpacing: -1 },
+  finalTitle: { fontSize: 32, fontWeight: '900', color: '#000', textAlign: 'center', letterSpacing: -1, textShadowColor: 'rgba(255,255,255,0.8)', textShadowOffset: {width: 0, height:0}, textShadowRadius: 10 },
 });

@@ -1,12 +1,8 @@
-import React, { forwardRef, useImperativeHandle, useState, useMemo, useRef } from 'react';
-import { StyleSheet, View, Platform, Dimensions, PanResponder } from 'react-native';
+import React, { forwardRef, useImperativeHandle, useState, useMemo } from 'react';
+import { StyleSheet, View, Dimensions, PanResponder } from 'react-native';
 import {
   Canvas, Path, useImage, Image as SkiaImage, Group, Skia, SkPath
 } from '@shopify/react-native-skia';
-
-// ---------------------------------------------------------
-// VERSION 3:4 - PORTRAIT
-// ---------------------------------------------------------
 
 interface DrawingCanvasProps {
   imageUri: string;
@@ -33,11 +29,10 @@ interface DrawingPath {
 export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
   ({ imageUri, strokeColor, strokeWidth, isEraserMode }, ref) => {
     
-    // --- DIMENSIONS 3:4 ---
-    const { width: screenWidth } = Dimensions.get('window');
-    // On force le format Portrait 3:4 (Hauteur = Largeur * 1.33)
+    // --- MODIFICATION ICI : PLEIN ÉCRAN ---
+    const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
     const CANVAS_WIDTH = screenWidth;
-    const CANVAS_HEIGHT = screenWidth * (4 / 3);
+    const CANVAS_HEIGHT = screenHeight; // On prend toute la hauteur disponible
 
     const image = useImage(imageUri);
     const [paths, setPaths] = useState<DrawingPath[]>([]);
@@ -81,7 +76,6 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
         const { locationX, locationY } = evt.nativeEvent;
         if (currentPathObj) {
           currentPathObj.lineTo(locationX, locationY);
-          // Force update pour l'affichage temps réel (astuce simple)
           setCurrentPathObj(currentPathObj.copy());
         }
       },
@@ -106,7 +100,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
       <View style={{ width: CANVAS_WIDTH, height: CANVAS_HEIGHT, backgroundColor: 'black', overflow: 'hidden' }}>
         <View style={StyleSheet.absoluteFill} {...panResponder.panHandlers}>
           <Canvas style={{ flex: 1 }}>
-            {/* L'image de fond remplit la zone 3:4 */}
+            {/* Image zoomée pour remplir l'écran (cover) */}
             <SkiaImage 
                 image={image} 
                 x={0} y={0} 

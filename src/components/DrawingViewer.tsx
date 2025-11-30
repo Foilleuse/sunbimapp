@@ -7,6 +7,7 @@ interface DrawingViewerProps {
   imageUri: string;
   canvasData: any; 
   viewerSize: number;
+  viewerHeight?: number; // <--- NOUVELLE PROP OPTIONNELLE
   transparentMode?: boolean;
   animated?: boolean;
   startVisible?: boolean;
@@ -25,6 +26,7 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
   imageUri, 
   canvasData, 
   viewerSize, 
+  viewerHeight, // <--- On récupère la hauteur personnalisée
   transparentMode = false,
   animated = false,
   startVisible = true,
@@ -35,9 +37,10 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
   const [isReady, setIsReady] = useState(false); 
   const progress = useSharedValue(animated ? 0 : (startVisible ? 1 : 0));
 
-  // --- FORMAT 3:4 ---
-  // Hauteur = Largeur * (4/3)
-  const VIEW_HEIGHT = viewerSize * (4/3);
+  // --- CALCUL HAUTEUR ---
+  // Si viewerHeight est fourni (Index), on l'utilise.
+  // Sinon (Feed/Gallery), on utilise le ratio 3:4.
+  const VIEW_HEIGHT = viewerHeight || (viewerSize * (4/3));
 
   useEffect(() => {
     if (animated) {
@@ -89,21 +92,22 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
           }
       }
 
-      // Logique Standard: On adapte l'échelle pour remplir la largeur
-      // L'image native est supposée être au moins aussi large/haute pour le cover
-      const fitScale = viewerSize / image.width(); // On se base sur la largeur pour remplir
-      m.scale(fitScale, fitScale);
+      // Mode Fit Cover : Remplir la zone définie
+      // L'échelle doit être suffisante pour couvrir viewerSize ET VIEW_HEIGHT
+      const scaleX = viewerSize / image.width();
+      const scaleY = VIEW_HEIGHT / image.height();
+      const scale = Math.max(scaleX, scaleY); // On prend le max pour couvrir (cover)
+
+      m.scale(scale, scale);
       return m;
 
-  }, [image, viewerSize, autoCenter, skiaPaths, VIEW_HEIGHT]);
+  }, [image, viewerSize, VIEW_HEIGHT, autoCenter, skiaPaths]);
 
   if (!image) {
     if (transparentMode) return <View style={{width: viewerSize, height: VIEW_HEIGHT}} />;
     return <View style={styles.loading}><ActivityIndicator color="#000" /></View>;
   }
 
-  // On définit la zone de dessin pour l'image Skia
-  // On utilise la taille de l'image source, mais on l'affiche dans notre canvas 3:4
   return (
     <View style={[styles.container, {width: viewerSize, height: VIEW_HEIGHT, overflow: 'hidden'}]}>
       <Canvas style={{ flex: 1 }}>
@@ -114,7 +118,7 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
                 x={0} y={0}
                 width={image.width()} 
                 height={image.height()} 
-                fit="cover" // Important pour que l'image remplisse bien si les ratios diffèrent légèrement
+                fit="cover" 
               />
           )}
           
