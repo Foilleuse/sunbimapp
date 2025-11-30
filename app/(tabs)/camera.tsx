@@ -3,13 +3,12 @@ import { useState, useRef } from 'react';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import { GestureDetector, Gesture, GestureHandlerRootView } from 'react-native-gesture-handler';
-import { Circle, Zap, ZapOff, RotateCcw } from 'lucide-react-native';
+import { Zap, ZapOff } from 'lucide-react-native'; // Retrait de RotateCcw
 import { SunbimHeader } from '../../src/components/SunbimHeader';
 
 export default function CameraPage() {
   const [permission, requestPermission] = useCameraPermissions();
   const [zoom, setZoom] = useState(0);
-  const [facing, setFacing] = useState<'back' | 'front'>('back');
   const [flash, setFlash] = useState<'off' | 'on'>('off');
   const cameraRef = useRef<CameraView>(null);
   const router = useRouter();
@@ -20,20 +19,11 @@ export default function CameraPage() {
   const CAMERA_HEIGHT = screenWidth * (4 / 3);
 
   // --- GESTION DU ZOOM (PINCH) ---
-  // On utilise un geste de pincement pour contrôler le zoom (de 0 à 1)
   const pinchGesture = Gesture.Pinch()
     .onUpdate((e) => {
-      // Formule simple pour ajuster le zoom en fonction de la vélocité du pincement
-      // velocity > 0 = zoom in, velocity < 0 = zoom out
       const velocity = e.velocity / 20; 
       let newZoom = zoom + velocity * 0.01;
-      
-      // On borne entre 0 et 1
       newZoom = Math.max(0, Math.min(1, newZoom));
-      
-      // On met à jour l'état (nécessite runOnJS si on utilisait worklets, mais ici state simple)
-      // Note: Pour une fluidité parfaite, on utiliserait une SharedValue Reanimated, 
-      // mais le setState est suffisant pour le prop `zoom` de CameraView ici.
       setZoom(newZoom);
     });
 
@@ -52,10 +42,6 @@ export default function CameraPage() {
     );
   }
 
-  const toggleCameraFacing = () => {
-    setFacing(current => (current === 'back' ? 'front' : 'back'));
-  };
-
   const toggleFlash = () => {
     setFlash(current => (current === 'off' ? 'on' : 'off'));
   };
@@ -66,10 +52,8 @@ export default function CameraPage() {
             const photo = await cameraRef.current.takePictureAsync({
                 quality: 0.8,
                 base64: false,
-                skipProcessing: true // Plus rapide
+                skipProcessing: true 
             });
-            // Pour l'instant, on log juste le résultat ou on alerte
-            // La suite logique serait de rediriger vers le DrawingCanvas avec cette image
             Alert.alert("Photo prise !", "Implémentation du dessin sur photo à venir.");
             console.log(photo?.uri);
         } catch (e) {
@@ -81,8 +65,8 @@ export default function CameraPage() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
         <View style={styles.container}>
-            {/* Header simple pour pouvoir revenir en arrière si besoin */}
-            <SunbimHeader showCloseButton={false} />
+            {/* Header simple */}
+            <SunbimHeader showCloseButton={true} onClose={() => router.back()} />
 
             {/* ZONE CAMÉRA 3:4 */}
             <View style={[styles.cameraContainer, { width: screenWidth, height: CAMERA_HEIGHT }]}>
@@ -90,25 +74,22 @@ export default function CameraPage() {
                     <CameraView 
                         ref={cameraRef}
                         style={{ flex: 1 }} 
-                        facing={facing}
+                        facing="back" // Forcé en 'back' caméra
                         flash={flash}
                         zoom={zoom}
                         animateShutter={false}
                     />
                 </GestureDetector>
 
-                {/* OVERLAY INTERFACE (Boutons flottants sur la caméra) */}
+                {/* OVERLAY INTERFACE (Juste le flash maintenant) */}
                 <View style={styles.overlay}>
                     <TouchableOpacity style={styles.iconBtn} onPress={toggleFlash}>
                         {flash === 'on' ? <Zap color="#FFF" size={24} /> : <ZapOff color="#FFF" size={24} />}
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.iconBtn} onPress={toggleCameraFacing}>
-                        <RotateCcw color="#FFF" size={24} />
-                    </TouchableOpacity>
                 </View>
             </View>
 
-            {/* BARRE DE CONTROLE (Zone noire en bas pour combler l'écran) */}
+            {/* BARRE DE CONTROLE (Zone noire en bas) */}
             <View style={styles.controlsContainer}>
                 <TouchableOpacity style={styles.captureBtn} onPress={takePicture}>
                     <View style={styles.captureInner} />
@@ -127,7 +108,7 @@ const styles = StyleSheet.create({
   },
   cameraContainer: {
     overflow: 'hidden',
-    backgroundColor: '#333', // Placeholder pendant le chargement
+    backgroundColor: '#333',
     position: 'relative',
   },
   message: {

@@ -37,11 +37,12 @@ export default function TabLayout() {
         }}
       />
 
-      {/* 3. CAMERA (Nouvelle fonctionnalité) */}
+      {/* 3. CAMERA */}
       <Tabs.Screen
-        name="camera" // Pointe maintenant vers camera.tsx
+        name="camera"
         options={{
-          // On garde le style bouton central proéminent
+          // On cache la barre de navigation pour cet écran uniquement
+          tabBarStyle: { display: 'none' },
           tabBarIcon: () => (
             <View style={{
               width: 56, height: 56, borderRadius: 28,
@@ -54,7 +55,6 @@ export default function TabLayout() {
             </View>
           ),
         }}
-        // PLUS DE LISTENER DE REDIRECTION ICI
       />
 
       {/* 4. MESSAGES */}
