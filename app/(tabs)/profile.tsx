@@ -3,36 +3,34 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { supabase } from '../../src/lib/supabaseClient';
 import { useAuth } from '../../src/contexts/AuthContext';
-import { User, Mail, Lock, LogOut, ChevronLeft, Settings, Heart, MessageCircle, X, AlertCircle } from 'lucide-react-native'; 
+import { User, Mail, Lock, LogOut, X, Heart, MessageCircle, AlertCircle } from 'lucide-react-native'; 
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { CommentsModal } from '../../src/components/CommentsModal';
 
 export default function ProfilePage() {
   const router = useRouter();
-  const { user, profile, signOut, loading: authLoading } = useAuth();
+  const { user, profile, signOut } = useAuth();
   
-  // --- ETATS DONNÉES ---
+  // --- ETATS ---
   const [historyItems, setHistoryItems] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
   
-  // Stats
-  const [totalLikes, setTotalLikes] = useState(0);
-  const [drawingCount, setDrawingCount] = useState(0);
-
-  // --- ETATS UI ---
   const [selectedDrawing, setSelectedDrawing] = useState<any | null>(null);
   const [isHolding, setIsHolding] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
 
-  // Formulaire Connexion
+  // Auth
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
   const [authActionLoading, setAuthActionLoading] = useState(false);
 
+  // --- CONFIGURATION GRILLE (Comme Gallery) ---
   const { width: screenWidth } = Dimensions.get('window');
-  const HISTORY_ITEM_SIZE = (screenWidth - 40 - 20) / 3; // 3 colonnes avec padding
+  const SPACING = 1; // Espacement fin comme la galerie
+  const NUM_COLS = 2; // 2 Colonnes
+  const ITEM_SIZE = (screenWidth - (SPACING * (NUM_COLS - 1))) / NUM_COLS;
 
   useEffect(() => {
     if (user) fetchHistory();
@@ -47,14 +45,7 @@ export default function ProfilePage() {
             .order('created_at', { ascending: false });
 
         if (error) throw error;
-
         setHistoryItems(drawings || []);
-        setDrawingCount(drawings?.length || 0);
-        
-        // Calcul des likes totaux
-        const likes = drawings?.reduce((acc, curr) => acc + (curr.likes_count || 0), 0) || 0;
-        setTotalLikes(likes);
-
     } catch (e) {
         console.error(e);
     } finally {
@@ -69,7 +60,6 @@ export default function ProfilePage() {
           const { error } = isSignUp 
             ? await supabase.auth.signUp({ email, password })
             : await supabase.auth.signInWithPassword({ email, password });
-          
           if (error) throw error;
       } catch (e: any) {
           Alert.alert("Erreur", e.message);
@@ -81,7 +71,7 @@ export default function ProfilePage() {
   const openDrawing = (drawing: any) => setSelectedDrawing(drawing);
   const closeDrawing = () => setSelectedDrawing(null);
 
-  // --- VUE NON CONNECTÉ ---
+  // --- NON CONNECTÉ ---
   if (!user) {
       return (
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
@@ -90,31 +80,17 @@ export default function ProfilePage() {
                       <Text style={styles.authTitle}>Profil</Text>
                       <Text style={styles.authSubtitle}>Connectez-vous pour retrouver vos dessins.</Text>
                   </View>
-
                   <View style={styles.inputGroup}>
                       <Mail color="#999" size={20} style={styles.inputIcon} />
-                      <TextInput 
-                        placeholder="Email" 
-                        style={styles.input} 
-                        placeholderTextColor="#999"
-                        value={email} onChangeText={setEmail} autoCapitalize="none"
-                      />
+                      <TextInput placeholder="Email" style={styles.input} placeholderTextColor="#999" value={email} onChangeText={setEmail} autoCapitalize="none" />
                   </View>
                   <View style={styles.inputGroup}>
                       <Lock color="#999" size={20} style={styles.inputIcon} />
-                      <TextInput 
-                        placeholder="Mot de passe" 
-                        style={styles.input} 
-                        placeholderTextColor="#999"
-                        secureTextEntry
-                        value={password} onChangeText={setPassword}
-                      />
+                      <TextInput placeholder="Mot de passe" style={styles.input} placeholderTextColor="#999" secureTextEntry value={password} onChangeText={setPassword} />
                   </View>
-
                   <TouchableOpacity style={styles.authBtn} onPress={handleAuth} disabled={authActionLoading}>
                       {authActionLoading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.authBtnText}>{isSignUp ? "S'inscrire" : "Se connecter"}</Text>}
                   </TouchableOpacity>
-
                   <TouchableOpacity onPress={() => setIsSignUp(!isSignUp)}>
                       <Text style={styles.switchText}>{isSignUp ? "J'ai déjà un compte" : "Créer un compte"}</Text>
                   </TouchableOpacity>
@@ -123,10 +99,10 @@ export default function ProfilePage() {
       );
   }
 
-  // --- VUE CONNECTÉ ---
+  // --- CONNECTÉ ---
   return (
     <View style={styles.container}>
-      {/* HEADER PROFIL */}
+      {/* HEADER PROFIL SIMPLIFIÉ (Sans stats) */}
       <View style={styles.header}>
           <View style={styles.avatarSection}>
               {profile?.avatar_url ? (
@@ -139,42 +115,40 @@ export default function ProfilePage() {
               <Text style={styles.displayName}>{profile?.display_name || "Artiste"}</Text>
               <Text style={styles.email}>{user.email}</Text>
           </View>
-
-          <View style={styles.statsBar}>
-              <View style={styles.statItem}>
-                  <Text style={styles.statNumber}>{drawingCount}</Text>
-                  <Text style={styles.statLabel}>Dessins</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statItem}>
-                  <Text style={styles.statNumber}>{totalLikes}</Text>
-                  <Text style={styles.statLabel}>J'aime</Text>
-              </View>
-          </View>
           
           <TouchableOpacity style={styles.logoutBtn} onPress={signOut}>
               <LogOut color="#FF3B30" size={20} />
           </TouchableOpacity>
       </View>
 
-      {/* GRILLE HISTORIQUE */}
+      {/* GRILLE HISTORIQUE (Style Galerie 3:4) */}
       <View style={styles.historySection}>
-          <Text style={styles.sectionTitle}>Historique</Text>
+          <Text style={styles.sectionTitle}>Mes Créations</Text>
           {loadingHistory ? (
               <ActivityIndicator style={{marginTop: 20}} />
           ) : (
               <FlatList
                 data={historyItems}
-                numColumns={3}
+                numColumns={NUM_COLS}
                 contentContainerStyle={{ paddingBottom: 100 }}
-                columnWrapperStyle={{ gap: 10 }}
+                // On utilise columnWrapperStyle seulement si numColumns > 1
+                columnWrapperStyle={{ gap: SPACING }}
                 keyExtractor={item => item.id}
                 renderItem={({item}) => (
-                    <TouchableOpacity onPress={() => openDrawing(item)} style={{ width: HISTORY_ITEM_SIZE, height: HISTORY_ITEM_SIZE, borderRadius: 10, overflow: 'hidden', backgroundColor: '#F5F5F5', marginBottom: 10 }}>
+                    <TouchableOpacity 
+                        onPress={() => openDrawing(item)} 
+                        style={{ 
+                            width: ITEM_SIZE, 
+                            aspectRatio: 3/4, // FORMAT 3:4
+                            marginBottom: SPACING, 
+                            backgroundColor: '#F9F9F9', 
+                            overflow: 'hidden' 
+                        }}
+                    >
                         <DrawingViewer 
                             imageUri={item.cloud_image_url}
                             canvasData={item.canvas_data}
-                            viewerSize={HISTORY_ITEM_SIZE}
+                            viewerSize={ITEM_SIZE}
                             transparentMode={false}
                             animated={false}
                             startVisible={true}
@@ -259,20 +233,15 @@ const styles = StyleSheet.create({
   switchText: { textAlign: 'center', marginTop: 20, color: '#666', fontSize: 14 },
   
   header: { paddingTop: 60, paddingBottom: 20, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
-  avatarSection: { alignItems: 'center', marginBottom: 20 },
+  avatarSection: { alignItems: 'center', marginBottom: 10 },
   profileAvatar: { width: 80, height: 80, borderRadius: 40 },
   placeholderAvatar: { backgroundColor: '#F0F0F0', justifyContent: 'center', alignItems: 'center' },
   displayName: { fontSize: 20, fontWeight: 'bold', marginTop: 10 },
   email: { fontSize: 14, color: '#999' },
-  statsBar: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', backgroundColor: '#F9F9F9', borderRadius: 15, paddingVertical: 15, marginHorizontal: 20 },
-  statItem: { alignItems: 'center', width: 80 },
-  statNumber: { fontSize: 18, fontWeight: 'bold' },
-  statLabel: { fontSize: 12, color: '#666' },
-  statDivider: { width: 1, height: 20, backgroundColor: '#DDD' },
   logoutBtn: { position: 'absolute', top: 60, right: 20, padding: 10 },
   
-  historySection: { flex: 1, padding: 20 },
-  sectionTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15 },
+  historySection: { flex: 1, paddingTop: 15 },
+  sectionTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15, paddingHorizontal: 20 },
   emptyState: { marginTop: 50, alignItems: 'center' },
   emptyText: { color: '#999', marginTop: 10 },
   
