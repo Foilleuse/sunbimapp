@@ -1,19 +1,46 @@
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Alert } from 'react-native';
 import { useState, useRef } from 'react';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import { Zap, ZapOff } from 'lucide-react-native';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
+// Imports essentiels pour le geste
+import { GestureDetector, Gesture, GestureHandlerRootView } from 'react-native-gesture-handler';
+import { runOnJS } from 'react-native-reanimated';
 
 export default function CameraPage() {
   const [permission, requestPermission] = useCameraPermissions();
   const [flash, setFlash] = useState<'off' | 'on'>('off');
+  const [zoom, setZoom] = useState(0); // État du zoom (0 à 1)
+  
   const cameraRef = useRef<CameraView>(null);
   const router = useRouter();
 
+  // On utilise une ref pour stocker le zoom de départ du geste
+  const startZoom = useRef(0);
+
   const { width: screenWidth } = Dimensions.get('window');
-  // Format 3:4 (Portrait)
   const CAMERA_HEIGHT = screenWidth * (4 / 3);
+
+  // --- GESTION DU ZOOM (PINCH) ---
+  const pinch = Gesture.Pinch()
+    .onStart(() => {
+      startZoom.current = zoom;
+    })
+    .onUpdate((e) => {
+      // Calcul du nouveau zoom basé sur l'échelle du pincement
+      // e.scale : 1 = pas de changement, 2 = double, 0.5 = moitié
+      // On divise par 50 ou une constante pour adoucir la sensibilité
+      // Une autre formule classique :
+      const velocity = 0.001; // Sensibilité
+      let newZoom = startZoom.current + (e.scale - 1) * 0.5; // On multiplie l'écart par un facteur
+
+      // Borner entre 0 et 1
+      newZoom = Math.max(0, Math.min(1, newZoom));
+      
+      // Mise à jour via runOnJS car on est dans un worklet UI
+      runOnJS(setZoom)(newZoom);
+    });
 
   if (!permission) {
     return <View style={styles.container} />;
@@ -51,34 +78,43 @@ export default function CameraPage() {
   };
 
   return (
-    <View style={styles.container}>
-        <SunbimHeader showCloseButton={true} onClose={() => router.back()} />
+    // GestureHandlerRootView est ESSENTIEL pour que les gestes fonctionnent
+    <GestureHandlerRootView style={{ flex: 1 }}>
+        <View style={styles.container}>
+            <SunbimHeader showCloseButton={true} onClose={() => router.back()} />
 
-        <View style={[styles.cameraContainer, { width: screenWidth, height: CAMERA_HEIGHT }]}>
-            <CameraView 
-                ref={cameraRef}
-                style={{ flex: 1 }} 
-                facing="back"
-                flash={flash}
-                // C'EST ICI : Zoom natif géré par le système (plus fluide, pas de crash)
-                enableZoomGesture={true} 
-                animateShutter={false}
-            />
-            
-            {/* Overlay Flash */}
-            <View style={styles.overlay} pointerEvents="box-none">
-                <TouchableOpacity style={styles.iconBtn} onPress={toggleFlash}>
-                    {flash === 'on' ? <Zap color="#FFF" size={24} /> : <ZapOff color="#FFF" size={24} />}
+            <View style={[styles.cameraContainer, { width: screenWidth, height: CAMERA_HEIGHT }]}>
+                {/* Le GestureDetector enveloppe la zone interactive */}
+                <GestureDetector gesture={pinch}>
+                    <View style={{ flex: 1 }}>
+                        <CameraView 
+                            ref={cameraRef}
+                            style={{ flex: 1 }} 
+                            facing="back"
+                            flash={flash}
+                            zoom={zoom} // On passe le zoom calculé ici
+                            animateShutter={false}
+                        />
+                        
+                        {/* Overlay Flash */}
+                        <View style={styles.overlay} pointerEvents="box-none">
+                            <TouchableOpacity style={styles.iconBtn} onPress={toggleFlash}>
+                                {flash === 'on' ? <Zap color="#FFF" size={24} /> : <ZapOff color="#FFF" size={24} />}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </GestureDetector>
+            </View>
+
+            <View style={styles.controlsContainer}>
+                <TouchableOpacity style={styles.captureBtn} onPress={takePicture}>
+                    <View style={styles.captureInner} />
                 </TouchableOpacity>
+                {/* Indicateur de zoom */}
+                <Text style={styles.zoomText}>x{(1 + zoom * 4).toFixed(1)}</Text>
             </View>
         </View>
-
-        <View style={styles.controlsContainer}>
-            <TouchableOpacity style={styles.captureBtn} onPress={takePicture}>
-                <View style={styles.captureInner} />
-            </TouchableOpacity>
-        </View>
-    </View>
+    </GestureHandlerRootView>
   );
 }
 
@@ -142,5 +178,11 @@ const styles = StyleSheet.create({
       backgroundColor: '#FFF',
       borderWidth: 2,
       borderColor: '#000'
+  },
+  zoomText: {
+      color: '#999',
+      marginTop: 15,
+      fontSize: 14,
+      fontWeight: 'bold'
   }
 });
