@@ -12,18 +12,20 @@ if (Platform.OS !== 'web') {
 
 const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: any, canvasSize: number, index: number, currentIndex: number }) => {
     const [isLiked, setIsLiked] = useState(false);
+    
     const likesCount = drawing.likes_count || 0;
     const commentsCount = drawing.comments_count || 0;
     const author = drawing.users;
 
     const isActive = index === currentIndex; 
-    const isFuture = index > currentIndex;
-    const shouldRenderDrawing = isActive; // On affiche que si actif pour l'animation
+    
+    // Logique stricte : on n'affiche le dessin QUE si c'est la carte active
+    const shouldRenderDrawing = isActive;
 
     return (
         <View style={styles.cardContainer}>
-            {/* UPDATE: height = canvasSize * 1.33 */}
-            <View style={{ width: canvasSize, height: canvasSize * 1.33, backgroundColor: 'transparent' }}>
+            {/* FORMAT 3:4 -> aspectRatio: 3/4 */}
+            <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent' }}>
                 {shouldRenderDrawing && (
                     <DrawingViewer
                         key={`${drawing.id}-${isActive}`} 
@@ -108,9 +110,10 @@ export default function FeedPage() {
         <View style={styles.container}>
             <SunbimHeader showCloseButton={false} />
             <View style={{ flex: 1, position: 'relative' }}>
+                {/* Image de fond en 3:4 aussi pour couvrir la même zone */}
                 {backgroundUrl && (
-                    <View style={{ position: 'absolute', top: 0, width: screenWidth, height: screenWidth, zIndex: -1 }}>
-                       <Image source={{uri: backgroundUrl}} style={{width: screenWidth, height: screenWidth}} resizeMode="cover" />
+                    <View style={{ position: 'absolute', top: 0, width: screenWidth, aspectRatio: 3/4, zIndex: -1 }}>
+                       <Image source={{uri: backgroundUrl}} style={{width: '100%', height: '100%'}} resizeMode="cover" />
                     </View>
                 )}
                 

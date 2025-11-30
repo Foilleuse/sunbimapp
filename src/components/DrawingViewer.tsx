@@ -35,9 +35,9 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
   const [isReady, setIsReady] = useState(false); 
   const progress = useSharedValue(animated ? 0 : (startVisible ? 1 : 0));
 
-  // --- NOUVEAU RATIO 3:4 ---
-  const RATIO = 4 / 3;
-  const VIEW_HEIGHT = viewerSize * RATIO;
+  // --- FORMAT 3:4 ---
+  // Hauteur = Largeur * (4/3)
+  const VIEW_HEIGHT = viewerSize * (4/3);
 
   useEffect(() => {
     if (animated) {
@@ -66,9 +66,10 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
       const m = Skia.Matrix();
       if (!image) return m;
       
-      const NATIVE_SIZE = image.height(); // On suppose largeur ~ hauteur ou portrait
-      if (NATIVE_SIZE === 0) return m;
+      const NATIVE_HEIGHT = image.height();
+      if (NATIVE_HEIGHT === 0) return m;
 
+      // Logique Auto-Center pour le Replay
       if (autoCenter && skiaPaths.length > 0) {
           const combinedPath = Skia.Path.Make();
           skiaPaths.forEach((p: any) => combinedPath.addPath(p.skPath));
@@ -76,7 +77,6 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
           const bounds = combinedPath.getBounds();
           if (bounds.width > 10 && bounds.height > 10) {
               const padding = 40;
-              // On adapte le calcul de focus pour le ratio vertical
               const targetSize = viewerSize - padding;
               const focusScale = Math.min(targetSize / Math.max(bounds.width, bounds.height), 5);
 
@@ -89,8 +89,9 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
           }
       }
 
-      // Mode Fit Cover Standard
-      const fitScale = viewerSize / NATIVE_SIZE;
+      // Logique Standard: On adapte l'échelle pour remplir la largeur
+      // L'image native est supposée être au moins aussi large/haute pour le cover
+      const fitScale = viewerSize / image.width(); // On se base sur la largeur pour remplir
       m.scale(fitScale, fitScale);
       return m;
 
@@ -101,9 +102,8 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
     return <View style={styles.loading}><ActivityIndicator color="#000" /></View>;
   }
 
-  // Dimension de base pour le dessin Skia
-  const BASE_SIZE = image.height();
-
+  // On définit la zone de dessin pour l'image Skia
+  // On utilise la taille de l'image source, mais on l'affiche dans notre canvas 3:4
   return (
     <View style={[styles.container, {width: viewerSize, height: VIEW_HEIGHT, overflow: 'hidden'}]}>
       <Canvas style={{ flex: 1 }}>
@@ -112,9 +112,9 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
               <SkiaImage
                 image={image}
                 x={0} y={0}
-                width={BASE_SIZE} 
-                height={BASE_SIZE * RATIO} // On étire la zone de dessin en hauteur (ratio 3:4)
-                fit="cover" // L'image va remplir cette zone proprement
+                width={image.width()} 
+                height={image.height()} 
+                fit="cover" // Important pour que l'image remplisse bien si les ratios diffèrent légèrement
               />
           )}
           

@@ -10,8 +10,8 @@ const GalleryItem = memo(({ item, itemSize, showClouds, onPress }: any) => {
     return (
         <TouchableOpacity 
             activeOpacity={0.9} onPress={() => onPress(item)}
-            // UPDATE: Hauteur 3:4
-            style={{ width: itemSize, height: itemSize * 1.33, marginBottom: 1, backgroundColor: '#F9F9F9', overflow: 'hidden' }}
+            // FORMAT 3:4
+            style={{ width: itemSize, aspectRatio: 3/4, marginBottom: 1, backgroundColor: '#F9F9F9', overflow: 'hidden' }}
         >
             <DrawingViewer
                 imageUri={item.cloud_image_url} 
@@ -44,23 +44,14 @@ export default function GalleryPage() {
     const fetchGallery = async (searchQuery = searchText) => {
         try {
             const today = new Date().toISOString().split('T')[0];
-            const { data: cloudData } = await supabase
-                .from('clouds')
-                .select('id')
-                .eq('published_for', today)
-                .maybeSingle();
+            const { data: cloudData } = await supabase.from('clouds').select('id').eq('published_for', today).maybeSingle();
 
             if (!cloudData) {
                 setDrawings([]);
                 return;
             }
 
-            let query = supabase
-                .from('drawings')
-                .select('*, users(display_name, avatar_url)') 
-                .eq('cloud_id', cloudData.id) 
-                .order('created_at', { ascending: false });
-
+            let query = supabase.from('drawings').select('*, users(display_name, avatar_url)').eq('cloud_id', cloudData.id).order('created_at', { ascending: false });
             if (searchQuery.trim().length > 0) query = query.ilike('label', `%${searchQuery.trim()}%`);
             
             const { data, error } = await query;
@@ -90,8 +81,6 @@ export default function GalleryPage() {
         />
     ), [showClouds, ITEM_SIZE, openViewer]);
 
-    const filteredDrawings = drawings; 
-
     return (
         <View style={styles.container}>
             <SunbimHeader showCloseButton={selectedDrawing !== null} onClose={closeViewer} showProfileButton={true} />
@@ -110,7 +99,7 @@ export default function GalleryPage() {
                     </View>
                     {loading && !refreshing ? (<View style={styles.loadingContainer}><ActivityIndicator size="large" color="#000" /></View>) : (
                         <FlatList
-                            data={filteredDrawings} 
+                            data={drawings} 
                             renderItem={renderItem} 
                             keyExtractor={(item) => item.id}
                             numColumns={2} 
@@ -128,7 +117,7 @@ export default function GalleryPage() {
 
                 {selectedDrawing && (
                     <View style={styles.fullScreenOverlay}>
-                        <Pressable onPressIn={() => setIsHolding(true)} onPressOut={() => setIsHolding(false)} style={{ width: screenWidth, height: screenWidth * 1.33, backgroundColor: '#F0F0F0' }}>
+                        <Pressable onPressIn={() => setIsHolding(true)} onPressOut={() => setIsHolding(false)} style={{ width: screenWidth, aspectRatio: 3/4, backgroundColor: '#F0F0F0' }}>
                             <DrawingViewer
                                 imageUri={selectedDrawing.cloud_image_url} canvasData={isHolding ? [] : selectedDrawing.canvas_data}
                                 viewerSize={screenWidth} transparentMode={!showClouds} startVisible={false} animated={true}
