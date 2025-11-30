@@ -31,9 +31,13 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
   ({ imageUri, strokeColor, strokeWidth, isEraserMode }, ref) => {
     if (Platform.OS === 'web') return <View />;
 
-    // --- DIMENSIONS 3:4 ---
-    const { width: screenWidth } = Dimensions.get('window');
-    const CANVAS_HEIGHT = screenWidth * (4 / 3);
+    // --- DIMENSIONS PLEIN ÉCRAN ---
+    const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+    
+    // On utilise toute la hauteur disponible
+    const CANVAS_HEIGHT = screenHeight; 
+    // Ratio de l'écran pour adapter la zone de dessin
+    const SCREEN_RATIO = screenHeight / screenWidth;
 
     const image = useImage(imageUri);
 
@@ -82,7 +86,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
 
     // --- INITIALISATION ---
     if (image && !isInitialized.current) {
-      // On utilise la hauteur de l'image comme base de référence pour le système de coordonnées
+      // On utilise la hauteur de l'image comme base de référence
       const BASE_SIZE = image.height();
       squareSizeRef.current = BASE_SIZE;
       
@@ -178,14 +182,14 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
             let newTx = currentCenter.x - (start.imageAnchorX * newScale);
             let newTy = currentCenter.y - (start.imageAnchorY * newScale);
 
-            // 3. CLAMPING (Adapté pour 3:4)
+            // 3. CLAMPING (Adapté Plein Écran)
             const width = squareSizeRef.current * newScale;
-            // La hauteur virtuelle de l'image est aussi en 3:4 dans le repère Skia
-            const height = (squareSizeRef.current * (4/3)) * newScale;
+            // Hauteur adaptée au ratio de l'écran
+            const height = (squareSizeRef.current * SCREEN_RATIO) * newScale;
             
             const minTx = screenWidth - width;
             const maxTx = 0;
-            const minTy = CANVAS_HEIGHT - height; // On utilise la hauteur 3:4 ici
+            const minTy = CANVAS_HEIGHT - height; 
             const maxTy = 0;
 
             if (width > screenWidth) {
@@ -241,7 +245,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
           mode.current = 'NONE'; 
           setCurrentPathObj(null); 
       }
-    }), [strokeColor, strokeWidth, currentPathObj, screenWidth, CANVAS_HEIGHT, image, isEraserMode]);
+    }), [strokeColor, strokeWidth, currentPathObj, screenWidth, CANVAS_HEIGHT, image, isEraserMode, SCREEN_RATIO]);
 
     if (!image) return <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#fff" /></View>;
 
@@ -257,12 +261,12 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
       <View style={{ width: screenWidth, height: CANVAS_HEIGHT, backgroundColor: 'black', overflow: 'hidden' }} {...panResponder.panHandlers}>
         <Canvas style={{ flex: 1 }} pointerEvents="none">
           <Group transform={skiaTransform}>
-            {/* L'image est affichée dans un rectangle 3:4 */}
+            {/* L'image remplit la zone plein écran (Ratio écran) */}
             <SkiaImage 
                 image={image} 
                 x={0} y={0} 
                 width={DISPLAY_SIZE} 
-                height={DISPLAY_SIZE * (4/3)} 
+                height={DISPLAY_SIZE * SCREEN_RATIO} 
                 fit="cover" 
             />
             <Group layer={true}>
