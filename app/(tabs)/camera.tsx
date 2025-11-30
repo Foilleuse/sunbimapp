@@ -7,26 +7,24 @@ import { Zap, ZapOff } from 'lucide-react-native';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
 
 export default function CameraPage() {
-  // 1. Permissions & Device
   const { hasPermission, requestPermission } = useCameraPermission();
+  
+  // On demande spécifiquement la caméra arrière
   const device = useCameraDevice('back');
   
   const isFocused = useIsFocused();
   const [isAppActive, setIsAppActive] = useState(true);
   const isActive = isFocused && isAppActive;
 
-  // 2. États
   const [flash, setFlash] = useState<'off' | 'on'>('off');
-  const [zoom, setZoom] = useState(1); // Zoom par défaut 1x
+  const [zoom, setZoom] = useState(1);
   
   const cameraRef = useRef<Camera>(null);
   const router = useRouter();
 
-  // 3. Dimensions 3:4
   const { width: screenWidth } = Dimensions.get('window');
   const CAMERA_HEIGHT = screenWidth * (4 / 3);
 
-  // Cycle de vie
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
       setIsAppActive(state === 'active');
@@ -39,23 +37,19 @@ export default function CameraPage() {
   }, [hasPermission]);
 
   if (!hasPermission) return <View style={styles.container} />;
-  
-  // Si pas de device, on affiche un message (évite écran noir silencieux)
   if (device == null) return <View style={styles.container}><Text style={styles.message}>Chargement caméra...</Text></View>;
 
-  // --- ACTIONS ---
   const toggleFlash = () => {
     setFlash(current => (current === 'off' ? 'on' : 'off'));
   };
 
   const handleZoom = (factor: number) => {
-      if (!device) return;
+      console.log("Zoom demandé :", factor);
       
       const minZoom = device.minZoom ?? 1;
       const maxZoom = device.maxZoom ?? 1;
       
-      // On s'assure que le zoom demandé est possible pour cet appareil
-      // (Ex: si on demande x2 mais que le max est x1.5)
+      // Sécurité : on reste dans les bornes physiques de l'appareil
       const targetZoom = Math.max(minZoom, Math.min(factor, maxZoom));
       
       setZoom(targetZoom);
@@ -69,7 +63,6 @@ export default function CameraPage() {
                 enableShutterSound: true
             });
             Alert.alert("Photo prise !", `Chemin : ${photo.path}`);
-            console.log("Photo path:", photo.path);
         } catch (e) {
             console.error("Erreur capture:", e);
             Alert.alert("Erreur", "La photo n'a pas pu être prise.");
@@ -88,8 +81,9 @@ export default function CameraPage() {
                 device={device}
                 isActive={isActive}
                 photo={true}
-                zoom={zoom} // Piloté par les boutons
-                enableZoomGesture={false} // Désactive le pinch natif pour éviter les conflits
+                video={false} // Optimisation : on ne veut que la photo
+                audio={false} // Pas besoin de micro
+                zoom={zoom}
             />
             
             {/* Overlay Flash */}
@@ -99,7 +93,7 @@ export default function CameraPage() {
                 </TouchableOpacity>
             </View>
 
-            {/* BARRE DE ZOOM (Boutons) - Sécurisé avec zIndex */}
+            {/* BARRE DE ZOOM (Boutons) */}
             <View style={styles.zoomContainer}>
                 {[1, 1.5, 2].map((z) => (
                     <TouchableOpacity 
@@ -107,6 +101,8 @@ export default function CameraPage() {
                         style={[styles.zoomBtn, zoom === z && styles.zoomBtnActive]} 
                         onPress={() => handleZoom(z)}
                         activeOpacity={0.7}
+                        // Zone tactile élargie pour faciliter le clic
+                        hitSlop={{ top: 15, bottom: 15, left: 10, right: 10 }}
                     >
                         <Text style={[styles.zoomText, zoom === z && styles.zoomTextActive]}>
                             {z}x
@@ -120,6 +116,11 @@ export default function CameraPage() {
             <TouchableOpacity style={styles.captureBtn} onPress={takePicture}>
                 <View style={styles.captureInner} />
             </TouchableOpacity>
+            
+            {/* Debug Info : Pour prouver que c'est bien Vision Camera */}
+            <Text style={styles.debugText}>
+               {device.name} • Max Zoom: {device.maxZoom?.toFixed(1)}x
+            </Text>
         </View>
     </View>
   );
@@ -140,7 +141,7 @@ const styles = StyleSheet.create({
       position: 'absolute',
       top: 20,
       right: 20,
-      zIndex: 10, // S'assure que c'est au-dessus
+      zIndex: 10,
   },
   iconBtn: {
       width: 40,
@@ -151,7 +152,6 @@ const styles = StyleSheet.create({
       alignItems: 'center',
   },
   
-  // STYLES ZOOM
   zoomContainer: {
       position: 'absolute',
       bottom: 20, 
@@ -160,13 +160,13 @@ const styles = StyleSheet.create({
       backgroundColor: 'rgba(0,0,0,0.6)',
       borderRadius: 25,
       padding: 6,
-      gap: 10,
-      zIndex: 20, // Très important pour être cliquable
+      gap: 12, // Espacement un peu plus large
+      zIndex: 20,
   },
   zoomBtn: {
-      width: 34,
-      height: 34,
-      borderRadius: 17,
+      width: 36,
+      height: 36,
+      borderRadius: 18,
       justifyContent: 'center',
       alignItems: 'center',
       backgroundColor: 'transparent'
@@ -175,14 +175,14 @@ const styles = StyleSheet.create({
       backgroundColor: 'rgba(255,255,255,0.3)', 
   },
   zoomText: {
-      color: '#DDD',
+      color: '#CCC',
       fontWeight: '600',
-      fontSize: 12
+      fontSize: 13
   },
   zoomTextActive: {
       color: '#FFF', 
       fontWeight: 'bold',
-      fontSize: 13
+      fontSize: 14
   },
 
   controlsContainer: {
@@ -209,5 +209,11 @@ const styles = StyleSheet.create({
       backgroundColor: '#FFF',
       borderWidth: 2,
       borderColor: '#000'
+  },
+  debugText: {
+      position: 'absolute',
+      bottom: 10,
+      color: '#333',
+      fontSize: 10
   }
 });
