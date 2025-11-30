@@ -31,21 +31,26 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
   ({ imageUri, strokeColor, strokeWidth, isEraserMode }, ref) => {
     if (Platform.OS === 'web') return <View />;
 
-    // Dimensions de l'écran (Zone de dessin visible)
+    // Dimensions de l'écran (Viewport)
     const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+    
+    // --- SURFACE DE DESSIN (PAPIER) ---
+    // On force le ratio 3:4 basé sur la largeur de l'écran
+    const PAPER_WIDTH = screenWidth;
+    const PAPER_HEIGHT = screenWidth * (4/3); // Ratio 0.75 (3:4)
+
     const image = useImage(imageUri);
 
     const [paths, setPaths] = useState<DrawingPath[]>([]);
     const [redoStack, setRedoStack] = useState<DrawingPath[]>([]);
     const [currentPathObj, setCurrentPathObj] = useState<SkPath | null>(null);
     
-    // Transform : { scale, translateX, translateY }
+    // Transform
     const transform = useRef({ scale: 1, translateX: 0, translateY: 0 });
     const [_, setTick] = useState(0);
     const forceUpdate = () => setTick(t => t + 1);
 
     const isInitialized = useRef(false);
-    // On stocke le scale de base pour ajuster l'épaisseur du trait
     const baseScaleRef = useRef(1);
 
     const mode = useRef<'NONE' | 'DRAWING' | 'ZOOMING'>('NONE');
@@ -76,25 +81,26 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
       getSnapshot: async () => undefined
     }), [paths]);
 
-    // --- INITIALISATION PRÉCISE ---
+    // --- INITIALISATION DU ZOOM (FILL SCREEN) ---
     if (image && !isInitialized.current) {
-      const imgW = image.width();
-      const imgH = image.height();
+      // Stratégie : On veut remplir l'écran (qui est souvent plus haut que 3:4)
+      // Si on fit la largeur, on aura du noir en bas.
+      // Donc on calcule le scale pour fit la HAUTEUR.
       
-      // Calcul du Scale pour "Cover" (Remplir l'écran)
-      const scaleW = screenWidth / imgW;
-      const scaleH = screenHeight / imgH;
-      const scale = Math.max(scaleW, scaleH);
+      const heightScale = screenHeight / PAPER_HEIGHT;
+      // On prend le max pour être sûr de couvrir (Cover)
+      // Note: Sur un téléphone très long, heightScale sera > 1.
+      const initialScale = Math.max(1, heightScale);
       
-      baseScaleRef.current = scale;
+      baseScaleRef.current = initialScale;
       
-      // Calcul du Centrage
-      const scaledW = imgW * scale;
-      const scaledH = imgH * scale;
-      const tx = (screenWidth - scaledW) / 2;
-      const ty = (screenHeight - scaledH) / 2;
+      // On centre horizontalement (puisque ça va dépasser si on a zoomé)
+      const scaledWidth = PAPER_WIDTH * initialScale;
+      const tx = (screenWidth - scaledWidth) / 2;
+      // On aligne en haut (ou centré verticalement, ici 0 car on fit height ou plus)
+      const ty = 0; 
       
-      transform.current = { scale, translateX: tx, translateY: ty };
+      transform.current = { scale: initialScale, translateX: tx, translateY: ty };
       isInitialized.current = true;
     }
 
@@ -105,7 +111,10 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
       return Math.sqrt(dx * dx + dy * dy);
     };
     
-    const getCenter = (t1: any, t2: any) => ({ x: (t1.pageX + t2.pageX) / 2, y: (t1.pageY + t2.pageY) / 2 });
+    const getCenter = (t1: any, t2: any) => ({ 
+      x: (t1.pageX + t2.pageX) / 2, 
+      y: (t1.pageY + t2.pageY) / 2 
+    });
 
     const startZooming = (touches: any[]) => {
       mode.current = 'ZOOMING';
@@ -152,20 +161,23 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
 
             const ratio = currentDist / start.dist;
             let newScale = start.scale * ratio;
-            newScale = Math.max(baseScaleRef.current, Math.min(newScale, baseScaleRef.current * 5));
+            // On permet de dézoomer un peu (0.8x) pour voir les bords, mais pas trop
+            newScale = Math.max(baseScaleRef.current * 0.5, Math.min(newScale, baseScaleRef.current * 5));
 
             let newTx = currentCenter.x - (start.imageAnchorX * newScale);
             let newTy = currentCenter.y - (start.imageAnchorY * newScale);
 
-            // BORDURES (Clamping) basées sur l'image réelle
-            const width = image.width() * newScale;
-            const height = image.height() * newScale;
+            // BORDURES (Clamping sur le PAPIER 3:4)
+            const currentWidth = PAPER_WIDTH * newScale;
+            const currentHeight = PAPER_HEIGHT * newScale;
             
-            if (width > screenWidth) newTx = Math.min(0, Math.max(screenWidth - width, newTx));
-            else newTx = (screenWidth - width) / 2;
+            // Si l'image est plus grande que l'écran, on clamp pour ne pas voir le fond noir
+            // Si elle est plus petite (dézoom), on centre
+            if (currentWidth > screenWidth) newTx = Math.min(0, Math.max(screenWidth - currentWidth, newTx));
+            else newTx = (screenWidth - currentWidth) / 2;
 
-            if (height > screenHeight) newTy = Math.min(0, Math.max(screenHeight - height, newTy));
-            else newTy = (screenHeight - height) / 2;
+            if (currentHeight > screenHeight) newTy = Math.min(0, Math.max(screenHeight - currentHeight, newTy));
+            else newTy = (screenHeight - currentHeight) / 2;
 
             transform.current = { scale: newScale, translateX: newTx, translateY: newTy };
             forceUpdate();
@@ -212,7 +224,17 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
       <View style={{ width: screenWidth, height: screenHeight, backgroundColor: 'black', overflow: 'hidden' }} {...panResponder.panHandlers}>
         <Canvas style={{ flex: 1 }} pointerEvents="none">
           <Group transform={skiaTransform}>
-            <SkiaImage image={image} x={0} y={0} width={image.width()} height={image.height()} fit="contain" />
+            {/* IMPORTANT : On dessine une zone de 3:4.
+               L'image est "croppée" dedans (cover) pour remplir ce 3:4.
+            */}
+            <SkiaImage 
+                image={image} 
+                x={0} y={0} 
+                width={PAPER_WIDTH} 
+                height={PAPER_HEIGHT} 
+                fit="cover" 
+            />
+            
             <Group layer={true}>
               {paths.map((p, index) => {
                 const path = Skia.Path.MakeFromSVGString(p.svgPath);
