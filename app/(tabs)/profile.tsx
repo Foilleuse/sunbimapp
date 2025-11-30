@@ -26,10 +26,10 @@ export default function ProfilePage() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [authActionLoading, setAuthActionLoading] = useState(false);
 
-  // --- CONFIGURATION GRILLE (Comme Gallery) ---
+  // --- CONFIGURATION GRILLE ---
   const { width: screenWidth } = Dimensions.get('window');
-  const SPACING = 1; // Espacement fin comme la galerie
-  const NUM_COLS = 2; // 2 Colonnes
+  const SPACING = 1; 
+  const NUM_COLS = 2; 
   const ITEM_SIZE = (screenWidth - (SPACING * (NUM_COLS - 1))) / NUM_COLS;
 
   useEffect(() => {
@@ -38,14 +38,44 @@ export default function ProfilePage() {
 
   const fetchHistory = async () => {
     try {
-        const { data: drawings, error } = await supabase
+        const today = new Date().toISOString().split('T')[0];
+
+        // 1. Récupérer TOUS les nuages passés jusqu'à aujourd'hui
+        const { data: allClouds, error: cloudsError } = await supabase
+            .from('clouds')
+            .select('*')
+            .lte('published_for', today)
+            .order('published_for', { ascending: false });
+
+        if (cloudsError) throw cloudsError;
+
+        // 2. Récupérer les dessins de l'utilisateur
+        const { data: userDrawings, error: drawingsError } = await supabase
             .from('drawings')
             .select('*')
-            .eq('user_id', user?.id)
-            .order('created_at', { ascending: false });
+            .eq('user_id', user?.id);
 
-        if (error) throw error;
-        setHistoryItems(drawings || []);
+        if (drawingsError) throw drawingsError;
+
+        // 3. Fusionner : Pour chaque nuage, a-t-on un dessin ?
+        const combinedHistory = allClouds?.map(cloud => {
+            const drawing = userDrawings?.find(d => d.cloud_id === cloud.id);
+            if (drawing) {
+                // C'est un dessin réalisé
+                return { ...drawing, type: 'drawing', id: drawing.id }; // ID du dessin prioritaire
+            } else {
+                // C'est un nuage raté
+                return { 
+                    id: `missed-${cloud.id}`, // Faux ID unique pour la liste
+                    type: 'missed', 
+                    cloud_image_url: cloud.image_url, 
+                    date: cloud.published_for 
+                };
+            }
+        }) || [];
+
+        setHistoryItems(combinedHistory);
+
     } catch (e) {
         console.error(e);
     } finally {
@@ -70,6 +100,54 @@ export default function ProfilePage() {
 
   const openDrawing = (drawing: any) => setSelectedDrawing(drawing);
   const closeDrawing = () => setSelectedDrawing(null);
+
+  // --- RENDER ITEM (Gère les deux cas : Dessin ou Raté) ---
+  const renderItem = ({ item }: { item: any }) => {
+      // CAS 1 : C'est un dessin RATÉ (Nuage manqué)
+      if (item.type === 'missed') {
+          return (
+            <View style={{ width: ITEM_SIZE, aspectRatio: 3/4, marginBottom: SPACING, backgroundColor: '#EEE', position: 'relative' }}>
+                {/* Image du nuage en fond, légèrement estompée */}
+                <Image 
+                    source={{ uri: item.cloud_image_url }} 
+                    style={{ width: '100%', height: '100%', opacity: 0.6 }} 
+                    resizeMode="cover" 
+                />
+                
+                {/* Overlay "!" et Date */}
+                <View style={styles.missedOverlay}>
+                    <AlertCircle color="#000" size={32} style={{ marginBottom: 5 }} />
+                    <Text style={styles.missedDate}>
+                        {new Date(item.date).toLocaleDateString(undefined, {day: '2-digit', month: '2-digit'})}
+                    </Text>
+                </View>
+            </View>
+          );
+      }
+
+      // CAS 2 : C'est un dessin RÉALISÉ
+      return (
+        <TouchableOpacity 
+            onPress={() => openDrawing(item)} 
+            style={{ 
+                width: ITEM_SIZE, 
+                aspectRatio: 3/4, 
+                marginBottom: SPACING, 
+                backgroundColor: '#F9F9F9', 
+                overflow: 'hidden' 
+            }}
+        >
+            <DrawingViewer 
+                imageUri={item.cloud_image_url}
+                canvasData={item.canvas_data}
+                viewerSize={ITEM_SIZE}
+                transparentMode={false}
+                animated={false}
+                startVisible={true}
+            />
+        </TouchableOpacity>
+      );
+  };
 
   // --- NON CONNECTÉ ---
   if (!user) {
@@ -102,7 +180,6 @@ export default function ProfilePage() {
   // --- CONNECTÉ ---
   return (
     <View style={styles.container}>
-      {/* HEADER PROFIL SIMPLIFIÉ (Sans stats) */}
       <View style={styles.header}>
           <View style={styles.avatarSection}>
               {profile?.avatar_url ? (
@@ -121,9 +198,8 @@ export default function ProfilePage() {
           </TouchableOpacity>
       </View>
 
-      {/* GRILLE HISTORIQUE (Style Galerie 3:4) */}
       <View style={styles.historySection}>
-          <Text style={styles.sectionTitle}>Mes Créations</Text>
+          <Text style={styles.sectionTitle}>Calendrier</Text>
           {loadingHistory ? (
               <ActivityIndicator style={{marginTop: 20}} />
           ) : (
@@ -131,34 +207,13 @@ export default function ProfilePage() {
                 data={historyItems}
                 numColumns={NUM_COLS}
                 contentContainerStyle={{ paddingBottom: 100 }}
-                // On utilise columnWrapperStyle seulement si numColumns > 1
                 columnWrapperStyle={{ gap: SPACING }}
                 keyExtractor={item => item.id}
-                renderItem={({item}) => (
-                    <TouchableOpacity 
-                        onPress={() => openDrawing(item)} 
-                        style={{ 
-                            width: ITEM_SIZE, 
-                            aspectRatio: 3/4, // FORMAT 3:4
-                            marginBottom: SPACING, 
-                            backgroundColor: '#F9F9F9', 
-                            overflow: 'hidden' 
-                        }}
-                    >
-                        <DrawingViewer 
-                            imageUri={item.cloud_image_url}
-                            canvasData={item.canvas_data}
-                            viewerSize={ITEM_SIZE}
-                            transparentMode={false}
-                            animated={false}
-                            startVisible={true}
-                        />
-                    </TouchableOpacity>
-                )}
+                renderItem={renderItem}
                 ListEmptyComponent={
                     <View style={styles.emptyState}>
                         <AlertCircle color="#CCC" size={40} />
-                        <Text style={styles.emptyText}>Aucun dessin pour le moment.</Text>
+                        <Text style={styles.emptyText}>Aucune activité pour le moment.</Text>
                     </View>
                 }
               />
@@ -245,6 +300,10 @@ const styles = StyleSheet.create({
   emptyState: { marginTop: 50, alignItems: 'center' },
   emptyText: { color: '#999', marginTop: 10 },
   
+  // Style pour les nuages manqués
+  missedOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.4)' },
+  missedDate: { fontSize: 16, fontWeight: '700', color: '#000', backgroundColor: 'rgba(255,255,255,0.8)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, overflow: 'hidden' },
+
   modalContainer: { flex: 1, backgroundColor: '#FFF' },
   modalHeader: { width: '100%', height: 60, justifyContent: 'center', alignItems: 'flex-end', paddingRight: 20, paddingTop: 10, backgroundColor: '#FFF', zIndex: 20 },
   closeModalBtn: { padding: 5 },
