@@ -6,6 +6,8 @@ import { useAuth } from '../../src/contexts/AuthContext';
 import { User, Mail, Lock, LogOut, X, Heart, MessageCircle, AlertCircle, Settings, UserPlus } from 'lucide-react-native'; 
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { CommentsModal } from '../../src/components/CommentsModal';
+// Import du Header global
+import { SunbimHeader } from '../../src/components/SunbimHeader';
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -40,7 +42,6 @@ export default function ProfilePage() {
     try {
         const today = new Date().toISOString().split('T')[0];
 
-        // 1. Récupérer TOUS les nuages passés jusqu'à aujourd'hui
         const { data: allClouds, error: cloudsError } = await supabase
             .from('clouds')
             .select('*')
@@ -49,7 +50,6 @@ export default function ProfilePage() {
 
         if (cloudsError) throw cloudsError;
 
-        // 2. Récupérer les dessins de l'utilisateur
         const { data: userDrawings, error: drawingsError } = await supabase
             .from('drawings')
             .select('*')
@@ -57,7 +57,6 @@ export default function ProfilePage() {
 
         if (drawingsError) throw drawingsError;
 
-        // 3. Fusionner
         const combinedHistory = allClouds?.map(cloud => {
             const drawing = userDrawings?.find(d => d.cloud_id === cloud.id);
             if (drawing) {
@@ -146,6 +145,9 @@ export default function ProfilePage() {
   if (!user) {
       return (
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
+              {/* Ajout du Header même si pas connecté pour la cohérence */}
+              <SunbimHeader showCloseButton={false} />
+              
               <View style={styles.authContainer}>
                   <View style={styles.logoContainer}>
                       <Text style={styles.authTitle}>Profil</Text>
@@ -173,7 +175,12 @@ export default function ProfilePage() {
   // --- CONNECTÉ ---
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      
+      {/* AJOUT DU HEADER GLOBAL */}
+      <SunbimHeader showCloseButton={false} />
+
+      {/* BLOC INFO PROFIL */}
+      <View style={styles.profileBlock}>
           <View style={styles.profileInfoContainer}>
               {profile?.avatar_url ? (
                   <Image source={{uri: profile.avatar_url}} style={styles.profileAvatar} />
@@ -191,21 +198,20 @@ export default function ProfilePage() {
               </View>
           </View>
 
-          {/* BARRE DE BOUTONS REDESIGNÉE */}
+          {/* BARRE DE BOUTONS */}
           <View style={styles.profileActions}>
-              
-              {/* 1. AMIS (Large, Texte) */}
+              {/* 1. AMIS */}
               <TouchableOpacity style={[styles.actionButton, styles.primaryBtn]} onPress={() => Alert.alert("Bientôt", "Gestion des amis")}>
                   <UserPlus color="#000" size={18} />
                   <Text style={styles.actionButtonText}>Amis</Text>
               </TouchableOpacity>
 
-              {/* 2. MODIFIER (Carré, Icône seule) */}
+              {/* 2. MODIFIER */}
               <TouchableOpacity style={styles.iconOnlyBtn} onPress={() => Alert.alert("Bientôt", "Édition de profil")}>
                   <Settings color="#000" size={20} />
               </TouchableOpacity>
 
-              {/* 3. DÉCONNEXION (Carré, Icône seule) */}
+              {/* 3. DÉCONNEXION */}
               <TouchableOpacity style={[styles.iconOnlyBtn, styles.logoutButton]} onPress={signOut}>
                   <LogOut color="#FF3B30" size={20} />
               </TouchableOpacity>
@@ -213,7 +219,8 @@ export default function ProfilePage() {
       </View>
 
       <View style={styles.historySection}>
-          <Text style={styles.sectionTitle}>Calendrier</Text>
+          {/* SUPPRESSION DU TITRE "CALENDRIER" ICI */}
+          
           {loadingHistory ? (
               <ActivityIndicator style={{marginTop: 20}} />
           ) : (
@@ -234,7 +241,7 @@ export default function ProfilePage() {
           )}
       </View>
 
-      {/* MODALE DÉTAIL DESSIN */}
+      {/* MODALE DÉTAIL */}
       <Modal visible={!!selectedDrawing} animationType="slide" presentationStyle="pageSheet">
           {selectedDrawing && (
               <View style={styles.modalContainer}>
@@ -290,19 +297,10 @@ export default function ProfilePage() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFF' },
-  authContainer: { flex: 1, justifyContent: 'center', padding: 30 },
-  logoContainer: { alignItems: 'center', marginBottom: 40 },
-  authTitle: { fontSize: 32, fontWeight: '900', color: '#000', marginBottom: 10 },
-  authSubtitle: { fontSize: 16, color: '#666', textAlign: 'center' },
-  inputGroup: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F9F9F9', borderRadius: 12, marginBottom: 15, paddingHorizontal: 15, height: 55, borderWidth: 1, borderColor: '#EEE' },
-  inputIcon: { marginRight: 10 },
-  input: { flex: 1, height: '100%', fontSize: 16, color: '#000' },
-  authBtn: { backgroundColor: '#000', height: 55, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 10 },
-  authBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
-  switchText: { textAlign: 'center', marginTop: 20, color: '#666', fontSize: 14 },
   
-  header: { 
-      paddingTop: 60, 
+  // MODIF: Padding ajusté car le SunbimHeader gère le top
+  profileBlock: { 
+      paddingTop: 10, 
       paddingBottom: 20, 
       paddingHorizontal: 20, 
       borderBottomWidth: 1, 
@@ -342,12 +340,10 @@ const styles = StyleSheet.create({
       lineHeight: 20
   },
 
-  // BARRE BOUTONS
   profileActions: {
       flexDirection: 'row',
       gap: 10,
   },
-  // Bouton Large (Amis)
   actionButton: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -358,12 +354,11 @@ const styles = StyleSheet.create({
       gap: 6
   },
   primaryBtn: {
-      flex: 1, // Prend tout l'espace restant
+      flex: 1, 
   },
-  // Boutons Carrés (Modifier, Déco)
   iconOnlyBtn: {
-      width: 45, // Largeur fixe
-      height: 45, // Hauteur fixe pour faire un carré (ajusté selon le padding de l'autre bouton)
+      width: 45, 
+      height: 45, 
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: '#F5F5F5',
@@ -379,13 +374,25 @@ const styles = StyleSheet.create({
   },
   
   historySection: { flex: 1, paddingTop: 15 },
-  sectionTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15, paddingHorizontal: 20 },
   emptyState: { marginTop: 50, alignItems: 'center' },
   emptyText: { color: '#999', marginTop: 10 },
   
   missedOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.4)' },
   missedDate: { fontSize: 16, fontWeight: '700', color: '#000', backgroundColor: 'rgba(255,255,255,0.8)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, overflow: 'hidden' },
 
+  // Styles Auth
+  authContainer: { flex: 1, justifyContent: 'center', padding: 30 },
+  logoContainer: { alignItems: 'center', marginBottom: 40 },
+  authTitle: { fontSize: 32, fontWeight: '900', color: '#000', marginBottom: 10 },
+  authSubtitle: { fontSize: 16, color: '#666', textAlign: 'center' },
+  inputGroup: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F9F9F9', borderRadius: 12, marginBottom: 15, paddingHorizontal: 15, height: 55, borderWidth: 1, borderColor: '#EEE' },
+  inputIcon: { marginRight: 10 },
+  input: { flex: 1, height: '100%', fontSize: 16, color: '#000' },
+  authBtn: { backgroundColor: '#000', height: 55, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 10 },
+  authBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
+  switchText: { textAlign: 'center', marginTop: 20, color: '#666', fontSize: 14 },
+
+  // Styles Modal
   modalContainer: { flex: 1, backgroundColor: '#FFF' },
   modalHeader: { width: '100%', height: 60, justifyContent: 'center', alignItems: 'flex-end', paddingRight: 20, paddingTop: 10, backgroundColor: '#FFF', zIndex: 20 },
   closeModalBtn: { padding: 5 },
