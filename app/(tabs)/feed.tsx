@@ -12,20 +12,19 @@ if (Platform.OS !== 'web') {
 
 const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: any, canvasSize: number, index: number, currentIndex: number }) => {
     const [isLiked, setIsLiked] = useState(false);
-    const [isHolding, setIsHolding] = useState(false); // Piloté par le bouton Œil
+    const [isHolding, setIsHolding] = useState(false);
     
     const likesCount = drawing.likes_count || 0;
     const commentsCount = drawing.comments_count || 0;
     const author = drawing.users;
 
     const isActive = index === currentIndex; 
-    
     const shouldRenderDrawing = isActive;
 
     return (
         <View style={styles.cardContainer}>
             
-            {/* ZONE IMAGE (Non interactive) */}
+            {/* IMAGE + DESSIN */}
             <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent' }}>
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
@@ -43,9 +42,27 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
             </View>
             
             <View style={styles.cardInfo}>
-                {/* INFO AUTEUR (Haut de la zone blanche) */}
+                {/* HEADER INFO : Titre + Bouton Œil sur la même ligne */}
                 <View style={styles.headerInfo}>
-                    <Text style={styles.drawingTitle}>{drawing.label || "Sans titre"}</Text>
+                    
+                    {/* LIGNE TITRE ET ŒIL */}
+                    <View style={styles.titleRow}>
+                        <Text style={styles.drawingTitle} numberOfLines={1}>
+                            {drawing.label || "Sans titre"}
+                        </Text>
+
+                        {/* BOUTON ŒIL DÉPLACÉ ICI (Aligné à droite) */}
+                        <TouchableOpacity 
+                            style={[styles.eyeBtn, isHolding && styles.iconBtnActive]}
+                            activeOpacity={1}
+                            onPressIn={() => setIsHolding(true)}
+                            onPressOut={() => setIsHolding(false)}
+                            hitSlop={15}
+                        >
+                            <Eye color={isHolding ? "#000" : "#000"} size={26} />
+                        </TouchableOpacity>
+                    </View>
+
                     <View style={styles.userInfo}>
                          <View style={styles.avatar}>
                             {author?.avatar_url ? (
@@ -59,9 +76,8 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
                     </View>
                 </View>
 
-                {/* BARRE D'ACTIONS (Bas de la zone blanche) */}
+                {/* BARRE D'ACTIONS (Bas) */}
                 <View style={styles.actionBar}>
-                    {/* GROUPE GAUCHE : Like & Comment */}
                     <View style={styles.leftActions}>
                         <TouchableOpacity style={styles.actionBtn} onPress={() => setIsLiked(!isLiked)}>
                             <Heart color={isLiked ? "#FF3B30" : "#000"} fill={isLiked ? "#FF3B30" : "transparent"} size={28} />
@@ -73,19 +89,8 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
                         </TouchableOpacity>
                     </View>
 
-                    {/* GROUPE DROITE : Œil & Share */}
                     <View style={styles.rightActions}>
-                        {/* BOUTON ŒIL (Maintenir pour voir l'original) */}
-                        <TouchableOpacity 
-                            style={[styles.iconBtn, isHolding && styles.iconBtnActive]}
-                            activeOpacity={1}
-                            onPressIn={() => setIsHolding(true)}
-                            onPressOut={() => setIsHolding(false)}
-                            hitSlop={10}
-                        >
-                            <Eye color={isHolding ? "#000" : "#000"} size={28} />
-                        </TouchableOpacity>
-
+                        {/* Juste le Share ici maintenant */}
                         <TouchableOpacity style={styles.iconBtn}>
                             <Share2 color="#000" size={24} />
                         </TouchableOpacity>
@@ -174,21 +179,47 @@ const styles = StyleSheet.create({
     text: { color: '#666', fontSize: 16 },
     cardContainer: { flex: 1 },
     cardInfo: {
-        flex: 1, backgroundColor: '#FFFFFF', marginTop: -20, paddingHorizontal: 20, paddingTop: 25,
-        shadowColor: "#000", shadowOffset: {width: 0, height: -4}, shadowOpacity: 0.05, shadowRadius: 4, elevation: 5
+        flex: 1, 
+        backgroundColor: '#FFFFFF', 
+        marginTop: -40, // Remonté pour "monter un tout petit peu l'ensemble"
+        paddingHorizontal: 20, 
+        paddingTop: 25,
+        shadowColor: "#000", shadowOffset: {width: 0, height: -4}, shadowOpacity: 0.05, shadowRadius: 4, elevation: 5,
+        borderTopLeftRadius: 25, // Ajout d'un petit arrondi pour l'esthétique "carte qui remonte"
+        borderTopRightRadius: 25
     },
-    headerInfo: { marginBottom: 20 },
-    drawingTitle: { fontSize: 28, fontWeight: '900', color: '#000', letterSpacing: -0.5, marginBottom: 8 },
+    headerInfo: { marginBottom: 15 },
+    
+    // NOUVEAU STYLE TITRE + OEIL
+    titleRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center', // Aligne le texte et l'oeil verticalement
+        marginBottom: 8
+    },
+    drawingTitle: { 
+        fontSize: 28, 
+        fontWeight: '900', 
+        color: '#000', 
+        letterSpacing: -0.5, 
+        flex: 1, // Prend toute la place sauf celle de l'oeil
+        marginRight: 10 
+    },
+    eyeBtn: {
+        padding: 5,
+        // Alignement fin pour matcher visuellement le Share en bas
+        marginRight: -5 
+    },
+
     userInfo: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     avatar: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#F0F0F0', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
     userName: { fontSize: 14, fontWeight: '600', color: '#333' },
     dateText: { fontSize: 14, color: '#999' },
     
-    // NOUVEAU STYLE ACTION BAR
     actionBar: { 
         flexDirection: 'row', 
         alignItems: 'center', 
-        justifyContent: 'space-between', // Pousse gauche/droite
+        justifyContent: 'space-between', 
         marginTop: 5 
     },
     leftActions: { flexDirection: 'row', alignItems: 'center', gap: 20 },
@@ -196,6 +227,6 @@ const styles = StyleSheet.create({
     
     actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     iconBtn: { padding: 5 },
-    iconBtnActive: { opacity: 0.5 },
+    iconBtnActive: { opacity: 0.3 },
     actionText: { fontSize: 16, fontWeight: '600', color: '#000' },
 });
