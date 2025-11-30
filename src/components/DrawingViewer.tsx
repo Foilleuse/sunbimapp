@@ -53,10 +53,10 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
         progress.value = 0;
         opacity.value = 0;
 
-        // 1. Fade In
+        // 1. Fade In long (1000ms)
         opacity.value = withTiming(1, { duration: 1000 });
 
-        // 2. Animation du tracé (1000ms = 1 seconde)
+        // 2. Animation du tracé (2200ms)
         progress.value = withTiming(1, { 
             duration: 2200, 
             easing: Easing.linear 
