@@ -1,46 +1,58 @@
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform, Image, Pressable } from 'react-native';
 import { useEffect, useState, memo } from 'react';
 import { Heart, MessageCircle, User, Share2 } from 'lucide-react-native';
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
 
-// Import conditionnel PagerView pour le web
 let PagerView: any;
 if (Platform.OS !== 'web') {
     try { PagerView = require('react-native-pager-view').default; } catch (e) { PagerView = View; }
 } else { PagerView = View; }
 
-// --- COMPOSANT CARTE MÉMOÏSÉ (Version Standard 3:4) ---
-const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: any, canvasSize: number, index: number, currentIndex: number }) => {
+const FeedCard = memo(({ drawing, canvasSize, canvasHeight, index, currentIndex }: { drawing: any, canvasSize: number, canvasHeight: number, index: number, currentIndex: number }) => {
     const [isLiked, setIsLiked] = useState(false);
+    // AJOUT : État pour détecter le maintien du doigt
+    const [isHolding, setIsHolding] = useState(false);
     
     const likesCount = drawing.likes_count || 0;
     const commentsCount = drawing.comments_count || 0;
     const author = drawing.users;
 
     const isActive = index === currentIndex; 
-    
-    // Logique stricte : Si futur, on ne rend RIEN.
     const shouldRenderDrawing = isActive;
 
     return (
         <View style={styles.cardContainer}>
-            {/* RETOUR AU FORMAT 3:4 */}
-            <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent' }}>
-                {shouldRenderDrawing && (
-                    <DrawingViewer
-                        key={`${drawing.id}-${isActive}`} 
-                        imageUri={drawing.cloud_image_url}
-                        canvasData={drawing.canvas_data}
-                        viewerSize={canvasSize}
-                        transparentMode={true} 
-                        
-                        animated={isActive} 
-                        startVisible={false} 
-                    />
-                )}
-            </View>
+            
+            {/* AJOUT : Pressable pour gérer le "Hold-to-Reveal"
+               onPressIn : Doigt posé -> isHolding = true
+               onPressOut : Doigt levé -> isHolding = false
+            */}
+            <Pressable 
+                onPressIn={() => setIsHolding(true)}
+                onPressOut={() => setIsHolding(false)}
+                style={{ width: canvasSize, height: canvasHeight, backgroundColor: 'transparent' }}
+            >
+                {/* AJOUT : On applique l'opacité ici. 
+                   Si isHolding est vrai, opacity = 0 (dessin invisible).
+                   Sinon opacity = 1.
+                */}
+                <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
+                    {shouldRenderDrawing && (
+                        <DrawingViewer
+                            key={`${drawing.id}-${isActive}`} 
+                            imageUri={drawing.cloud_image_url}
+                            canvasData={drawing.canvas_data}
+                            viewerSize={canvasSize}
+                            viewerHeight={canvasHeight}
+                            transparentMode={true} 
+                            animated={true} 
+                            startVisible={false} 
+                        />
+                    )}
+                </View>
+            </Pressable>
             
             <View style={styles.cardInfo}>
                 <View style={styles.headerInfo}>
@@ -82,7 +94,7 @@ export default function FeedPage() {
     const [drawings, setDrawings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [currentIndex, setCurrentIndex] = useState(0);
-    const { width: screenWidth } = Dimensions.get('window');
+    const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
     useEffect(() => { fetchTodaysFeed(); }, []);
 
@@ -113,9 +125,9 @@ export default function FeedPage() {
         <View style={styles.container}>
             <SunbimHeader showCloseButton={false} />
             <View style={{ flex: 1, position: 'relative' }}>
-                {/* Image de fond en 3:4 aussi */}
+                {/* Image de fond en plein écran */}
                 {backgroundUrl && (
-                    <View style={{ position: 'absolute', top: 0, width: screenWidth, aspectRatio: 3/4, zIndex: -1 }}>
+                    <View style={{ position: 'absolute', top: 0, width: screenWidth, height: screenHeight, zIndex: -1 }}>
                        <Image source={{uri: backgroundUrl}} style={{width: '100%', height: '100%'}} resizeMode="cover" />
                     </View>
                 )}
@@ -131,7 +143,8 @@ export default function FeedPage() {
                             <View key={drawing.id} style={{ flex: 1 }}>
                                 <FeedCard 
                                     drawing={drawing} 
-                                    canvasSize={screenWidth} 
+                                    canvasSize={screenWidth}
+                                    canvasHeight={screenHeight}
                                     index={index}
                                     currentIndex={currentIndex}
                                 />
