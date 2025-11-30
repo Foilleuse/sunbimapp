@@ -1,124 +1,119 @@
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Alert } from 'react-native';
-import { useState, useRef } from 'react';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Alert, AppState, Linking } from 'react-native';
+import { useState, useRef, useEffect } from 'react';
+import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
+import { useIsFocused } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import { Zap, ZapOff } from 'lucide-react-native';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
-// Imports essentiels pour le geste
-import { GestureDetector, Gesture, GestureHandlerRootView } from 'react-native-gesture-handler';
-import { runOnJS } from 'react-native-reanimated';
 
 export default function CameraPage() {
-  const [permission, requestPermission] = useCameraPermissions();
-  const [flash, setFlash] = useState<'off' | 'on'>('off');
-  const [zoom, setZoom] = useState(0); // État du zoom (0 à 1)
+  // 1. Permissions & Device
+  const { hasPermission, requestPermission } = useCameraPermission();
+  const device = useCameraDevice('back');
   
-  const cameraRef = useRef<CameraView>(null);
+  const isFocused = useIsFocused();
+  const [isAppActive, setIsAppActive] = useState(true);
+  const isActive = isFocused && isAppActive;
+
+  // 2. États
+  const [flash, setFlash] = useState<'off' | 'on'>('off');
+  const [zoom, setZoom] = useState(1); // Zoom par défaut 1x
+  
+  const cameraRef = useRef<Camera>(null);
   const router = useRouter();
 
-  // On utilise une ref pour stocker le zoom de départ du geste
-  const startZoom = useRef(0);
-
+  // 3. Dimensions 3:4
   const { width: screenWidth } = Dimensions.get('window');
   const CAMERA_HEIGHT = screenWidth * (4 / 3);
 
-  // --- GESTION DU ZOOM (PINCH) ---
-  const pinch = Gesture.Pinch()
-    .onStart(() => {
-      startZoom.current = zoom;
-    })
-    .onUpdate((e) => {
-      // Calcul du nouveau zoom basé sur l'échelle du pincement
-      // e.scale : 1 = pas de changement, 2 = double, 0.5 = moitié
-      
-      // On réduit la sensibilité ici pour un effet plus "lourd" / analogique
-      // (e.scale - 1) donne la variation relative.
-      // On divise par une valeur plus grande pour ralentir la progression.
-      const velocity = (e.scale - 1) * 0.15; // Facteur 0.15 pour ralentir
-
-      let newZoom = startZoom.current + velocity;
-
-      // Borner entre 0 et 1 (Expo Camera gère le zoom de 0 à 1)
-      // 0 = Zoom min (1x), 1 = Zoom max (dépend du hardware, souvent 5x ou 10x)
-      newZoom = Math.max(0, Math.min(1, newZoom));
-      
-      // Mise à jour via runOnJS car on est dans un worklet UI
-      runOnJS(setZoom)(newZoom);
+  // Cycle de vie
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      setIsAppActive(state === 'active');
     });
+    return () => subscription.remove();
+  }, []);
 
-  if (!permission) {
-    return <View style={styles.container} />;
-  }
+  useEffect(() => {
+    if (!hasPermission) requestPermission();
+  }, [hasPermission]);
 
-  if (!permission.granted) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.message}>Nous avons besoin de votre permission pour utiliser la caméra.</Text>
-        <TouchableOpacity style={styles.permissionBtn} onPress={requestPermission}>
-          <Text style={styles.permissionText}>Accorder la permission</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
+  if (!hasPermission) return <View style={styles.container} />;
+  if (device == null) return <View style={styles.container}><Text style={styles.message}>Pas de caméra</Text></View>;
 
+  // --- ACTIONS ---
   const toggleFlash = () => {
     setFlash(current => (current === 'off' ? 'on' : 'off'));
+  };
+
+  const handleZoom = (factor: number) => {
+      // On s'assure que le device supporte le zoom demandé (sécurité basique)
+      const maxZoom = device.maxZoom || 1;
+      if (factor <= maxZoom) {
+          setZoom(factor);
+      }
   };
 
   const takePicture = async () => {
     if (cameraRef.current) {
         try {
-            const photo = await cameraRef.current.takePictureAsync({
-                quality: 0.8,
-                base64: false,
-                skipProcessing: true 
+            const photo = await cameraRef.current.takePhoto({
+                flash: flash,
+                qualityPrioritization: 'speed',
+                enableShutterSound: true
             });
-            Alert.alert("Photo prise !", "Implémentation du dessin sur photo à venir.");
-            console.log(photo?.uri);
+            Alert.alert("Photo prise !", `Chemin : ${photo.path}`);
+            console.log("Photo path:", photo.path);
         } catch (e) {
-            console.error(e);
+            console.error("Erreur capture:", e);
         }
     }
   };
 
   return (
-    // GestureHandlerRootView est ESSENTIEL pour que les gestes fonctionnent
-    <GestureHandlerRootView style={{ flex: 1 }}>
-        <View style={styles.container}>
-            <SunbimHeader showCloseButton={true} onClose={() => router.back()} />
+    <View style={styles.container}>
+        <SunbimHeader showCloseButton={true} onClose={() => router.back()} />
 
-            <View style={[styles.cameraContainer, { width: screenWidth, height: CAMERA_HEIGHT }]}>
-                {/* Le GestureDetector enveloppe la zone interactive */}
-                <GestureDetector gesture={pinch}>
-                    <View style={{ flex: 1 }}>
-                        <CameraView 
-                            ref={cameraRef}
-                            style={{ flex: 1 }} 
-                            facing="back"
-                            flash={flash}
-                            zoom={zoom} // On passe le zoom calculé ici
-                            animateShutter={false}
-                        />
-                        
-                        {/* Overlay Flash */}
-                        <View style={styles.overlay} pointerEvents="box-none">
-                            <TouchableOpacity style={styles.iconBtn} onPress={toggleFlash}>
-                                {flash === 'on' ? <Zap color="#FFF" size={24} /> : <ZapOff color="#FFF" size={24} />}
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                </GestureDetector>
+        <View style={[styles.cameraContainer, { width: screenWidth, height: CAMERA_HEIGHT }]}>
+            <Camera
+                ref={cameraRef}
+                style={StyleSheet.absoluteFill}
+                device={device}
+                isActive={isActive}
+                photo={true}
+                zoom={zoom}
+                // Plus de gestures ici
+            />
+            
+            {/* Overlay Flash */}
+            <View style={styles.overlay}>
+                <TouchableOpacity style={styles.iconBtn} onPress={toggleFlash}>
+                    {flash === 'on' ? <Zap color="#FFF" size={24} /> : <ZapOff color="#FFF" size={24} />}
+                </TouchableOpacity>
             </View>
 
-            <View style={styles.controlsContainer}>
-                <TouchableOpacity style={styles.captureBtn} onPress={takePicture}>
-                    <View style={styles.captureInner} />
-                </TouchableOpacity>
-                {/* Indicateur de zoom */}
-                <Text style={styles.zoomText}>x{(1 + zoom * 4).toFixed(1)}</Text>
+            {/* BARRE DE ZOOM (Intégrée en bas de l'image pour l'ergonomie) */}
+            <View style={styles.zoomContainer}>
+                {[1, 1.5, 2].map((z) => (
+                    <TouchableOpacity 
+                        key={z} 
+                        style={[styles.zoomBtn, zoom === z && styles.zoomBtnActive]} 
+                        onPress={() => handleZoom(z)}
+                    >
+                        <Text style={[styles.zoomText, zoom === z && styles.zoomTextActive]}>
+                            {z}x
+                        </Text>
+                    </TouchableOpacity>
+                ))}
             </View>
         </View>
-    </GestureHandlerRootView>
+
+        <View style={styles.controlsContainer}>
+            <TouchableOpacity style={styles.captureBtn} onPress={takePicture}>
+                <View style={styles.captureInner} />
+            </TouchableOpacity>
+        </View>
+    </View>
   );
 }
 
@@ -129,22 +124,10 @@ const styles = StyleSheet.create({
   },
   cameraContainer: {
     overflow: 'hidden',
-    backgroundColor: '#333',
+    backgroundColor: '#111',
     position: 'relative',
   },
-  message: {
-    textAlign: 'center',
-    paddingBottom: 10,
-    color: '#FFF'
-  },
-  permissionBtn: {
-      backgroundColor: '#FFF',
-      padding: 15,
-      borderRadius: 10
-  },
-  permissionText: {
-      fontWeight: 'bold'
-  },
+  message: { textAlign: 'center', color: '#FFF', marginTop: 100 },
   overlay: {
       position: 'absolute',
       top: 20,
@@ -158,6 +141,39 @@ const styles = StyleSheet.create({
       justifyContent: 'center',
       alignItems: 'center',
   },
+  
+  // NOUVEAUX STYLES ZOOM
+  zoomContainer: {
+      position: 'absolute',
+      bottom: 20, // Juste au dessus de la barre noire
+      alignSelf: 'center',
+      flexDirection: 'row',
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      borderRadius: 20,
+      padding: 4,
+      gap: 8
+  },
+  zoomBtn: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: 'transparent'
+  },
+  zoomBtnActive: {
+      backgroundColor: 'rgba(255,255,255,0.2)', // Surbrillance légère
+  },
+  zoomText: {
+      color: '#CCC',
+      fontWeight: '600',
+      fontSize: 12
+  },
+  zoomTextActive: {
+      color: '#FFF', // Texte blanc si actif
+      fontWeight: 'bold'
+  },
+
   controlsContainer: {
       flex: 1,
       backgroundColor: '#000',
@@ -182,11 +198,5 @@ const styles = StyleSheet.create({
       backgroundColor: '#FFF',
       borderWidth: 2,
       borderColor: '#000'
-  },
-  zoomText: {
-      color: '#999',
-      marginTop: 15,
-      fontSize: 14,
-      fontWeight: 'bold'
   }
 });

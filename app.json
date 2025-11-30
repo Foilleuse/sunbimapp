@@ -15,9 +15,10 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.foilleuse.sunbimapp",
-      "buildNumber": "14",
+      "buildNumber": "15",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSLocationWhenInUseUsageDescription": "This app does not use location data directly, but third-party libraries may require this permission."
       }
     },
     "android": {
@@ -29,8 +30,6 @@
       "versionCode": 13,
       "permissions": [
         "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO",
-        "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO"
       ]
     },
@@ -41,22 +40,20 @@
       "expo-router",
       "expo-font",
       [
-        "expo-camera",
+        "react-native-vision-camera",
         {
-          "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera to capture clouds."
+          "cameraPermissionText": "Allow $(PRODUCT_NAME) to access your camera to capture clouds.",
+          "enableMicrophonePermission": false
         }
       ]
     ],
     "extra": {
+      "router": {
+        "origin": false
+      },
       "eas": {
         "projectId": "6ac7da66-fe81-4d00-b064-035f9535e691"
       }
-    },
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
-    "updates": {
-      "url": "https://u.expo.dev/6ac7da66-fe81-4d00-b064-035f9535e691"
     }
   }
 }
