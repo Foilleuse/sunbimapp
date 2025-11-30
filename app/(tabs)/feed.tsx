@@ -12,19 +12,20 @@ if (Platform.OS !== 'web') {
 
 const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: any, canvasSize: number, index: number, currentIndex: number }) => {
     const [isLiked, setIsLiked] = useState(false);
-    const [isHolding, setIsHolding] = useState(false);
+    const [isHolding, setIsHolding] = useState(false); // Piloté par le bouton Œil
     
     const likesCount = drawing.likes_count || 0;
     const commentsCount = drawing.comments_count || 0;
     const author = drawing.users;
 
     const isActive = index === currentIndex; 
+    
     const shouldRenderDrawing = isActive;
 
     return (
         <View style={styles.cardContainer}>
             
-            {/* IMAGE + DESSIN */}
+            {/* IMAGE + DESSIN (Non interactif au toucher) */}
             <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent' }}>
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
@@ -90,7 +91,6 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
                     </View>
 
                     <View style={styles.rightActions}>
-                        {/* Juste le Share ici maintenant */}
                         <TouchableOpacity style={styles.iconBtn}>
                             <Share2 color="#000" size={24} />
                         </TouchableOpacity>
@@ -181,20 +181,18 @@ const styles = StyleSheet.create({
     cardInfo: {
         flex: 1, 
         backgroundColor: '#FFFFFF', 
-        marginTop: -40, // Remonté pour "monter un tout petit peu l'ensemble"
+        marginTop: -40, // Chevauchement léger pour le style
         paddingHorizontal: 20, 
         paddingTop: 25,
         shadowColor: "#000", shadowOffset: {width: 0, height: -4}, shadowOpacity: 0.05, shadowRadius: 4, elevation: 5,
-        borderTopLeftRadius: 25, // Ajout d'un petit arrondi pour l'esthétique "carte qui remonte"
-        borderTopRightRadius: 25
+        // ANGLES RECTANGULAIRES (Suppression des borderRadius)
     },
     headerInfo: { marginBottom: 15 },
     
-    // NOUVEAU STYLE TITRE + OEIL
     titleRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        alignItems: 'center', // Aligne le texte et l'oeil verticalement
+        alignItems: 'center', 
         marginBottom: 8
     },
     drawingTitle: { 
@@ -202,12 +200,11 @@ const styles = StyleSheet.create({
         fontWeight: '900', 
         color: '#000', 
         letterSpacing: -0.5, 
-        flex: 1, // Prend toute la place sauf celle de l'oeil
+        flex: 1, 
         marginRight: 10 
     },
     eyeBtn: {
         padding: 5,
-        // Alignement fin pour matcher visuellement le Share en bas
         marginRight: -5 
     },
 
