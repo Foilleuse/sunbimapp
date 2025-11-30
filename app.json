@@ -18,7 +18,8 @@
       "buildNumber": "15",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSLocationWhenInUseUsageDescription": "This app does not use location data directly, but third-party libraries may require this permission."
+        "NSLocationWhenInUseUsageDescription": "This app does not use location data directly, but third-party libraries may require this permission.",
+        "NSCameraUsageDescription": "Allow $(PRODUCT_NAME) to access your camera to capture clouds."
       }
     },
     "android": {
@@ -29,6 +30,8 @@
       "package": "com.foilleuse.sunbimapp",
       "versionCode": 13,
       "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO"
       ]
@@ -54,6 +57,12 @@
       "eas": {
         "projectId": "6ac7da66-fe81-4d00-b064-035f9535e691"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/6ac7da66-fe81-4d00-b064-035f9535e691"
     }
   }
 }

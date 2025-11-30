@@ -47,9 +47,12 @@ export default function CameraPage() {
   };
 
   const handleZoom = (factor: number) => {
-      // On s'assure que le device supporte le zoom demandé (sécurité basique)
+      // On s'assure que le device supporte le zoom demandé
       const maxZoom = device.maxZoom || 1;
-      if (factor <= maxZoom) {
+      const minZoom = device.minZoom || 1;
+      
+      // On applique le zoom s'il est dans les bornes du téléphone
+      if (factor >= minZoom && factor <= maxZoom) {
           setZoom(factor);
       }
   };
@@ -59,7 +62,6 @@ export default function CameraPage() {
         try {
             const photo = await cameraRef.current.takePhoto({
                 flash: flash,
-                qualityPrioritization: 'speed',
                 enableShutterSound: true
             });
             Alert.alert("Photo prise !", `Chemin : ${photo.path}`);
@@ -75,14 +77,15 @@ export default function CameraPage() {
         <SunbimHeader showCloseButton={true} onClose={() => router.back()} />
 
         <View style={[styles.cameraContainer, { width: screenWidth, height: CAMERA_HEIGHT }]}>
+            {/* Suppression du GestureDetector : On utilise uniquement la CameraView simple */}
             <Camera
                 ref={cameraRef}
                 style={StyleSheet.absoluteFill}
                 device={device}
                 isActive={isActive}
                 photo={true}
-                zoom={zoom}
-                // Plus de gestures ici
+                zoom={zoom} // Piloté uniquement par les boutons
+                enableZoomGesture={false} // Désactive le zoom natif au pincement
             />
             
             {/* Overlay Flash */}
@@ -92,7 +95,7 @@ export default function CameraPage() {
                 </TouchableOpacity>
             </View>
 
-            {/* BARRE DE ZOOM (Intégrée en bas de l'image pour l'ergonomie) */}
+            {/* BARRE DE ZOOM (Boutons) */}
             <View style={styles.zoomContainer}>
                 {[1, 1.5, 2].map((z) => (
                     <TouchableOpacity 
@@ -142,10 +145,10 @@ const styles = StyleSheet.create({
       alignItems: 'center',
   },
   
-  // NOUVEAUX STYLES ZOOM
+  // STYLES ZOOM
   zoomContainer: {
       position: 'absolute',
-      bottom: 20, // Juste au dessus de la barre noire
+      bottom: 20, 
       alignSelf: 'center',
       flexDirection: 'row',
       backgroundColor: 'rgba(0,0,0,0.5)',
@@ -162,15 +165,15 @@ const styles = StyleSheet.create({
       backgroundColor: 'transparent'
   },
   zoomBtnActive: {
-      backgroundColor: 'rgba(255,255,255,0.2)', // Surbrillance légère
+      backgroundColor: 'rgba(255,255,255,0.3)', 
   },
   zoomText: {
-      color: '#CCC',
+      color: '#DDD',
       fontWeight: '600',
       fontSize: 12
   },
   zoomTextActive: {
-      color: '#FFF', // Texte blanc si actif
+      color: '#FFF', 
       fontWeight: 'bold'
   },
 
