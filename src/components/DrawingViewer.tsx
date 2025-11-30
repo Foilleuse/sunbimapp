@@ -7,7 +7,7 @@ interface DrawingViewerProps {
   imageUri: string;
   canvasData: any; 
   viewerSize: number;
-  viewerHeight?: number; // <--- NOUVELLE PROP OPTIONNELLE
+  viewerHeight?: number; // Hauteur optionnelle pour le mode plein écran
   transparentMode?: boolean;
   animated?: boolean;
   startVisible?: boolean;
@@ -26,7 +26,7 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
   imageUri, 
   canvasData, 
   viewerSize, 
-  viewerHeight, // <--- On récupère la hauteur personnalisée
+  viewerHeight,
   transparentMode = false,
   animated = false,
   startVisible = true,
@@ -37,9 +37,9 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
   const [isReady, setIsReady] = useState(false); 
   const progress = useSharedValue(animated ? 0 : (startVisible ? 1 : 0));
 
-  // --- CALCUL HAUTEUR ---
-  // Si viewerHeight est fourni (Index), on l'utilise.
-  // Sinon (Feed/Gallery), on utilise le ratio 3:4.
+  // Si viewerHeight n'est pas fourni, on assume un ratio par défaut (ou carré)
+  // Pour le Feed qui est "flex", il vaudrait mieux passer la hauteur réelle via onLayout, 
+  // mais ici on va utiliser viewerHeight s'il est là (Index), sinon viewerSize * 1.33 (Feed 3:4)
   const VIEW_HEIGHT = viewerHeight || (viewerSize * (4/3));
 
   useEffect(() => {
@@ -69,10 +69,11 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
       const m = Skia.Matrix();
       if (!image) return m;
       
-      const NATIVE_HEIGHT = image.height();
-      if (NATIVE_HEIGHT === 0) return m;
+      const imgW = image.width();
+      const imgH = image.height();
+      if (imgH === 0 || imgW === 0) return m;
 
-      // Logique Auto-Center pour le Replay
+      // 1. Logique AUTO-CENTER (Zoom sur les traits)
       if (autoCenter && skiaPaths.length > 0) {
           const combinedPath = Skia.Path.Make();
           skiaPaths.forEach((p: any) => combinedPath.addPath(p.skPath));
@@ -92,13 +93,19 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
           }
       }
 
-      // Mode Fit Cover : Remplir la zone définie
-      // L'échelle doit être suffisante pour couvrir viewerSize ET VIEW_HEIGHT
-      const scaleX = viewerSize / image.width();
-      const scaleY = VIEW_HEIGHT / image.height();
-      const scale = Math.max(scaleX, scaleY); // On prend le max pour couvrir (cover)
+      // 2. Logique FIT COVER + CENTER (Correction de l'alignement)
+      // On calcule l'échelle pour couvrir toute la zone (comme le CSS object-fit: cover)
+      const scaleW = viewerSize / imgW;
+      const scaleH = VIEW_HEIGHT / imgH;
+      const scale = Math.max(scaleW, scaleH);
 
+      // On calcule le décalage pour CENTRER l'image (comme le Canvas de dessin)
+      const dx = (viewerSize - imgW * scale) / 2;
+      const dy = (VIEW_HEIGHT - imgH * scale) / 2;
+
+      m.translate(dx, dy);
       m.scale(scale, scale);
+      
       return m;
 
   }, [image, viewerSize, VIEW_HEIGHT, autoCenter, skiaPaths]);

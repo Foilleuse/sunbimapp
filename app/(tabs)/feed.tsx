@@ -5,13 +5,14 @@ import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
 
+// Import conditionnel PagerView pour le web
 let PagerView: any;
 if (Platform.OS !== 'web') {
     try { PagerView = require('react-native-pager-view').default; } catch (e) { PagerView = View; }
 } else { PagerView = View; }
 
-// On passe canvasHeight en prop pour gérer le plein écran
-const FeedCard = memo(({ drawing, canvasSize, canvasHeight, index, currentIndex }: { drawing: any, canvasSize: number, canvasHeight: number, index: number, currentIndex: number }) => {
+// --- COMPOSANT CARTE MÉMOÏSÉ (Version Standard 3:4) ---
+const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: any, canvasSize: number, index: number, currentIndex: number }) => {
     const [isLiked, setIsLiked] = useState(false);
     
     const likesCount = drawing.likes_count || 0;
@@ -19,22 +20,23 @@ const FeedCard = memo(({ drawing, canvasSize, canvasHeight, index, currentIndex 
     const author = drawing.users;
 
     const isActive = index === currentIndex; 
+    
+    // Logique stricte : Si futur, on ne rend RIEN.
     const shouldRenderDrawing = isActive;
 
     return (
         <View style={styles.cardContainer}>
-            {/* CORRECTION : On utilise la hauteur totale de l'écran (Plein écran) */}
-            <View style={{ width: canvasSize, height: canvasHeight, backgroundColor: 'transparent' }}>
+            {/* RETOUR AU FORMAT 3:4 */}
+            <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent' }}>
                 {shouldRenderDrawing && (
                     <DrawingViewer
                         key={`${drawing.id}-${isActive}`} 
                         imageUri={drawing.cloud_image_url}
                         canvasData={drawing.canvas_data}
                         viewerSize={canvasSize}
-                        // IMPORTANT : On passe la hauteur pour que le ratio soit correct
-                        viewerHeight={canvasHeight}
                         transparentMode={true} 
-                        animated={true} 
+                        
+                        animated={isActive} 
                         startVisible={false} 
                     />
                 )}
@@ -80,8 +82,7 @@ export default function FeedPage() {
     const [drawings, setDrawings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [currentIndex, setCurrentIndex] = useState(0);
-    // Récupération des dimensions écran
-    const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+    const { width: screenWidth } = Dimensions.get('window');
 
     useEffect(() => { fetchTodaysFeed(); }, []);
 
@@ -112,9 +113,9 @@ export default function FeedPage() {
         <View style={styles.container}>
             <SunbimHeader showCloseButton={false} />
             <View style={{ flex: 1, position: 'relative' }}>
-                {/* Image de fond en plein écran (cover) pour matcher le canvas */}
+                {/* Image de fond en 3:4 aussi */}
                 {backgroundUrl && (
-                    <View style={{ position: 'absolute', top: 0, width: screenWidth, height: screenHeight, zIndex: -1 }}>
+                    <View style={{ position: 'absolute', top: 0, width: screenWidth, aspectRatio: 3/4, zIndex: -1 }}>
                        <Image source={{uri: backgroundUrl}} style={{width: '100%', height: '100%'}} resizeMode="cover" />
                     </View>
                 )}
@@ -130,8 +131,7 @@ export default function FeedPage() {
                             <View key={drawing.id} style={{ flex: 1 }}>
                                 <FeedCard 
                                     drawing={drawing} 
-                                    canvasSize={screenWidth}
-                                    canvasHeight={screenHeight} // On passe la hauteur écran
+                                    canvasSize={screenWidth} 
                                     index={index}
                                     currentIndex={currentIndex}
                                 />
