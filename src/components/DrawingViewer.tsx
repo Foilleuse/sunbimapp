@@ -47,7 +47,6 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
     } else {
         progress.value = startVisible ? 1 : 0;
     }
-    // Délai minimal pour s'assurer que layout est prêt
     const timer = setTimeout(() => setIsReady(true), 50);
     return () => clearTimeout(timer);
   }, [animated, startVisible]);
@@ -65,14 +64,13 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
     })).filter((p: any) => p.skPath !== null);
   }, [canvasData]);
 
-  // --- NOUVELLE LOGIQUE DE TRANSFORMATION (Array) ---
+  // --- LOGIQUE D'ALIGNEMENT CORRIGÉE ---
   const transforms = useMemo(() => {
       if (!image) return [];
       
       const imgW = image.width();
       const imgH = image.height();
       
-      // 1. Logique AUTO-CENTER (Zoom sur les traits) - Pas changée
       if (autoCenter && skiaPaths.length > 0) {
           const combinedPath = Skia.Path.Make();
           skiaPaths.forEach((p: any) => combinedPath.addPath(p.skPath));
@@ -80,36 +78,24 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
           
           if (bounds.width > 10 && bounds.height > 10) {
               const padding = 40;
-              const targetSize = viewerSize - padding;
-              const focusScale = Math.min(targetSize / Math.max(bounds.width, bounds.height), 5);
-
+              const focusScale = Math.min((viewerSize - padding) / Math.max(bounds.width, bounds.height), 5);
               const tx = (viewerSize - bounds.width * focusScale) / 2 - bounds.x * focusScale;
               const ty = (VIEW_HEIGHT - bounds.height * focusScale) / 2 - bounds.y * focusScale;
-
               return [{ translateX: tx }, { translateY: ty }, { scale: focusScale }];
           }
       }
 
-      // 2. Logique FIT COVER (Standard)
-      // On calcule l'échelle nécessaire pour couvrir toute la zone
+      // Logique FIT COVER + CENTER (Miroir de DrawingCanvas)
       const scaleW = viewerSize / imgW;
       const scaleH = VIEW_HEIGHT / imgH;
       const scale = Math.max(scaleW, scaleH);
 
-      // On centre l'image (si l'image est plus large que la zone, dx sera négatif, ce qui est correct)
       const scaledW = imgW * scale;
       const scaledH = imgH * scale;
-      
       const translateX = (viewerSize - scaledW) / 2;
       const translateY = (VIEW_HEIGHT - scaledH) / 2;
 
-      // On retourne un tableau de transforms (Ordre: Translate puis Scale est géré par Skia comme T * S)
-      // C'est exactement le même format que DrawingCanvas
-      return [
-          { translateX },
-          { translateY },
-          { scale }
-      ];
+      return [{ translateX }, { translateY }, { scale }];
 
   }, [image, viewerSize, VIEW_HEIGHT, autoCenter, skiaPaths]);
 
@@ -121,7 +107,6 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
   return (
     <View style={[styles.container, {width: viewerSize, height: VIEW_HEIGHT, overflow: 'hidden'}]}>
       <Canvas style={{ flex: 1 }}>
-        {/* On applique la transformation au GROUPE entier (Image + Traits) */}
         <Group transform={transforms}>
           {!transparentMode && (
               <SkiaImage
@@ -129,7 +114,7 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
                 x={0} y={0}
                 width={image.width()} 
                 height={image.height()} 
-                // Pas de fit="cover" ici, on gère la taille via le Group Scale
+                // Important : on n'utilise pas fit="cover" ici car on le fait manuellement avec transforms
               />
           )}
           
