@@ -10,7 +10,7 @@
     "web": "expo start --web",
     "test": "jest --watchAll",
     "lint": "expo lint",
-    "deploy": "git add . && git commit -m 'Auto-update' --allow-empty && git push && npx eas-cli update --branch sunbim --message 'Mise à jour rapide'"
+    "deploy": "git add . && git commit -m 'Auto-update' --allow-empty && git push && npx eas-cli update --branch production --message 'Mise à jour rapide'"
   },
   "jest": {
     "preset": "jest-expo"
