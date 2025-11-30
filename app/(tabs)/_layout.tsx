@@ -37,10 +37,11 @@ export default function TabLayout() {
         }}
       />
 
-      {/* 3. CAMERA (Redirection vers Index) */}
+      {/* 3. CAMERA (Nouvelle fonctionnalité) */}
       <Tabs.Screen
-        name="camera_dummy" 
+        name="camera" // Pointe maintenant vers camera.tsx
         options={{
+          // On garde le style bouton central proéminent
           tabBarIcon: () => (
             <View style={{
               width: 56, height: 56, borderRadius: 28,
@@ -53,12 +54,7 @@ export default function TabLayout() {
             </View>
           ),
         }}
-        listeners={() => ({
-          tabPress: (e) => {
-            e.preventDefault(); 
-            router.push('/');   
-          },
-        })}
+        // PLUS DE LISTENER DE REDIRECTION ICI
       />
 
       {/* 4. MESSAGES */}
@@ -69,7 +65,7 @@ export default function TabLayout() {
         }}
       />
 
-      {/* 5. PROFIL (Anciennement Stats) */}
+      {/* 5. PROFIL */}
       <Tabs.Screen
         name="profile"
         options={{
