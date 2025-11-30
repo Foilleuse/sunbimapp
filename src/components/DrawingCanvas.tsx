@@ -1,7 +1,7 @@
 import React, { forwardRef, useImperativeHandle, useState, useMemo, useRef } from 'react';
 import { StyleSheet, View, Platform, Dimensions, PanResponder, ActivityIndicator } from 'react-native';
 import {
-  Canvas, Path, useImage, Image as SkiaImage, Group, Skia, SkPath, BlurMask
+  Canvas, Path, useImage, Image as SkiaImage, Group, Skia, SkPath
 } from '@shopify/react-native-skia';
 
 interface DrawingCanvasProps {
@@ -175,9 +175,13 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
           const { locationX, locationY } = evt.nativeEvent;
           const x = (locationX - transform.current.translateX) / transform.current.scale;
           const y = (locationY - transform.current.translateY) / transform.current.scale;
+          
+          // EFFET BEZIER (Lissage)
+          // On utilise le point médian pour créer une courbe quadratique fluide
           const xMid = (lastPoint.current.x + x) / 2;
           const yMid = (lastPoint.current.y + y) / 2;
           currentPathObj.quadTo(lastPoint.current.x, lastPoint.current.y, xMid, yMid);
+          
           lastPoint.current = { x, y };
           setCurrentPathObj(currentPathObj); forceUpdate();
         }
@@ -227,17 +231,11 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
                   if (!path) return null;
                   const adjustedWidth = p.width / baseScaleRef.current;
                   return (
-                    <Path key={index} path={path} color={p.isEraser ? "#000" : p.color} style="stroke" strokeWidth={adjustedWidth} strokeCap="round" strokeJoin="round" blendMode={p.isEraser ? "clear" : "srcOver"}>
-                        {/* EFFET PLUME : Blur léger sur chaque trait */}
-                        <BlurMask blur={1} style="normal" />
-                    </Path>
+                    <Path key={index} path={path} color={p.isEraser ? "#000" : p.color} style="stroke" strokeWidth={adjustedWidth} strokeCap="round" strokeJoin="round" blendMode={p.isEraser ? "clear" : "srcOver"} />
                   );
                 })}
                 {currentPathObj && (
-                  <Path path={currentPathObj} color={isEraserMode ? "#000" : strokeColor} style="stroke" strokeWidth={strokeWidth / baseScaleRef.current} strokeCap="round" strokeJoin="round" blendMode={isEraserMode ? "clear" : "srcOver"}>
-                        {/* EFFET PLUME : Blur léger sur le trait en cours */}
-                        <BlurMask blur={1} style="normal" />
-                  </Path>
+                  <Path path={currentPathObj} color={isEraserMode ? "#000" : strokeColor} style="stroke" strokeWidth={strokeWidth / baseScaleRef.current} strokeCap="round" strokeJoin="round" blendMode={isEraserMode ? "clear" : "srcOver"} />
                 )}
               </Group>
             </Group>
