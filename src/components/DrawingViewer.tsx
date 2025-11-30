@@ -36,9 +36,7 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
   const image = useImage(imageUri); 
   const [isReady, setIsReady] = useState(false); 
   
-  // Valeurs d'animation
   const progress = useSharedValue(animated ? 0 : (startVisible ? 1 : 0));
-  // NOUVEAU : Opacité pour le fade-in
   const opacity = useSharedValue(animated ? 0 : 1);
 
   // --- DIMENSIONS DE REFERENCE ---
@@ -52,12 +50,11 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
 
   useEffect(() => {
     if (animated) {
-        // Reset
         progress.value = 0;
         opacity.value = 0;
 
-        // 1. Fade In très court (200ms) pour une entrée douce
-        opacity.value = withTiming(1, { duration: 200 });
+        // 1. Fade In plus long (600ms) pour être bien visible
+        opacity.value = withTiming(1, { duration: 600 });
 
         // 2. Animation du tracé (Lineaire, 2200ms)
         progress.value = withTiming(1, { 
@@ -139,7 +136,6 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
           )}
           
           {isReady && (
-            // AJOUT : On applique l'opacité (fade-in) sur le groupe de traits
             <Group layer={true} opacity={opacity}> 
             {skiaPaths.map((p: any, index: number) => (
               <Path
