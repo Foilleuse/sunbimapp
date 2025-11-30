@@ -4,40 +4,33 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import { Cloud } from 'lucide-react-native';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
-import { supabase } from '../../src/lib/supabaseClient';
-import { useAuth } from '../../src/contexts/AuthContext';
 
 export default function CameraPage() {
-  const { user } = useAuth();
-  const router = useRouter();
-  const cameraRef = useRef<CameraView>(null);
-
-  // Permissions : Seulement la caméra maintenant
-  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
-  
-  // États
+  const [permission, requestPermission] = useCameraPermissions();
   const [zoom, setZoom] = useState(0);
-  const [isUploading, setIsUploading] = useState(false);
+  const [isTakingPhoto, setIsTakingPhoto] = useState(false); // État pour éviter le double-clic
+  const cameraRef = useRef<CameraView>(null);
+  const router = useRouter();
 
   const { width: screenWidth } = Dimensions.get('window');
   const CAMERA_HEIGHT = screenWidth * (4 / 3);
 
   useEffect(() => {
-    (async () => {
-        if (!cameraPermission?.granted) await requestCameraPermission();
-    })();
-  }, []);
+    if (permission && !permission.granted) {
+      requestPermission();
+    }
+  }, [permission]);
 
-  if (!cameraPermission) {
+  if (!permission) {
     return <View style={styles.container}><ActivityIndicator size="large" color="#fff" /></View>;
   }
 
-  if (!cameraPermission.granted) {
+  if (!permission.granted) {
     return (
       <View style={styles.container}>
-        <Text style={styles.message}>Permission caméra nécessaire.</Text>
-        <TouchableOpacity style={styles.permissionBtn} onPress={requestCameraPermission}>
-          <Text style={styles.permissionText}>Autoriser</Text>
+        <Text style={styles.message}>Permission caméra requise.</Text>
+        <TouchableOpacity style={styles.permissionBtn} onPress={requestPermission}>
+          <Text style={styles.permissionText}>Accorder</Text>
         </TouchableOpacity>
       </View>
     );
@@ -52,71 +45,31 @@ export default function CameraPage() {
       }
   };
 
-  const uploadToSupabase = async (uri: string) => {
-      if (!user) {
-          Alert.alert("Erreur", "Vous devez être connecté pour envoyer un nuage.");
-          return;
-      }
-
-      setIsUploading(true);
-      try {
-          // Suppression de la logique de localisation ici
-
-          const response = await fetch(uri);
-          const blob = await response.blob();
-          const fileExt = uri.split('.').pop();
-          const fileName = `${user.id}/${Date.now()}.${fileExt}`;
-          const filePath = `${fileName}`;
-
-          const { error: uploadError } = await supabase.storage
-              .from('cloud-submissions')
-              .upload(filePath, blob);
-
-          if (uploadError) throw uploadError;
-
-          const { data: { publicUrl } } = supabase.storage
-              .from('cloud-submissions')
-              .getPublicUrl(filePath);
-
-          // Insertion sans lat/long
-          const { error: dbError } = await supabase
-              .from('cloud_submissions')
-              .insert({
-                  user_id: user.id,
-                  image_url: publicUrl,
-                  // latitude et longitude retirés
-                  status: 'pending'
-              });
-
-          if (dbError) throw dbError;
-
-          Alert.alert("Succès !", "Ton nuage a été envoyé.", [
-              { text: "Super", onPress: () => router.back() }
-          ]);
-
-      } catch (e: any) {
-          console.error("Upload error:", e);
-          Alert.alert("Erreur d'envoi", e.message || "Impossible d'envoyer le nuage.");
-      } finally {
-          setIsUploading(false);
-      }
-  };
-
   const takePicture = async () => {
-    if (cameraRef.current && !isUploading) {
+    if (cameraRef.current && !isTakingPhoto) {
+        setIsTakingPhoto(true); // On verrouille le bouton
         try {
             const photo = await cameraRef.current.takePictureAsync({
-                quality: 0.7,
+                quality: 0.8,
                 base64: false,
-                skipProcessing: true,
-                shutterSound: true
+                skipProcessing: true, 
+                shutterSound: true,
             });
             
-            if (photo) {
-                await uploadToSupabase(photo.uri);
+            // VÉRIFICATION STRICTE ICI
+            if (photo && photo.uri) {
+                console.log("Photo capturée :", photo.uri);
+                Alert.alert("Photo prise !", `Chemin : ${photo.uri}`);
+                // Ici, vous ajouterez la logique d'envoi ou de navigation
+            } else {
+                throw new Error("Aucune image retournée par la caméra.");
             }
-        } catch (e) {
+
+        } catch (e: any) {
             console.error("Erreur capture:", e);
+            Alert.alert("Erreur", e.message || "Impossible de prendre la photo.");
+        } finally {
+            setIsTakingPhoto(false); // On déverrouille
         }
     }
   };
@@ -131,8 +84,8 @@ export default function CameraPage() {
                 style={StyleSheet.absoluteFill}
                 facing="back"
                 zoom={zoom}
-                flash="off"
                 animateShutter={false}
+                flash="off" 
             />
             
             <View style={styles.zoomContainer}>
@@ -156,23 +109,20 @@ export default function CameraPage() {
                     );
                 })}
             </View>
-
-            {isUploading && (
-                <View style={styles.loadingOverlay}>
-                    <ActivityIndicator size="large" color="#FFF" />
-                    <Text style={styles.loadingText}>Envoi du nuage...</Text>
-                </View>
-            )}
         </View>
 
         <View style={styles.controlsContainer}>
             <TouchableOpacity 
-                style={[styles.captureBtn, isUploading && { opacity: 0.5 }]} 
+                style={[styles.captureBtn, isTakingPhoto && { opacity: 0.5 }]} 
                 onPress={takePicture} 
                 activeOpacity={0.7}
-                disabled={isUploading}
+                disabled={isTakingPhoto}
             >
-                <Cloud color="#FFF" size={72} fill="#FFF" />
+                {isTakingPhoto ? (
+                    <ActivityIndicator color="#FFF" />
+                ) : (
+                    <Cloud color="#FFF" size={72} fill="#FFF" />
+                )}
             </TouchableOpacity>
         </View>
     </View>
@@ -188,18 +138,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: '#111',
     position: 'relative',
-  },
-  loadingOverlay: {
-      ...StyleSheet.absoluteFillObject,
-      backgroundColor: 'rgba(0,0,0,0.7)',
-      justifyContent: 'center',
-      alignItems: 'center',
-      zIndex: 50
-  },
-  loadingText: {
-      color: '#FFF',
-      marginTop: 10,
-      fontWeight: '600'
   },
   message: { textAlign: 'center', color: '#FFF', marginTop: 100 },
   permissionBtn: {
