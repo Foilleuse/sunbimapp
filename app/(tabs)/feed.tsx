@@ -5,39 +5,36 @@ import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
 
+// Import conditionnel PagerView
 let PagerView: any;
 if (Platform.OS !== 'web') {
     try { PagerView = require('react-native-pager-view').default; } catch (e) { PagerView = View; }
 } else { PagerView = View; }
 
-const FeedCard = memo(({ drawing, canvasSize, canvasHeight, index, currentIndex }: { drawing: any, canvasSize: number, canvasHeight: number, index: number, currentIndex: number }) => {
+const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: any, canvasSize: number, index: number, currentIndex: number }) => {
     const [isLiked, setIsLiked] = useState(false);
-    // AJOUT : État pour détecter le maintien du doigt
-    const [isHolding, setIsHolding] = useState(false);
+    const [isHolding, setIsHolding] = useState(false); // État pour le "Hold-to-reveal"
     
     const likesCount = drawing.likes_count || 0;
     const commentsCount = drawing.comments_count || 0;
     const author = drawing.users;
 
     const isActive = index === currentIndex; 
+    
+    // Logique stricte : Si futur, on ne rend RIEN (pas de composant = pas de flash).
     const shouldRenderDrawing = isActive;
 
     return (
         <View style={styles.cardContainer}>
             
-            {/* AJOUT : Pressable pour gérer le "Hold-to-Reveal"
-               onPressIn : Doigt posé -> isHolding = true
-               onPressOut : Doigt levé -> isHolding = false
-            */}
+            {/* INTERACTION : Appui long pour voir l'original */}
             <Pressable 
                 onPressIn={() => setIsHolding(true)}
                 onPressOut={() => setIsHolding(false)}
-                style={{ width: canvasSize, height: canvasHeight, backgroundColor: 'transparent' }}
+                // FORMAT RESTAURÉ : 3:4 (aspectRatio: 0.75)
+                style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent' }}
             >
-                {/* AJOUT : On applique l'opacité ici. 
-                   Si isHolding est vrai, opacity = 0 (dessin invisible).
-                   Sinon opacity = 1.
-                */}
+                {/* Opacité : 0 si on maintient le doigt (voir l'image), 1 sinon */}
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
                         <DrawingViewer
@@ -45,9 +42,10 @@ const FeedCard = memo(({ drawing, canvasSize, canvasHeight, index, currentIndex 
                             imageUri={drawing.cloud_image_url}
                             canvasData={drawing.canvas_data}
                             viewerSize={canvasSize}
-                            viewerHeight={canvasHeight}
+                            // On ne passe pas viewerHeight ici, le Viewer utilisera son défaut 3:4
                             transparentMode={true} 
-                            animated={true} 
+                            
+                            animated={isActive} 
                             startVisible={false} 
                         />
                     )}
@@ -94,7 +92,7 @@ export default function FeedPage() {
     const [drawings, setDrawings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [currentIndex, setCurrentIndex] = useState(0);
-    const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+    const { width: screenWidth } = Dimensions.get('window');
 
     useEffect(() => { fetchTodaysFeed(); }, []);
 
@@ -125,9 +123,9 @@ export default function FeedPage() {
         <View style={styles.container}>
             <SunbimHeader showCloseButton={false} />
             <View style={{ flex: 1, position: 'relative' }}>
-                {/* Image de fond en plein écran */}
+                {/* Image de fond en 3:4 pour correspondre aux cartes */}
                 {backgroundUrl && (
-                    <View style={{ position: 'absolute', top: 0, width: screenWidth, height: screenHeight, zIndex: -1 }}>
+                    <View style={{ position: 'absolute', top: 0, width: screenWidth, aspectRatio: 3/4, zIndex: -1 }}>
                        <Image source={{uri: backgroundUrl}} style={{width: '100%', height: '100%'}} resizeMode="cover" />
                     </View>
                 )}
@@ -144,7 +142,6 @@ export default function FeedPage() {
                                 <FeedCard 
                                     drawing={drawing} 
                                     canvasSize={screenWidth}
-                                    canvasHeight={screenHeight}
                                     index={index}
                                     currentIndex={currentIndex}
                                 />
