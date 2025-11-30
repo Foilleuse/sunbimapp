@@ -5,7 +5,6 @@ import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
 
-// Import conditionnel PagerView
 let PagerView: any;
 if (Platform.OS !== 'web') {
     try { PagerView = require('react-native-pager-view').default; } catch (e) { PagerView = View; }
@@ -13,34 +12,25 @@ if (Platform.OS !== 'web') {
 
 const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: any, canvasSize: number, index: number, currentIndex: number }) => {
     const [isLiked, setIsLiked] = useState(false);
-    
     const likesCount = drawing.likes_count || 0;
     const commentsCount = drawing.comments_count || 0;
     const author = drawing.users;
 
     const isActive = index === currentIndex; 
-
-    // --- CORRECTION DÉFINITIVE ---
-    // On ne rend le composant de dessin QUE si c'est la carte active.
-    // Cela garantit que :
-    // 1. Les cartes futures (Next) sont vides pendant le swipe.
-    // 2. Les cartes passées (Previous) sont vides aussi si on revient dessus.
-    // Résultat : L'animation se lance proprement à chaque fois qu'on s'arrête sur une carte.
-    const shouldRenderDrawing = isActive;
+    const isFuture = index > currentIndex;
+    const shouldRenderDrawing = isActive; // On affiche que si actif pour l'animation
 
     return (
         <View style={styles.cardContainer}>
-            <View style={{ width: canvasSize, height: canvasSize, backgroundColor: 'transparent' }}>
+            {/* UPDATE: height = canvasSize * 1.33 */}
+            <View style={{ width: canvasSize, height: canvasSize * 1.33, backgroundColor: 'transparent' }}>
                 {shouldRenderDrawing && (
                     <DrawingViewer
-                        // La clé force le rechargement si nécessaire, mais avec shouldRenderDrawing c'est moins critique
                         key={`${drawing.id}-${isActive}`} 
                         imageUri={drawing.cloud_image_url}
                         canvasData={drawing.canvas_data}
                         viewerSize={canvasSize}
                         transparentMode={true} 
-                        
-                        // Puisqu'on ne l'affiche que quand isActive est true, animated est forcément true
                         animated={true} 
                         startVisible={false} 
                     />

@@ -6,12 +6,12 @@ import { SunbimHeader } from '../../src/components/SunbimHeader';
 import { useFocusEffect } from 'expo-router';
 import { Search, Heart, Cloud, CloudOff, XCircle, User, MessageCircle } from 'lucide-react-native';
 
-// --- ITEM DE LISTE OPTIMISÉ ---
 const GalleryItem = memo(({ item, itemSize, showClouds, onPress }: any) => {
     return (
         <TouchableOpacity 
             activeOpacity={0.9} onPress={() => onPress(item)}
-            style={{ width: itemSize, height: itemSize, marginBottom: 1, backgroundColor: '#F9F9F9', overflow: 'hidden' }}
+            // UPDATE: Hauteur 3:4
+            style={{ width: itemSize, height: itemSize * 1.33, marginBottom: 1, backgroundColor: '#F9F9F9', overflow: 'hidden' }}
         >
             <DrawingViewer
                 imageUri={item.cloud_image_url} 
@@ -43,7 +43,6 @@ export default function GalleryPage() {
 
     const fetchGallery = async (searchQuery = searchText) => {
         try {
-            // 1. Récupérer le nuage d'aujourd'hui
             const today = new Date().toISOString().split('T')[0];
             const { data: cloudData } = await supabase
                 .from('clouds')
@@ -51,17 +50,15 @@ export default function GalleryPage() {
                 .eq('published_for', today)
                 .maybeSingle();
 
-            // Si pas de nuage aujourd'hui, la galerie est vide
             if (!cloudData) {
                 setDrawings([]);
                 return;
             }
 
-            // 2. Récupérer SEULEMENT les dessins liés à ce nuage (filtre jour)
             let query = supabase
                 .from('drawings')
                 .select('*, users(display_name, avatar_url)') 
-                .eq('cloud_id', cloudData.id) // <--- LE FILTRE CRITIQUE EST ICI
+                .eq('cloud_id', cloudData.id) 
                 .order('created_at', { ascending: false });
 
             if (searchQuery.trim().length > 0) query = query.ilike('label', `%${searchQuery.trim()}%`);
@@ -69,12 +66,7 @@ export default function GalleryPage() {
             const { data, error } = await query;
             if (error) throw error;
             setDrawings(data || []);
-        } catch (e) { 
-            console.error(e); 
-        } finally { 
-            setLoading(false); 
-            setRefreshing(false); 
-        }
+        } catch (e) { console.error(e); } finally { setLoading(false); setRefreshing(false); }
     };
 
     useEffect(() => { fetchGallery(); }, []);
@@ -98,8 +90,6 @@ export default function GalleryPage() {
         />
     ), [showClouds, ITEM_SIZE, openViewer]);
 
-    // Filtrage local optionnel pour les Likes (si besoin plus tard)
-    // Pour l'instant on affiche tout ce qui correspond au filtre de date/recherche
     const filteredDrawings = drawings; 
 
     return (
@@ -138,7 +128,7 @@ export default function GalleryPage() {
 
                 {selectedDrawing && (
                     <View style={styles.fullScreenOverlay}>
-                        <Pressable onPressIn={() => setIsHolding(true)} onPressOut={() => setIsHolding(false)} style={{ width: screenWidth, height: screenWidth, backgroundColor: '#F0F0F0' }}>
+                        <Pressable onPressIn={() => setIsHolding(true)} onPressOut={() => setIsHolding(false)} style={{ width: screenWidth, height: screenWidth * 1.33, backgroundColor: '#F0F0F0' }}>
                             <DrawingViewer
                                 imageUri={selectedDrawing.cloud_image_url} canvasData={isHolding ? [] : selectedDrawing.canvas_data}
                                 viewerSize={screenWidth} transparentMode={!showClouds} startVisible={false} animated={true}

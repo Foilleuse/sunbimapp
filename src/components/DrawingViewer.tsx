@@ -32,25 +32,20 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
 }) => {
   
   const image = useImage(imageUri); 
-  
-  // SÉCURITÉ ANTI-FLASH :
-  // On n'affiche rien tant que le composant n'est pas parfaitement synchronisé.
   const [isReady, setIsReady] = useState(false); 
-  
-  // Initialisation de la valeur d'animation
   const progress = useSharedValue(animated ? 0 : (startVisible ? 1 : 0));
+
+  // --- NOUVEAU RATIO 3:4 ---
+  const RATIO = 4 / 3;
+  const VIEW_HEIGHT = viewerSize * RATIO;
 
   useEffect(() => {
     if (animated) {
         progress.value = 0;
-        // On lance l'animation
         progress.value = withTiming(1, { duration: 1500, easing: Easing.out(Easing.cubic) });
     } else {
         progress.value = startVisible ? 1 : 0;
     }
-    
-    // C'est ici que la magie opère :
-    // On attend que le useEffect s'exécute (donc que progress soit bien à 0) avant d'autoriser l'affichage.
     setIsReady(true);
   }, [animated, startVisible]);
 
@@ -71,7 +66,7 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
       const m = Skia.Matrix();
       if (!image) return m;
       
-      const NATIVE_SIZE = image.height();
+      const NATIVE_SIZE = image.height(); // On suppose largeur ~ hauteur ou portrait
       if (NATIVE_SIZE === 0) return m;
 
       if (autoCenter && skiaPaths.length > 0) {
@@ -81,11 +76,12 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
           const bounds = combinedPath.getBounds();
           if (bounds.width > 10 && bounds.height > 10) {
               const padding = 40;
+              // On adapte le calcul de focus pour le ratio vertical
               const targetSize = viewerSize - padding;
               const focusScale = Math.min(targetSize / Math.max(bounds.width, bounds.height), 5);
 
               const translateX = (viewerSize - bounds.width * focusScale) / 2 - bounds.x * focusScale;
-              const translateY = (viewerSize - bounds.height * focusScale) / 2 - bounds.y * focusScale;
+              const translateY = (VIEW_HEIGHT - bounds.height * focusScale) / 2 - bounds.y * focusScale;
 
               m.translate(translateX, translateY);
               m.scale(focusScale, focusScale);
@@ -93,33 +89,35 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
           }
       }
 
+      // Mode Fit Cover Standard
       const fitScale = viewerSize / NATIVE_SIZE;
       m.scale(fitScale, fitScale);
       return m;
 
-  }, [image, viewerSize, autoCenter, skiaPaths]);
+  }, [image, viewerSize, autoCenter, skiaPaths, VIEW_HEIGHT]);
 
   if (!image) {
-    if (transparentMode) return <View style={{width: viewerSize, height: viewerSize}} />;
+    if (transparentMode) return <View style={{width: viewerSize, height: VIEW_HEIGHT}} />;
     return <View style={styles.loading}><ActivityIndicator color="#000" /></View>;
   }
 
-  const SQUARE_SIZE = image.height();
+  // Dimension de base pour le dessin Skia
+  const BASE_SIZE = image.height();
 
   return (
-    <View style={[styles.container, {width: viewerSize, height: viewerSize, overflow: 'hidden'}]}>
+    <View style={[styles.container, {width: viewerSize, height: VIEW_HEIGHT, overflow: 'hidden'}]}>
       <Canvas style={{ flex: 1 }}>
         <Group matrix={matrixTransform}>
           {!transparentMode && (
               <SkiaImage
                 image={image}
                 x={0} y={0}
-                width={SQUARE_SIZE} height={SQUARE_SIZE}
-                fit="cover"
+                width={BASE_SIZE} 
+                height={BASE_SIZE * RATIO} // On étire la zone de dessin en hauteur (ratio 3:4)
+                fit="cover" // L'image va remplir cette zone proprement
               />
           )}
           
-          {/* CONDITION CRITIQUE : Si pas prêt, on n'affiche PAS les traits */}
           {isReady && (
             <Group layer={true}> 
             {skiaPaths.map((p: any, index: number) => (
@@ -147,7 +145,6 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
 export const DrawingViewer: React.FC<DrawingViewerProps> = (props) => {
   return (
     <DrawingViewerContent 
-      // Force le rechargement complet si on passe d'animé à statique pour éviter les résidus
       key={props.animated ? 'anim-mode' : 'static-mode'} 
       {...props} 
     />

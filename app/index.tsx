@@ -1,340 +1,162 @@
-import { View, Text, StyleSheet, ActivityIndicator, Alert, Modal, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Animated, Dimensions } from 'react-native';
-import { useEffect, useState, useRef } from 'react';
-import { supabase } from '../src/lib/supabaseClient';
-import { DrawingCanvas, DrawingCanvasRef } from '../src/components/DrawingCanvas';
-import { DrawingViewer } from '../src/components/DrawingViewer'; 
-import { DrawingControls } from '../src/components/DrawingControls';
-import { useRouter, useFocusEffect } from 'expo-router';
-import { useAuth } from '../src/contexts/AuthContext';
-import * as Updates from 'expo-updates';
-import React from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform, Image } from 'react-native';
+import { useEffect, useState, memo } from 'react';
+import { Heart, MessageCircle, User, Share2 } from 'lucide-react-native';
+import { supabase } from '../../src/lib/supabaseClient';
+import { DrawingViewer } from '../../src/components/DrawingViewer';
+import { SunbimHeader } from '../../src/components/SunbimHeader';
 
-interface Cloud {
-  id: string;
-  image_url: string;
-}
+let PagerView: any;
+if (Platform.OS !== 'web') {
+    try { PagerView = require('react-native-pager-view').default; } catch (e) { PagerView = View; }
+} else { PagerView = View; }
 
-const FALLBACK_CLOUD = {
-    id: 'fallback',
-    image_url: 'https://images.unsplash.com/photo-1506053420909-e828c43512bb?q=80&w=1000&auto=format&fit=crop'
-};
+const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: any, canvasSize: number, index: number, currentIndex: number }) => {
+    const [isLiked, setIsLiked] = useState(false);
+    const likesCount = drawing.likes_count || 0;
+    const commentsCount = drawing.comments_count || 0;
+    const author = drawing.users;
 
-export default function DrawPage() {
-  const router = useRouter(); 
-  const { user } = useAuth(); 
-  const { width: screenWidth } = Dimensions.get('window');
-  
-  const [cloud, setCloud] = useState<Cloud | null>(null);
-  const [loading, setLoading] = useState(true);
-  
-  const [strokeColor, setStrokeColor] = useState('#000000');
-  const [strokeWidth, setStrokeWidth] = useState(6);
-  const [isEraserMode, setIsEraserMode] = useState(false);
-  
-  // Modale Tag (Titre)
-  const [modalVisible, setModalVisible] = useState(false);
-  const [tagText, setTagText] = useState('');
-  const [isUploading, setIsUploading] = useState(false);
+    const isActive = index === currentIndex; 
+    const isFuture = index > currentIndex;
+    const shouldRenderDrawing = isActive; // On affiche que si actif pour l'animation
 
-  // Modale Auth (Connexion)
-  const [authModalVisible, setAuthModalVisible] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [isSignUp, setIsSignUp] = useState(false);
-  const [authLoading, setAuthLoading] = useState(false);
-  
-  const [replayPaths, setReplayPaths] = useState<any[] | null>(null);
-  
-  const fadeWhiteAnim = useRef(new Animated.Value(0)).current; 
-  const drawingOpacityAnim = useRef(new Animated.Value(1)).current; 
-  const textOpacityAnim = useRef(new Animated.Value(0)).current; 
-
-  const canvasRef = useRef<DrawingCanvasRef>(null);
-  const updateLabel = (Updates && Updates.updateId) ? `v.${Updates.updateId.substring(0, 6)}` : '';
-
-  useFocusEffect(
-    React.useCallback(() => {
-        checkStatusAndLoad();
-    }, [user])
-  );
-
-  // Écouteur de connexion : Si l'user se connecte via la modale, on la ferme
-  useEffect(() => {
-    if (user) {
-        setAuthModalVisible(false); // Ferme la modale auth
-        checkIfPlayedToday();       // Vérifie s'il a déjà joué
-    }
-  }, [user]);
-
-  const checkStatusAndLoad = async () => {
-    try {
-        if (!supabase) throw new Error("No Supabase");
-        const today = new Date().toISOString().split('T')[0];
-        
-        const { data: cloudData, error: cloudError } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();   
-        if (cloudError) throw cloudError;
-        const currentCloud = cloudData || FALLBACK_CLOUD;
-        
-        // Si user connecté au chargement, on vérifie le déjà joué
-        if (user && cloudData) {
-            await checkIfPlayedToday(user.id, cloudData.id);
-        }
-        setCloud(currentCloud);
-    } catch (err) {
-        console.error(err);
-        setCloud(FALLBACK_CLOUD);
-    } finally {
-        setLoading(false);
-    }
-  };
-
-  const checkIfPlayedToday = async (userId = user?.id, cloudId = cloud?.id) => {
-      if (!userId || !cloudId) return;
-      const { data: existingDrawing } = await supabase
-        .from('drawings').select('id')
-        .eq('user_id', userId).eq('cloud_id', cloudId).maybeSingle();
-
-      if (existingDrawing) {
-          console.log("🚫 Déjà joué -> Redirection Feed");
-          router.replace('/(tabs)/feed'); 
-      }
-  };
-
-  const handleClear = () => canvasRef.current?.clearCanvas();
-  const handleUndo = () => canvasRef.current?.undo();
-  const handleRedo = () => canvasRef.current?.redo();
-  const toggleEraser = () => setIsEraserMode((prev) => !prev);
-
-  const handleSharePress = () => {
-    if (!canvasRef.current) return;
-    const paths = canvasRef.current.getPaths();
-    if (!paths || paths.length === 0) { Alert.alert("Oups", "Dessine quelque chose !"); return; }
-    
-    if (!user) { 
-        // Pas connecté ? On ouvre la modale Auth locale
-        setAuthModalVisible(true);
-        return; 
-    }
-    
-    setModalVisible(true); // Connecté ? On ouvre la modale Tag
-  };
-
-  const handleAuthAction = async () => {
-    if (!email || !password) return Alert.alert("Erreur", "Remplissez tous les champs");
-    setAuthLoading(true);
-    try {
-        const { error } = isSignUp 
-            ? await supabase.auth.signUp({ email, password })
-            : await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        // Le useEffect([user]) s'occupera de fermer la modale
-    } catch (e: any) {
-        Alert.alert("Erreur", e.message);
-    } finally {
-        setAuthLoading(false);
-    }
-  };
-
-  const confirmShare = async () => {
-    if (!canvasRef.current || !cloud || !user) return;
-    const finalTag = tagText.trim();
-    if (finalTag.length === 0) return;
-
-    setIsUploading(true);
-    
-    try {
-        const pathsData = canvasRef.current.getPaths();
-        const { error: dbError } = await supabase.from('drawings').insert({
-            cloud_id: cloud.id, user_id: user.id, canvas_data: pathsData, cloud_image_url: cloud.image_url, label: finalTag, is_shared: true
-        });
-        if (dbError) throw dbError;
-
-        setModalVisible(false);
-
-        // Animation de transition blanche (Votre code original)
-        Animated.timing(fadeWhiteAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start(() => {
-            setReplayPaths(pathsData); 
-            setTimeout(() => {
-                Animated.timing(textOpacityAnim, { toValue: 1, duration: 800, useNativeDriver: true }).start();
-                setTimeout(() => {
-                    Animated.parallel([
-                        Animated.timing(drawingOpacityAnim, { toValue: 0, duration: 800, useNativeDriver: true }),
-                        Animated.timing(textOpacityAnim, { toValue: 0, duration: 800, useNativeDriver: true })
-                    ]).start(() => {
-                        router.replace({ pathname: '/(tabs)/feed', params: { justPosted: 'true' } });
-                        setTimeout(() => {
-                            fadeWhiteAnim.setValue(0); drawingOpacityAnim.setValue(1); textOpacityAnim.setValue(0);
-                            setReplayPaths(null); setTagText(''); handleClear(); setIsUploading(false);
-                        }, 1000);
-                    });
-                }, 2500); 
-            }, 1500); 
-        });
-    } catch (e: any) { Alert.alert("Erreur", e.message); setIsUploading(false); }
-  };
-
-  if (loading) return <View style={styles.container}><ActivityIndicator size="large" color="#87CEEB" /></View>;
-  if (!cloud) return <View style={styles.container}><Text style={styles.noCloudText}>Chargement...</Text></View>;
-
-  return (
-    <View style={styles.container}>
-      
-      {/* Header manuel (Pas de bouton profil ici) */}
-      <View style={styles.header}>
-        <Text style={styles.headerText}>sunbim</Text>
-        {updateLabel ? <Text style={styles.versionText}>{updateLabel}</Text> : null}
-      </View>
-
-      <View style={styles.canvasContainer}>
-        {replayPaths ? (
-            <DrawingViewer 
-                imageUri={cloud.image_url}
-                canvasData={replayPaths}
-                viewerSize={screenWidth}
-                transparentMode={false} 
-                animated={true}
-                startVisible={false}
-                autoCenter={true}
-            />
-        ) : (
-            <DrawingCanvas
-              ref={canvasRef}
-              imageUri={cloud.image_url}
-              strokeColor={strokeColor}
-              strokeWidth={strokeWidth}
-              isEraserMode={isEraserMode}
-              onClear={handleClear}
-            />
-        )}
-      </View>
-      
-      {!replayPaths && (
-          <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-            <View style={{flex: 1}} pointerEvents="none" /> 
-            <DrawingControls
-                onUndo={handleUndo} onRedo={handleRedo} onClear={handleClear}
-                strokeColor={strokeColor} onColorChange={setStrokeColor}
-                strokeWidth={strokeWidth} onStrokeWidthChange={setStrokeWidth}
-                isEraserMode={isEraserMode} toggleEraser={toggleEraser}
-                onShare={handleSharePress}
-             />
-          </View>
-      )}
-
-      {/* MODALE 1 : AUTHENTIFICATION */}
-      <Modal animationType="slide" transparent={true} visible={authModalVisible} onRequestClose={() => setAuthModalVisible(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-                <Text style={styles.modalTitle}>{isSignUp ? "Créer un compte" : "Se connecter"}</Text>
-                <Text style={styles.modalSubtitle}>Sauvegardez votre dessin pour le publier</Text>
-                
-                <TextInput 
-                    style={styles.input} placeholder="Email" placeholderTextColor="#999"
-                    value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address"
-                />
-                <TextInput 
-                    style={styles.input} placeholder="Mot de passe" placeholderTextColor="#999"
-                    value={password} onChangeText={setPassword} secureTextEntry
-                />
-
-                {/* BOUTON VALIDATION AUTH (Style validateBtn utilisé aussi pour le share) */}
-                <TouchableOpacity style={styles.validateBtn} onPress={handleAuthAction} disabled={authLoading}>
-                    {authLoading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.validateText}>{isSignUp ? "S'inscrire" : "Se connecter"}</Text>}
-                </TouchableOpacity>
-
-                <TouchableOpacity onPress={() => setIsSignUp(!isSignUp)} style={{marginTop: 15, padding: 5}}>
-                    <Text style={styles.switchText}>{isSignUp ? "J'ai déjà un compte" : "Pas encore de compte ?"}</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.cancelBtn} onPress={() => setAuthModalVisible(false)}>
-                    <Text style={styles.cancelText}>Fermer</Text>
-                </TouchableOpacity>
-            </View>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      {/* MODALE 2 : TAG DU DESSIN */}
-      <Modal animationType="fade" transparent={true} visible={modalVisible} onRequestClose={() => setModalVisible(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-                <Text style={styles.modalTitle}>Qu'as-tu vu ?</Text>
-                <Text style={styles.modalSubtitle}>Donne un titre à ton œuvre</Text>
-                
-                <TextInput 
-                    style={styles.input} 
-                    placeholder="Ex: Un dragon..." 
-                    placeholderTextColor="#999"
-                    value={tagText} 
-                    onChangeText={setTagText} 
-                    autoFocus={true} 
-                    maxLength={30} 
-                    returnKeyType="done"
-                    onSubmitEditing={confirmShare}
-                />
-
-                <TouchableOpacity style={styles.validateBtn} onPress={confirmShare} disabled={isUploading}>
-                    {isUploading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.validateText}>Publier</Text>}
-                </TouchableOpacity>
-                {!isUploading && <TouchableOpacity style={styles.cancelBtn} onPress={() => setModalVisible(false)}><Text style={styles.cancelText}>Annuler</Text></TouchableOpacity>}
-            </View>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      {/* Animation de transition blanche */}
-      <Animated.View 
-        pointerEvents="none"
-        style={[
-            StyleSheet.absoluteFill, 
-            { backgroundColor: 'white', opacity: fadeWhiteAnim, zIndex: 9999, justifyContent: 'center', alignItems: 'center' }
-        ]} 
-      >
-          {replayPaths && (
-              <Animated.View style={{ opacity: drawingOpacityAnim, width: screenWidth, alignItems: 'center' }}>
-                  <View style={{ height: screenWidth, width: screenWidth }}>
-                    <DrawingViewer 
-                        imageUri={cloud.image_url}
-                        canvasData={replayPaths}
-                        viewerSize={screenWidth}
+    return (
+        <View style={styles.cardContainer}>
+            {/* UPDATE: height = canvasSize * 1.33 */}
+            <View style={{ width: canvasSize, height: canvasSize * 1.33, backgroundColor: 'transparent' }}>
+                {shouldRenderDrawing && (
+                    <DrawingViewer
+                        key={`${drawing.id}-${isActive}`} 
+                        imageUri={drawing.cloud_image_url}
+                        canvasData={drawing.canvas_data}
+                        viewerSize={canvasSize}
                         transparentMode={true} 
-                        animated={true}
-                        startVisible={false}
-                        autoCenter={true} 
+                        animated={true} 
+                        startVisible={false} 
                     />
-                  </View>
-                  
-                  <Animated.View style={{ opacity: textOpacityAnim, marginTop: 40, alignItems: 'center' }}>
-                      <Text style={styles.finalTitle}>{tagText}</Text>
-                  </Animated.View>
-              </Animated.View>
-          )}
-      </Animated.View>
-    </View>
-  );
+                )}
+            </View>
+            
+            <View style={styles.cardInfo}>
+                <View style={styles.headerInfo}>
+                    <Text style={styles.drawingTitle}>{drawing.label || "Sans titre"}</Text>
+                    <View style={styles.userInfo}>
+                         <View style={styles.avatar}>
+                            {author?.avatar_url ? (
+                                <Image source={{uri: author.avatar_url}} style={{width:24, height:24, borderRadius:12}} />
+                            ) : (
+                                <User size={14} color="#666"/>
+                            )}
+                         </View>
+                         <Text style={styles.userName}>{author?.display_name || "Anonyme"}</Text>
+                         <Text style={styles.dateText}>• {new Date(drawing.created_at).toLocaleDateString()}</Text>
+                    </View>
+                </View>
+                <View style={styles.actionBar}>
+                    <TouchableOpacity style={styles.actionBtn} onPress={() => setIsLiked(!isLiked)}>
+                        <Heart color={isLiked ? "#FF3B30" : "#000"} fill={isLiked ? "#FF3B30" : "transparent"} size={28} />
+                        <Text style={styles.actionText}>{likesCount + (isLiked ? 1 : 0)}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.actionBtn}>
+                        <MessageCircle color="#000" size={28} />
+                        <Text style={styles.actionText}>{commentsCount}</Text>
+                    </TouchableOpacity>
+                    <View style={{flex: 1}} /> 
+                    <TouchableOpacity><Share2 color="#000" size={24} /></TouchableOpacity>
+                </View>
+            </View>
+        </View>
+    );
+}, (prev, next) => {
+    return prev.drawing.id === next.drawing.id && 
+           prev.index === next.index && 
+           prev.currentIndex === next.currentIndex;
+});
+
+export default function FeedPage() {
+    const [drawings, setDrawings] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [currentIndex, setCurrentIndex] = useState(0);
+    const { width: screenWidth } = Dimensions.get('window');
+
+    useEffect(() => { fetchTodaysFeed(); }, []);
+
+    const fetchTodaysFeed = async () => {
+        try {
+            const today = new Date().toISOString().split('T')[0];
+            const { data: cloudData } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();
+            
+            if (cloudData) {
+                const { data: drawingsData, error: drawingsError } = await supabase
+                    .from('drawings')
+                    .select('*, users(display_name, avatar_url)') 
+                    .eq('cloud_id', cloudData.id)
+                    .order('created_at', { ascending: false })
+                    .limit(20);
+
+                if (drawingsError) throw drawingsError;
+                setDrawings(drawingsData || []);
+            }
+        } catch (e) { console.error(e); } finally { setLoading(false); }
+    };
+
+    if (loading) return <View style={styles.loadingContainer}><ActivityIndicator color="#000" size="large" /></View>;
+    
+    const backgroundUrl = drawings.length > 0 ? drawings[0].cloud_image_url : null;
+
+    return (
+        <View style={styles.container}>
+            <SunbimHeader showCloseButton={false} />
+            <View style={{ flex: 1, position: 'relative' }}>
+                {backgroundUrl && (
+                    <View style={{ position: 'absolute', top: 0, width: screenWidth, height: screenWidth, zIndex: -1 }}>
+                       <Image source={{uri: backgroundUrl}} style={{width: screenWidth, height: screenWidth}} resizeMode="cover" />
+                    </View>
+                )}
+                
+                {drawings.length > 0 ? (
+                    <PagerView 
+                        style={{ flex: 1 }} 
+                        initialPage={0} 
+                        onPageSelected={(e: any) => setCurrentIndex(e.nativeEvent.position)}
+                        offscreenPageLimit={1} 
+                    >
+                        {drawings.map((drawing, index) => (
+                            <View key={drawing.id} style={{ flex: 1 }}>
+                                <FeedCard 
+                                    drawing={drawing} 
+                                    canvasSize={screenWidth} 
+                                    index={index}
+                                    currentIndex={currentIndex}
+                                />
+                            </View>
+                        ))}
+                    </PagerView>
+                ) : (
+                    <View style={styles.centerBox}><Text style={styles.text}>La galerie est vide.</Text></View>
+                )}
+            </View>
+        </View>
+    );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
-  canvasContainer: { width: '100%', height: '100%', backgroundColor: '#000' },
-  header: { position: 'absolute', top: 0, left: 0, right: 0, paddingTop: 60, paddingBottom: 15, alignItems: 'center', zIndex: 10, pointerEvents: 'none' },
-  headerText: { fontSize: 32, fontWeight: '900', color: '#FFFFFF', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 0 },
-  versionText: { fontSize: 10, color: 'rgba(255,255,255,0.5)', marginTop: 2, textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 1 },
-  noCloudText: { fontSize: 18, color: '#666', textAlign: 'center' },
-  errorText: { color: 'red', textAlign: 'center' },
-  
-  // Styles Modales
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' },
-  modalContent: { width: '85%', backgroundColor: '#FFF', borderRadius: 20, padding: 25, alignItems: 'center' },
-  modalTitle: { fontSize: 22, fontWeight: '800', color: '#000', marginBottom: 5 },
-  modalSubtitle: { fontSize: 14, color: '#666', marginBottom: 20 },
-  input: { width: '100%', height: 50, borderWidth: 1, borderColor: '#EEE', borderRadius: 12, paddingHorizontal: 15, fontSize: 16, marginBottom: 20, backgroundColor: '#F9F9F9' },
-  
-  // Style bouton corrigé : width 100% force la largeur
-  validateBtn: { width: '100%', height: 50, backgroundColor: '#000', borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
-  validateText: { color: '#FFF', fontWeight: '700', fontSize: 16 },
-  
-  cancelBtn: { padding: 10, marginTop: 5 },
-  cancelText: { color: '#999', fontWeight: '600' },
-  switchText: { color: '#666', fontSize: 14, textDecorationLine: 'underline' },
-  
-  finalTitle: { fontSize: 32, fontWeight: '900', color: '#000', textAlign: 'center', letterSpacing: -1 },
+    container: { flex: 1, backgroundColor: '#FFFFFF' },
+    loadingContainer: { flex: 1, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
+    centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    text: { color: '#666', fontSize: 16 },
+    cardContainer: { flex: 1 },
+    cardInfo: {
+        flex: 1, backgroundColor: '#FFFFFF', marginTop: -20, paddingHorizontal: 20, paddingTop: 25,
+        shadowColor: "#000", shadowOffset: {width: 0, height: -4}, shadowOpacity: 0.05, shadowRadius: 4, elevation: 5
+    },
+    headerInfo: { marginBottom: 20 },
+    drawingTitle: { fontSize: 28, fontWeight: '900', color: '#000', letterSpacing: -0.5, marginBottom: 8 },
+    userInfo: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    avatar: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#F0F0F0', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
+    userName: { fontSize: 14, fontWeight: '600', color: '#333' },
+    dateText: { fontSize: 14, color: '#999' },
+    actionBar: { flexDirection: 'row', alignItems: 'center', gap: 25 },
+    actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    actionText: { fontSize: 16, fontWeight: '600', color: '#000' },
 });
