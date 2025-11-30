@@ -1,11 +1,10 @@
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform, Image, Pressable } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform, Image } from 'react-native';
 import { useEffect, useState, memo } from 'react';
-import { Heart, MessageCircle, User, Share2 } from 'lucide-react-native';
+import { Heart, MessageCircle, User, Share2, Eye } from 'lucide-react-native'; // Ajout de l'icône Eye
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
 
-// Import conditionnel PagerView
 let PagerView: any;
 if (Platform.OS !== 'web') {
     try { PagerView = require('react-native-pager-view').default; } catch (e) { PagerView = View; }
@@ -13,7 +12,7 @@ if (Platform.OS !== 'web') {
 
 const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: any, canvasSize: number, index: number, currentIndex: number }) => {
     const [isLiked, setIsLiked] = useState(false);
-    const [isHolding, setIsHolding] = useState(false); // État pour le "Hold-to-reveal"
+    const [isHolding, setIsHolding] = useState(false); // État piloté par le bouton Œil
     
     const likesCount = drawing.likes_count || 0;
     const commentsCount = drawing.comments_count || 0;
@@ -21,20 +20,14 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
 
     const isActive = index === currentIndex; 
     
-    // Logique stricte : Si futur, on ne rend RIEN (pas de composant = pas de flash).
     const shouldRenderDrawing = isActive;
 
     return (
         <View style={styles.cardContainer}>
             
-            {/* INTERACTION : Appui long pour voir l'original */}
-            <Pressable 
-                onPressIn={() => setIsHolding(true)}
-                onPressOut={() => setIsHolding(false)}
-                // FORMAT RESTAURÉ : 3:4 (aspectRatio: 0.75)
-                style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent' }}
-            >
-                {/* Opacité : 0 si on maintient le doigt (voir l'image), 1 sinon */}
+            {/* IMAGE + DESSIN (Non interactif au toucher) */}
+            <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent' }}>
+                {/* Opacité contrôlée par le bouton plus bas */}
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
                         <DrawingViewer
@@ -42,15 +35,13 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
                             imageUri={drawing.cloud_image_url}
                             canvasData={drawing.canvas_data}
                             viewerSize={canvasSize}
-                            // On ne passe pas viewerHeight ici, le Viewer utilisera son défaut 3:4
                             transparentMode={true} 
-                            
                             animated={isActive} 
                             startVisible={false} 
                         />
                     )}
                 </View>
-            </Pressable>
+            </View>
             
             <View style={styles.cardInfo}>
                 <View style={styles.headerInfo}>
@@ -67,6 +58,8 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
                          <Text style={styles.dateText}>• {new Date(drawing.created_at).toLocaleDateString()}</Text>
                     </View>
                 </View>
+
+                {/* BARRE D'ACTIONS */}
                 <View style={styles.actionBar}>
                     <TouchableOpacity style={styles.actionBtn} onPress={() => setIsLiked(!isLiked)}>
                         <Heart color={isLiked ? "#FF3B30" : "#000"} fill={isLiked ? "#FF3B30" : "transparent"} size={28} />
@@ -76,8 +69,22 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
                         <MessageCircle color="#000" size={28} />
                         <Text style={styles.actionText}>{commentsCount}</Text>
                     </TouchableOpacity>
+                    
                     <View style={{flex: 1}} /> 
-                    <TouchableOpacity><Share2 color="#000" size={24} /></TouchableOpacity>
+
+                    {/* BOUTON ŒIL (Hold to reveal) */}
+                    <TouchableOpacity 
+                        style={[styles.iconBtn, isHolding && styles.iconBtnActive]}
+                        activeOpacity={1}
+                        onPressIn={() => setIsHolding(true)}
+                        onPressOut={() => setIsHolding(false)}
+                    >
+                        <Eye color={isHolding ? "#000" : "#666"} size={28} />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={styles.iconBtn}>
+                        <Share2 color="#000" size={24} />
+                    </TouchableOpacity>
                 </View>
             </View>
         </View>
@@ -123,7 +130,6 @@ export default function FeedPage() {
         <View style={styles.container}>
             <SunbimHeader showCloseButton={false} />
             <View style={{ flex: 1, position: 'relative' }}>
-                {/* Image de fond en 3:4 pour correspondre aux cartes */}
                 {backgroundUrl && (
                     <View style={{ position: 'absolute', top: 0, width: screenWidth, aspectRatio: 3/4, zIndex: -1 }}>
                        <Image source={{uri: backgroundUrl}} style={{width: '100%', height: '100%'}} resizeMode="cover" />
@@ -141,7 +147,7 @@ export default function FeedPage() {
                             <View key={drawing.id} style={{ flex: 1 }}>
                                 <FeedCard 
                                     drawing={drawing} 
-                                    canvasSize={screenWidth}
+                                    canvasSize={screenWidth} 
                                     index={index}
                                     currentIndex={currentIndex}
                                 />
@@ -172,7 +178,9 @@ const styles = StyleSheet.create({
     avatar: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#F0F0F0', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
     userName: { fontSize: 14, fontWeight: '600', color: '#333' },
     dateText: { fontSize: 14, color: '#999' },
-    actionBar: { flexDirection: 'row', alignItems: 'center', gap: 25 },
+    actionBar: { flexDirection: 'row', alignItems: 'center', gap: 20 }, // Gap ajusté
     actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    iconBtn: { padding: 5 }, // Padding pour faciliter le touch
+    iconBtnActive: { opacity: 0.5 }, // Feedback visuel lors du press
     actionText: { fontSize: 16, fontWeight: '600', color: '#000' },
 });
