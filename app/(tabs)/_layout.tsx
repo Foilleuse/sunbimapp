@@ -39,7 +39,7 @@ export default function TabLayout() {
 
       {/* 3. CAMERA (Redirection vers Index) */}
       <Tabs.Screen
-        name="camera_dummy" // Nom arbitraire pour le fichier vide
+        name="camera_dummy" 
         options={{
           tabBarIcon: () => (
             <View style={{
@@ -69,9 +69,9 @@ export default function TabLayout() {
         }}
       />
 
-      {/* 5. STATS (Devenu Profil) */}
+      {/* 5. PROFIL (Anciennement Stats) */}
       <Tabs.Screen
-        name="stats"
+        name="profile"
         options={{
           tabBarIcon: ({ color }) => <User color={color} size={28} />,
         }}
