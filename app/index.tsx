@@ -89,9 +89,9 @@ export default function DrawPage() {
     const paths = canvasRef.current.getPaths();
     if (!paths || paths.length === 0) { Alert.alert("Oups", "Dessine quelque chose !"); return; }
     
-    // MODIFICATION ICI : Suppression de la redirection vers /profile
+    // MODIFICATION DE SÉCURITÉ : Suppression du lien vers le profil
     if (!user) { 
-        Alert.alert("Connexion requise", "Tu dois être connecté pour participer."); 
+        Alert.alert("Connexion requise", "Connecte-toi pour participer."); 
         return; 
     }
     
@@ -141,7 +141,7 @@ export default function DrawPage() {
   return (
     <View style={styles.container}>
       
-      {/* Header manuel (sans bouton profil) */}
+      {/* Header manuel en position absolue (permet à l'image de passer dessous) */}
       <View style={styles.header}>
         <Text style={styles.headerText}>sunbim</Text>
         {updateLabel ? <Text style={styles.versionText}>{updateLabel}</Text> : null}
@@ -210,6 +210,7 @@ export default function DrawPage() {
         </KeyboardAvoidingView>
       </Modal>
 
+      {/* Animation de transition blanche */}
       <Animated.View 
         pointerEvents="none"
         style={[
@@ -244,6 +245,7 @@ export default function DrawPage() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
   canvasContainer: { width: '100%', height: '100%', backgroundColor: '#000' },
+  // Header en absolute pour ne pas pousser le contenu vers le bas
   header: { position: 'absolute', top: 0, left: 0, right: 0, paddingTop: 60, paddingBottom: 15, alignItems: 'center', zIndex: 10, pointerEvents: 'none' },
   headerText: { fontSize: 32, fontWeight: '900', color: '#FFFFFF', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 0 },
   versionText: { fontSize: 10, color: 'rgba(255,255,255,0.5)', marginTop: 2, textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 1 },
