@@ -38,22 +38,22 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
   const progress = useSharedValue(animated ? 0 : (startVisible ? 1 : 0));
 
   // --- DIMENSIONS DE REFERENCE ---
-  // On suppose que le dessin a été fait sur un écran de largeur standard (le téléphone actuel)
-  // C'est la base de coordonnées des traits.
   const SCREEN_WIDTH = Dimensions.get('window').width;
   
-  // Le "Papier" virtuel 3:4 sur lequel on a dessiné
   const REF_PAPER_W = SCREEN_WIDTH;
   const REF_PAPER_H = SCREEN_WIDTH * (4/3);
 
-  // La zone cible d'affichage (Ex: 180px dans la galerie)
   const TARGET_W = viewerSize;
   const TARGET_H = viewerHeight || (viewerSize * (4/3));
 
   useEffect(() => {
     if (animated) {
         progress.value = 0;
-        progress.value = withTiming(1, { duration: 1500, easing: Easing.out(Easing.cubic) });
+        // MODIFICATION ICI : Easing.linear pour une vitesse constante
+        progress.value = withTiming(1, { 
+            duration: 2500, // Durée ajustée pour bien voir le tracé (2.5s)
+            easing: Easing.linear 
+        });
     } else {
         progress.value = startVisible ? 1 : 0;
     }
@@ -77,7 +77,7 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
   const transforms = useMemo(() => {
       if (!image) return [];
       
-      // 1. Zoom Auto (Pour le Replay centré sur l'encre)
+      // 1. Zoom Auto
       if (autoCenter && skiaPaths.length > 0) {
           const combinedPath = Skia.Path.Make();
           skiaPaths.forEach((p: any) => combinedPath.addPath(p.skPath));
@@ -94,14 +94,9 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
           }
       }
 
-      // 2. Mode STANDARD (Galerie & Feed)
-      // On calcule l'échelle nécessaire pour faire entrer notre "Papier de référence" 
-      // dans la "Zone cible" (viewerSize).
-      
-      // Ratio : PetiteCase / ÉcranLargeur
+      // 2. Mode STANDARD
       const scale = TARGET_W / REF_PAPER_W;
 
-      // On centre le résultat (normalement tx/ty seront 0 si les ratios sont respectés)
       const scaledW = REF_PAPER_W * scale;
       const scaledH = REF_PAPER_H * scale;
       
