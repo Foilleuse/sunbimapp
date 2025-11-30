@@ -1,22 +1,24 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
-import { X, User } from 'lucide-react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Alert } from 'react-native';
+import { X, User, Bell } from 'lucide-react-native'; // Ajout de Bell
 import { useRouter } from 'expo-router';
-import { useAuth } from '../contexts/AuthContext'; // On récupère le contexte
+import { useAuth } from '../contexts/AuthContext'; 
 
 interface SunbimHeaderProps {
   showCloseButton?: boolean;
   onClose?: () => void;
-  showProfileButton?: boolean; // Nouvelle option pour activer/désactiver le bouton profil
+  showProfileButton?: boolean; 
+  showNotificationButton?: boolean; // Nouvelle option pour la cloche
 }
 
 export const SunbimHeader: React.FC<SunbimHeaderProps> = ({ 
   showCloseButton, 
   onClose,
-  showProfileButton = true // Par défaut, on affiche le profil
+  showProfileButton = true,
+  showNotificationButton = false // Par défaut inactif
 }) => {
   const router = useRouter();
-  const { user, profile } = useAuth(); // On récupère l'user
+  const { user, profile } = useAuth(); 
 
   const handleClose = () => {
     if (onClose) onClose();
@@ -24,33 +26,45 @@ export const SunbimHeader: React.FC<SunbimHeaderProps> = ({
   };
 
   const handleProfile = () => {
-    router.push('/profile'); // Navigation vers la page profil
+    router.push('/profile'); 
+  };
+
+  const handleNotifications = () => {
+      Alert.alert("Notifications", "Aucune nouvelle notification.");
   };
 
   return (
     <View style={styles.headerBar}>
       <Text style={styles.headerText}>sunbim</Text>
       
-      {/* Croix de fermeture (si demandée) */}
       {showCloseButton && (
         <TouchableOpacity style={styles.leftBtn} onPress={handleClose} hitSlop={10}>
            <X color="#000" size={28} />
         </TouchableOpacity>
       )}
 
-      {/* Bouton Profil (en haut à droite) */}
-      {showProfileButton && !showCloseButton && (
-          <TouchableOpacity style={styles.rightBtn} onPress={handleProfile}>
-              {user && profile?.avatar_url ? (
-                  <Image source={{ uri: profile.avatar_url }} style={styles.avatarTiny} />
-              ) : (
-                  // Icône générique si pas connecté ou pas d'avatar
-                  <View style={[styles.avatarTiny, styles.avatarPlaceholder]}>
-                      <User color="#000" size={18} />
-                  </View>
-              )}
-          </TouchableOpacity>
-      )}
+      {/* ZONE DROITE : Soit Profil, soit Notification */}
+      <View style={styles.rightBtn}>
+          {/* Cas 1 : Bouton Notification (Prioritaire si demandé) */}
+          {showNotificationButton ? (
+              <TouchableOpacity onPress={handleNotifications} hitSlop={10}>
+                  <Bell color="#000" size={26} />
+              </TouchableOpacity>
+          ) : (
+              // Cas 2 : Bouton Profil (Si demandé et pas de croix)
+              showProfileButton && !showCloseButton && (
+                  <TouchableOpacity onPress={handleProfile}>
+                      {user && profile?.avatar_url ? (
+                          <Image source={{ uri: profile.avatar_url }} style={styles.avatarTiny} />
+                      ) : (
+                          <View style={[styles.avatarTiny, styles.avatarPlaceholder]}>
+                              <User color="#000" size={18} />
+                          </View>
+                      )}
+                  </TouchableOpacity>
+              )
+          )}
+      </View>
     </View>
   );
 };
@@ -97,6 +111,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#EEE'
+    borderColor: '#EEE',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
   }
 });
