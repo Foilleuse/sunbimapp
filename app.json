@@ -4,6 +4,7 @@
     "slug": "sunbimapp",
     "owner": "foilleuse",
     "version": "1.0.0",
+   "runtimeVersion": "exposdk:54.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "userInterfaceStyle": "light",
