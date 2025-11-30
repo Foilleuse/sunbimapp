@@ -30,12 +30,16 @@ export default function CameraPage() {
     .onUpdate((e) => {
       // Calcul du nouveau zoom basé sur l'échelle du pincement
       // e.scale : 1 = pas de changement, 2 = double, 0.5 = moitié
-      // On divise par 50 ou une constante pour adoucir la sensibilité
-      // Une autre formule classique :
-      const velocity = 0.001; // Sensibilité
-      let newZoom = startZoom.current + (e.scale - 1) * 0.5; // On multiplie l'écart par un facteur
+      
+      // On réduit la sensibilité ici pour un effet plus "lourd" / analogique
+      // (e.scale - 1) donne la variation relative.
+      // On divise par une valeur plus grande pour ralentir la progression.
+      const velocity = (e.scale - 1) * 0.15; // Facteur 0.15 pour ralentir
 
-      // Borner entre 0 et 1
+      let newZoom = startZoom.current + velocity;
+
+      // Borner entre 0 et 1 (Expo Camera gère le zoom de 0 à 1)
+      // 0 = Zoom min (1x), 1 = Zoom max (dépend du hardware, souvent 5x ou 10x)
       newZoom = Math.max(0, Math.min(1, newZoom));
       
       // Mise à jour via runOnJS car on est dans un worklet UI
