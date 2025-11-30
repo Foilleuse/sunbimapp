@@ -1,32 +1,24 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Alert } from 'react-native';
-import { X, User, Bell } from 'lucide-react-native'; // Ajout de Bell
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { X, Bell } from 'lucide-react-native'; 
 import { useRouter } from 'expo-router';
-import { useAuth } from '../contexts/AuthContext'; 
 
 interface SunbimHeaderProps {
   showCloseButton?: boolean;
   onClose?: () => void;
-  showProfileButton?: boolean; 
-  showNotificationButton?: boolean; // Nouvelle option pour la cloche
+  showNotificationButton?: boolean; 
 }
 
 export const SunbimHeader: React.FC<SunbimHeaderProps> = ({ 
   showCloseButton, 
   onClose,
-  showProfileButton = true,
-  showNotificationButton = false // Par défaut inactif
+  showNotificationButton = false 
 }) => {
   const router = useRouter();
-  const { user, profile } = useAuth(); 
 
   const handleClose = () => {
     if (onClose) onClose();
     else router.back();
-  };
-
-  const handleProfile = () => {
-    router.push('/profile'); 
   };
 
   const handleNotifications = () => {
@@ -43,26 +35,12 @@ export const SunbimHeader: React.FC<SunbimHeaderProps> = ({
         </TouchableOpacity>
       )}
 
-      {/* ZONE DROITE : Soit Profil, soit Notification */}
+      {/* ZONE DROITE : Uniquement Notification si demandé */}
       <View style={styles.rightBtn}>
-          {/* Cas 1 : Bouton Notification (Prioritaire si demandé) */}
-          {showNotificationButton ? (
+          {showNotificationButton && (
               <TouchableOpacity onPress={handleNotifications} hitSlop={10}>
                   <Bell color="#000" size={26} />
               </TouchableOpacity>
-          ) : (
-              // Cas 2 : Bouton Profil (Si demandé et pas de croix)
-              showProfileButton && !showCloseButton && (
-                  <TouchableOpacity onPress={handleProfile}>
-                      {user && profile?.avatar_url ? (
-                          <Image source={{ uri: profile.avatar_url }} style={styles.avatarTiny} />
-                      ) : (
-                          <View style={[styles.avatarTiny, styles.avatarPlaceholder]}>
-                              <User color="#000" size={18} />
-                          </View>
-                      )}
-                  </TouchableOpacity>
-              )
           )}
       </View>
     </View>
@@ -101,19 +79,4 @@ const styles = StyleSheet.create({
     right: 20,
     bottom: 15,
   },
-  avatarTiny: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-  },
-  avatarPlaceholder: {
-    backgroundColor: '#F0F0F0',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#EEE',
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-  }
 });
