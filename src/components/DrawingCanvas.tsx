@@ -31,11 +31,13 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
   ({ imageUri, strokeColor, strokeWidth, isEraserMode }, ref) => {
     if (Platform.OS === 'web') return <View />;
 
+    // Dimensions de l'écran (Viewport)
     const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
     
-    // Pour l'initialisation, on garde les dimensions écran pour le calcul du "Cover"
-    const CANVAS_WIDTH = screenWidth;
-    const CANVAS_HEIGHT = screenHeight;
+    // --- SURFACE DE DESSIN (PAPIER 3:4) ---
+    // C'est la zone "utile" de l'image. On force le ratio 3:4.
+    const PAPER_WIDTH = screenWidth;
+    const PAPER_HEIGHT = screenWidth * (4/3); // Ratio 3:4
 
     const image = useImage(imageUri);
 
@@ -49,7 +51,6 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
 
     const isInitialized = useRef(false);
     const baseScaleRef = useRef(1);
-    const imageSizeRef = useRef<{ w: number, h: number }>({ w: 1000, h: 1000 }); 
 
     const mode = useRef<'NONE' | 'DRAWING' | 'ZOOMING'>('NONE');
     const gestureStart = useRef<any>(null);
@@ -79,23 +80,22 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
       getSnapshot: async () => undefined
     }), [paths]);
 
-    // --- INITIALISATION (Cover) ---
+    // --- INITIALISATION (Cover Screen avec Papier 3:4) ---
     if (image && !isInitialized.current) {
-      const imgW = image.width();
-      const imgH = image.height();
-      imageSizeRef.current = { w: imgW, h: imgH };
-      
-      const scaleW = CANVAS_WIDTH / imgW;
-      const scaleH = CANVAS_HEIGHT / imgH;
-      const scale = Math.max(scaleW, scaleH); // Cover : on prend le max
+      // On calcule l'échelle pour que le Papier 3:4 couvre tout l'écran.
+      // Si l'écran est plus long que 3:4, on zoome pour fit la hauteur.
+      // Si l'écran est plus large (tablette), on zoome pour fit la largeur.
+      const scaleW = screenWidth / PAPER_WIDTH;
+      const scaleH = screenHeight / PAPER_HEIGHT;
+      const scale = Math.max(scaleW, scaleH); // Cover
       
       baseScaleRef.current = scale;
       
-      // Centrage initial
-      const scaledW = imgW * scale;
-      const scaledH = imgH * scale;
-      const tx = (CANVAS_WIDTH - scaledW) / 2;
-      const ty = (CANVAS_HEIGHT - scaledH) / 2;
+      // Centrage initial du Papier sur l'écran
+      const scaledW = PAPER_WIDTH * scale;
+      const scaledH = PAPER_HEIGHT * scale;
+      const tx = (screenWidth - scaledW) / 2;
+      const ty = (screenHeight - scaledH) / 2;
       
       transform.current = { scale, translateX: tx, translateY: ty };
       isInitialized.current = true;
@@ -156,31 +156,24 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
             const ratio = currentDist / start.dist;
             let newScale = start.scale * ratio;
             
-            // --- CORRECTION ZOOM ---
-            // On empêche de dézoomer en dessous de la taille de base (Cover).
-            // L'utilisateur ne verra jamais de bordure noire.
+            // ZOOM LOCK : On ne dézoome pas plus que le "Cover" initial (pas de bordure noire)
             newScale = Math.max(baseScaleRef.current, Math.min(newScale, baseScaleRef.current * 5));
 
             let newTx = currentCenter.x - (start.imageAnchorX * newScale);
             let newTy = currentCenter.y - (start.imageAnchorY * newScale);
 
-            // BORDURES (Clamping)
-            const width = imageSizeRef.current.w * newScale;
-            const height = imageSizeRef.current.h * newScale;
+            // BORDURES STRICTES (Clamping sur le PAPIER 3:4)
+            // On empêche de voir en dehors du papier 3:4
+            const width = PAPER_WIDTH * newScale;
+            const height = PAPER_HEIGHT * newScale;
             
-            // Puisque newScale >= baseScale, l'image est toujours >= écran
-            // On applique donc un clamping strict (min = écran - taille, max = 0)
-            if (width >= screenWidth) {
-                newTx = Math.min(0, Math.max(screenWidth - width, newTx));
-            } else {
-                newTx = (screenWidth - width) / 2; // Sécurité si jamais float imprécis
-            }
+            // Puisque newScale >= baseScale, le papier couvre au moins l'écran dans une dimension
+            // On clamp pour ne jamais voir le fond noir
+            if (width > screenWidth) newTx = Math.min(0, Math.max(screenWidth - width, newTx));
+            else newTx = (screenWidth - width) / 2;
 
-            if (height >= screenHeight) {
-                newTy = Math.min(0, Math.max(screenHeight - height, newTy));
-            } else {
-                newTy = (screenHeight - height) / 2;
-            }
+            if (height > screenHeight) newTy = Math.min(0, Math.max(screenHeight - height, newTy));
+            else newTy = (screenHeight - height) / 2;
 
             transform.current = { scale: newScale, translateX: newTx, translateY: newTy };
             forceUpdate();
@@ -227,13 +220,14 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
       <View style={{ width: screenWidth, height: screenHeight, backgroundColor: 'black', overflow: 'hidden' }} {...panResponder.panHandlers}>
         <Canvas style={{ flex: 1 }} pointerEvents="none">
           <Group transform={skiaTransform}>
-            {/* L'image remplit l'écran (Plein écran) */}
+            
+            {/* L'IMAGE EST CROPPÉE EN 3:4 (PAPER_WIDTH / PAPER_HEIGHT) */}
             <SkiaImage 
                 image={image} 
                 x={0} y={0} 
-                width={imageSizeRef.current.w} 
-                height={imageSizeRef.current.h} 
-                fit="fill" // On a calculé le scale nous-mêmes, donc on affiche l'image brute et on la transforme
+                width={PAPER_WIDTH} 
+                height={PAPER_HEIGHT} 
+                fit="cover" // L'image source remplit le rectangle 3:4
             />
             
             <Group layer={true}>
