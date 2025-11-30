@@ -37,8 +37,15 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
   const [isReady, setIsReady] = useState(false); 
   const progress = useSharedValue(animated ? 0 : (startVisible ? 1 : 0));
 
-  // Hauteur par défaut (3:4) si non fournie
-  const VIEW_HEIGHT = viewerHeight || (viewerSize * (4/3));
+  // --- 1. DÉFINITION DU "PAPIER" (Même logique que DrawingCanvas) ---
+  // On crée une surface virtuelle en 3:4 basée sur la largeur du viewer.
+  // C'est dans ce repère que les traits ont été enregistrés.
+  const PAPER_W = viewerSize;
+  const PAPER_H = viewerSize * (4/3);
+
+  // --- 2. DÉFINITION DE LA CIBLE (Viewport) ---
+  // Hauteur réelle d'affichage (si pas fournie, on reste en 3:4)
+  const TARGET_H = viewerHeight || PAPER_H;
 
   useEffect(() => {
     if (animated) {
@@ -64,13 +71,10 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
     })).filter((p: any) => p.skPath !== null);
   }, [canvasData]);
 
-  // --- LOGIQUE D'ALIGNEMENT CORRIGÉE ---
   const transforms = useMemo(() => {
       if (!image) return [];
       
-      const imgW = image.width();
-      const imgH = image.height();
-      
+      // Logique Auto-Center (Zoom sur l'encre)
       if (autoCenter && skiaPaths.length > 0) {
           const combinedPath = Skia.Path.Make();
           skiaPaths.forEach((p: any) => combinedPath.addPath(p.skPath));
@@ -78,43 +82,54 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
           
           if (bounds.width > 10 && bounds.height > 10) {
               const padding = 40;
+              // On calcule le zoom pour faire tenir la bounding box des traits dans le viewer
               const focusScale = Math.min((viewerSize - padding) / Math.max(bounds.width, bounds.height), 5);
+              
               const tx = (viewerSize - bounds.width * focusScale) / 2 - bounds.x * focusScale;
-              const ty = (VIEW_HEIGHT - bounds.height * focusScale) / 2 - bounds.y * focusScale;
+              const ty = (TARGET_H - bounds.height * focusScale) / 2 - bounds.y * focusScale;
+
               return [{ translateX: tx }, { translateY: ty }, { scale: focusScale }];
           }
       }
 
-      // Logique FIT COVER + CENTER (Miroir de DrawingCanvas)
-      const scaleW = viewerSize / imgW;
-      const scaleH = VIEW_HEIGHT / imgH;
+      // Logique STANDARD (Cover Screen)
+      // On doit faire rentrer notre PAPIER 3:4 dans le Viewport TARGET (Plein écran ou autre)
+      // en mode "Cover" (remplir tout).
+      
+      const scaleW = viewerSize / PAPER_W; // = 1
+      const scaleH = TARGET_H / PAPER_H;
       const scale = Math.max(scaleW, scaleH);
 
-      const scaledW = imgW * scale;
-      const scaledH = imgH * scale;
+      // Centrage
+      const scaledW = PAPER_W * scale;
+      const scaledH = PAPER_H * scale;
+      
       const translateX = (viewerSize - scaledW) / 2;
-      const translateY = (VIEW_HEIGHT - scaledH) / 2;
+      const translateY = (TARGET_H - scaledH) / 2;
 
       return [{ translateX }, { translateY }, { scale }];
 
-  }, [image, viewerSize, VIEW_HEIGHT, autoCenter, skiaPaths]);
+  }, [image, viewerSize, TARGET_H, autoCenter, skiaPaths]);
 
   if (!image) {
-    if (transparentMode) return <View style={{width: viewerSize, height: VIEW_HEIGHT}} />;
+    if (transparentMode) return <View style={{width: viewerSize, height: TARGET_H}} />;
     return <View style={styles.loading}><ActivityIndicator color="#000" /></View>;
   }
 
   return (
-    <View style={[styles.container, {width: viewerSize, height: VIEW_HEIGHT, overflow: 'hidden'}]}>
+    <View style={[styles.container, {width: viewerSize, height: TARGET_H, overflow: 'hidden'}]}>
       <Canvas style={{ flex: 1 }}>
+        {/* On transforme le groupe entier (Papier + Image + Traits) */}
         <Group transform={transforms}>
+          
+          {/* IMPORTANT : On affiche l'image DANS le cadre 3:4 (comme à la création) */}
           {!transparentMode && (
               <SkiaImage
                 image={image}
                 x={0} y={0}
-                width={image.width()} 
-                height={image.height()} 
-                // Important : on n'utilise pas fit="cover" ici car on le fait manuellement avec transforms
+                width={PAPER_W} 
+                height={PAPER_H} 
+                fit="cover" 
               />
           )}
           
