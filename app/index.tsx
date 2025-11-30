@@ -31,9 +31,17 @@ export default function DrawPage() {
   const [strokeWidth, setStrokeWidth] = useState(6);
   const [isEraserMode, setIsEraserMode] = useState(false);
   
+  // Modale Tag (Titre)
   const [modalVisible, setModalVisible] = useState(false);
   const [tagText, setTagText] = useState('');
   const [isUploading, setIsUploading] = useState(false);
+
+  // Modale Auth (Connexion)
+  const [authModalVisible, setAuthModalVisible] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [authLoading, setAuthLoading] = useState(false);
   
   const [replayPaths, setReplayPaths] = useState<any[] | null>(null);
   
@@ -50,6 +58,14 @@ export default function DrawPage() {
     }, [user])
   );
 
+  // Écouteur de connexion : Si l'user se connecte via la modale, on la ferme
+  useEffect(() => {
+    if (user) {
+        setAuthModalVisible(false); // Ferme la modale auth
+        checkIfPlayedToday();       // Vérifie s'il a déjà joué
+    }
+  }, [user]);
+
   const checkStatusAndLoad = async () => {
     try {
         if (!supabase) throw new Error("No Supabase");
@@ -59,16 +75,9 @@ export default function DrawPage() {
         if (cloudError) throw cloudError;
         const currentCloud = cloudData || FALLBACK_CLOUD;
         
+        // Si user connecté au chargement, on vérifie le déjà joué
         if (user && cloudData) {
-            const { data: existingDrawing } = await supabase
-                .from('drawings').select('id')
-                .eq('user_id', user.id).eq('cloud_id', cloudData.id).maybeSingle();
-
-            if (existingDrawing) {
-                console.log("🚫 Déjà joué -> Redirection Feed");
-                router.replace('/(tabs)/feed'); 
-                return; 
-            }
+            await checkIfPlayedToday(user.id, cloudData.id);
         }
         setCloud(currentCloud);
     } catch (err) {
@@ -77,6 +86,18 @@ export default function DrawPage() {
     } finally {
         setLoading(false);
     }
+  };
+
+  const checkIfPlayedToday = async (userId = user?.id, cloudId = cloud?.id) => {
+      if (!userId || !cloudId) return;
+      const { data: existingDrawing } = await supabase
+        .from('drawings').select('id')
+        .eq('user_id', userId).eq('cloud_id', cloudId).maybeSingle();
+
+      if (existingDrawing) {
+          console.log("🚫 Déjà joué -> Redirection Feed");
+          router.replace('/(tabs)/feed'); 
+      }
   };
 
   const handleClear = () => canvasRef.current?.clearCanvas();
@@ -89,13 +110,29 @@ export default function DrawPage() {
     const paths = canvasRef.current.getPaths();
     if (!paths || paths.length === 0) { Alert.alert("Oups", "Dessine quelque chose !"); return; }
     
-    // MODIFICATION DE SÉCURITÉ : Suppression du lien vers le profil
     if (!user) { 
-        Alert.alert("Connexion requise", "Connecte-toi pour participer."); 
+        // Pas connecté ? On ouvre la modale Auth locale
+        setAuthModalVisible(true);
         return; 
     }
     
-    setModalVisible(true);
+    setModalVisible(true); // Connecté ? On ouvre la modale Tag
+  };
+
+  const handleAuthAction = async () => {
+    if (!email || !password) return Alert.alert("Erreur", "Remplissez tous les champs");
+    setAuthLoading(true);
+    try {
+        const { error } = isSignUp 
+            ? await supabase.auth.signUp({ email, password })
+            : await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        // Le useEffect([user]) s'occupera de fermer la modale
+    } catch (e: any) {
+        Alert.alert("Erreur", e.message);
+    } finally {
+        setAuthLoading(false);
+    }
   };
 
   const confirmShare = async () => {
@@ -114,6 +151,7 @@ export default function DrawPage() {
 
         setModalVisible(false);
 
+        // Animation de transition blanche (Votre code original)
         Animated.timing(fadeWhiteAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start(() => {
             setReplayPaths(pathsData); 
             setTimeout(() => {
@@ -141,7 +179,7 @@ export default function DrawPage() {
   return (
     <View style={styles.container}>
       
-      {/* Header manuel en position absolue (permet à l'image de passer dessous) */}
+      {/* Header manuel (Pas de bouton profil ici) */}
       <View style={styles.header}>
         <Text style={styles.headerText}>sunbim</Text>
         {updateLabel ? <Text style={styles.versionText}>{updateLabel}</Text> : null}
@@ -183,7 +221,39 @@ export default function DrawPage() {
           </View>
       )}
 
-      {/* MODALE TAG */}
+      {/* MODALE 1 : AUTHENTIFICATION */}
+      <Modal animationType="slide" transparent={true} visible={authModalVisible} onRequestClose={() => setAuthModalVisible(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+                <Text style={styles.modalTitle}>{isSignUp ? "Créer un compte" : "Se connecter"}</Text>
+                <Text style={styles.modalSubtitle}>Sauvegardez votre dessin pour le publier</Text>
+                
+                <TextInput 
+                    style={styles.input} placeholder="Email" placeholderTextColor="#999"
+                    value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address"
+                />
+                <TextInput 
+                    style={styles.input} placeholder="Mot de passe" placeholderTextColor="#999"
+                    value={password} onChangeText={setPassword} secureTextEntry
+                />
+
+                {/* BOUTON VALIDATION AUTH (Style validateBtn utilisé aussi pour le share) */}
+                <TouchableOpacity style={styles.validateBtn} onPress={handleAuthAction} disabled={authLoading}>
+                    {authLoading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.validateText}>{isSignUp ? "S'inscrire" : "Se connecter"}</Text>}
+                </TouchableOpacity>
+
+                <TouchableOpacity onPress={() => setIsSignUp(!isSignUp)} style={{marginTop: 15, padding: 5}}>
+                    <Text style={styles.switchText}>{isSignUp ? "J'ai déjà un compte" : "Pas encore de compte ?"}</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.cancelBtn} onPress={() => setAuthModalVisible(false)}>
+                    <Text style={styles.cancelText}>Fermer</Text>
+                </TouchableOpacity>
+            </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* MODALE 2 : TAG DU DESSIN */}
       <Modal animationType="fade" transparent={true} visible={modalVisible} onRequestClose={() => setModalVisible(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
             <View style={styles.modalContent}>
@@ -245,20 +315,26 @@ export default function DrawPage() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
   canvasContainer: { width: '100%', height: '100%', backgroundColor: '#000' },
-  // Header en absolute pour ne pas pousser le contenu vers le bas
   header: { position: 'absolute', top: 0, left: 0, right: 0, paddingTop: 60, paddingBottom: 15, alignItems: 'center', zIndex: 10, pointerEvents: 'none' },
   headerText: { fontSize: 32, fontWeight: '900', color: '#FFFFFF', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 0 },
   versionText: { fontSize: 10, color: 'rgba(255,255,255,0.5)', marginTop: 2, textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 1 },
   noCloudText: { fontSize: 18, color: '#666', textAlign: 'center' },
   errorText: { color: 'red', textAlign: 'center' },
+  
+  // Styles Modales
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' },
   modalContent: { width: '85%', backgroundColor: '#FFF', borderRadius: 20, padding: 25, alignItems: 'center' },
   modalTitle: { fontSize: 22, fontWeight: '800', color: '#000', marginBottom: 5 },
   modalSubtitle: { fontSize: 14, color: '#666', marginBottom: 20 },
   input: { width: '100%', height: 50, borderWidth: 1, borderColor: '#EEE', borderRadius: 12, paddingHorizontal: 15, fontSize: 16, marginBottom: 20, backgroundColor: '#F9F9F9' },
+  
+  // Style bouton corrigé : width 100% force la largeur
   validateBtn: { width: '100%', height: 50, backgroundColor: '#000', borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
   validateText: { color: '#FFF', fontWeight: '700', fontSize: 16 },
-  cancelBtn: { padding: 10 },
+  
+  cancelBtn: { padding: 10, marginTop: 5 },
   cancelText: { color: '#999', fontWeight: '600' },
+  switchText: { color: '#666', fontSize: 14, textDecorationLine: 'underline' },
+  
   finalTitle: { fontSize: 32, fontWeight: '900', color: '#000', textAlign: 'center', letterSpacing: -1 },
 });
