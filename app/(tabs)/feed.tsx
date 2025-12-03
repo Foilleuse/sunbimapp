@@ -1,5 +1,4 @@
-// 1. Importer ImageBackground
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform, Image, Pressable, ImageBackground } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform, Image, Pressable } from 'react-native';
 import { useEffect, useState, memo } from 'react';
 import { Heart, MessageCircle, User, Share2, Eye } from 'lucide-react-native';
 import { supabase } from '../../src/lib/supabaseClient';
@@ -42,7 +41,6 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
     useEffect(() => {
         if (!user) return;
         const checkLikeStatus = async () => {
-            // ... (Logique checkLikeStatus inchangée)
             const { count } = await supabase
                 .from('likes')
                 .select('*', { count: 'exact', head: true })
@@ -56,7 +54,6 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
     }, [user, drawing.id]);
 
     const handleLike = async () => {
-        // ... (Logique handleLike inchangée)
         if (!user) return;
 
         const previousLiked = isLiked;
@@ -117,7 +114,6 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
                 />
             </View>
             
-            {/* styles.cardInfo est maintenant transparent (voir les styles en bas) */}
             <View style={styles.cardInfo}>
                 <View style={styles.headerInfo}>
                     <View style={styles.titleRow}>
@@ -205,7 +201,6 @@ export default function FeedPage() {
     useEffect(() => { fetchTodaysFeed(); }, []);
 
     const fetchTodaysFeed = async () => {
-        // ... (Logique fetchTodaysFeed inchangée)
         try {
             const today = new Date().toISOString().split('T')[0];
             const { data: cloudData } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();
@@ -228,7 +223,6 @@ export default function FeedPage() {
     };
 
     const handleUserPress = (targetUser: any) => {
-        // ... (Logique handleUserPress inchangée)
         if (!targetUser) return;
         if (user && targetUser.id === user.id) {
             router.push('/(tabs)/profile');
@@ -240,88 +234,65 @@ export default function FeedPage() {
 
     if (loading) return <View style={styles.loadingContainer}><ActivityIndicator color="#000" size="large" /></View>;
 
-    // 2. Définissez la source de votre image de fond
-    // Remplacez par votre asset local (ex: require('../../assets/bg.jpg')) ou une URI
-    const backgroundImageSource = require('../../assets/votre_fond_ecran.jpg'); 
-
     return (
-        // 3. Utilisation de ImageBackground comme wrapper principal
-        <ImageBackground 
-            source={backgroundImageSource} 
-            style={styles.background}
-            resizeMode="cover"
-        >
-            {/* Le View conteneur doit être transparent */}
-            <View style={styles.container}>
+        <View style={styles.container}>
+            <SunbimHeader showCloseButton={false} />
+            
+            <View style={{ flex: 1, position: 'relative' }}>
+                {/* Suppression du fond flou */}
                 
-                {/* Important: Assurez-vous que SunbimHeader est également transparent dans son propre code ! */}
-                <SunbimHeader showCloseButton={false} />
-                
-                <View style={{ flex: 1, position: 'relative' }}>
-                    {/* Suppression du fond flou */}
-                    
-                    {drawings.length > 0 ? (
-                        <PagerView 
-                            style={{ flex: 1 }} 
-                            initialPage={0} 
-                            onPageSelected={(e: any) => setCurrentIndex(e.nativeEvent.position)}
-                            offscreenPageLimit={1} 
-                        >
-                            {drawings.map((drawing, index) => (
-                                <View key={drawing.id} style={{ flex: 1 }}>
-                                    <FeedCard 
-                                        drawing={drawing} 
-                                        canvasSize={screenWidth} 
-                                        index={index}
-                                        currentIndex={currentIndex}
-                                        onUserPress={handleUserPress}
-                                    />
-                                </View>
-                            ))}
-                        </PagerView>
-                    ) : (
-                        <View style={styles.centerBox}><Text style={styles.text}>La galerie est vide.</Text></View>
-                    )}
-                </View>
-
-                {selectedUser && (
-                    <UserProfileModal
-                        visible={isProfileModalVisible}
-                        onClose={() => setIsProfileModalVisible(false)}
-                        userId={selectedUser.id}
-                        initialUser={selectedUser}
-                    />
+                {drawings.length > 0 ? (
+                    <PagerView 
+                        style={{ flex: 1 }} 
+                        initialPage={0} 
+                        onPageSelected={(e: any) => setCurrentIndex(e.nativeEvent.position)}
+                        offscreenPageLimit={1} 
+                    >
+                        {drawings.map((drawing, index) => (
+                            <View key={drawing.id} style={{ flex: 1 }}>
+                                <FeedCard 
+                                    drawing={drawing} 
+                                    canvasSize={screenWidth} 
+                                    index={index}
+                                    currentIndex={currentIndex}
+                                    onUserPress={handleUserPress}
+                                />
+                            </View>
+                        ))}
+                    </PagerView>
+                ) : (
+                    <View style={styles.centerBox}><Text style={styles.text}>La galerie est vide.</Text></View>
                 )}
             </View>
-        </ImageBackground>
+
+            {selectedUser && (
+                <UserProfileModal
+                    visible={isProfileModalVisible}
+                    onClose={() => setIsProfileModalVisible(false)}
+                    userId={selectedUser.id}
+                    initialUser={selectedUser}
+                />
+            )}
+        </View>
     );
 }
 
-// 4. Ajustement des styles
 const styles = StyleSheet.create({
-    // Nouveau style pour ImageBackground
-    background: {
-        flex: 1,
-    },
-    // MODIFICATION : Changé de '#FFFFFF' à 'transparent'
-    container: { flex: 1, backgroundColor: 'transparent' },
+    container: { flex: 1, backgroundColor: '#FFFFFF' },
     loadingContainer: { flex: 1, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     text: { color: '#666', fontSize: 16 },
     cardContainer: { flex: 1 },
     cardInfo: {
         flex: 1, 
-        // MODIFICATION : Changé de '#FFFFFF' à 'transparent'
-        backgroundColor: 'transparent', 
+        backgroundColor: '#FFFFFF', 
         marginTop: -40, 
         paddingHorizontal: 20, 
         paddingTop: 25,
-        // L'ombre peut sembler étrange sur un fond transparent. Ajustez ou retirez si nécessaire.
         shadowColor: "#000", shadowOffset: {width: 0, height: -4}, shadowOpacity: 0.05, shadowRadius: 4, elevation: 5,
     },
     headerInfo: { marginBottom: 15 },
     titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-    // NOTE : Assurez-vous que la couleur du texte est lisible sur votre fond d'écran.
     drawingTitle: { fontSize: 28, fontWeight: '900', color: '#000', letterSpacing: -0.5, flex: 1, marginRight: 10 },
     eyeBtn: { padding: 5, marginRight: -5 },
     userInfo: { flexDirection: 'row', alignItems: 'center', gap: 8 },
