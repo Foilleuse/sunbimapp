@@ -1,7 +1,6 @@
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform, Image, Pressable } from 'react-native';
 import { useEffect, useState, memo } from 'react';
 import { Heart, MessageCircle, User, Share2, Eye } from 'lucide-react-native';
-import {Hz} from 'lucide-react-native'; // Correction: Suppression import inutile si présent, sinon ignorer
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
@@ -15,8 +14,6 @@ if (Platform.OS !== 'web') {
 const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: any, canvasSize: number, index: number, currentIndex: number }) => {
     const { user } = useAuth();
     
-    // Récupération du nombre de likes depuis la relation 'likes(count)'
-    // Supabase retourne un tableau [{ count: N }] pour les requêtes de comptage relationnel
     const initialLikesCount = drawing.likes?.[0]?.count || 0;
 
     const [isLiked, setIsLiked] = useState(false);
@@ -24,20 +21,17 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
     
     const [isHolding, setIsHolding] = useState(false); 
     
-    // Pour les commentaires, on suppose une logique similaire ou un champ existant
-    // Si vous avez une relation comments(count), on pourrait faire pareil, 
-    // ici je garde comments_count s'il existe ou 0 par défaut.
     const commentsCount = drawing.comments?.[0]?.count || drawing.comments_count || 0;
     const author = drawing.users;
     const isActive = index === currentIndex; 
     const shouldRenderDrawing = isActive;
 
-    // 1. SYNCHRONISATION : Si les données changent suite à un refresh
+    // 1. SYNCHRONISATION
     useEffect(() => {
         setLikesCount(drawing.likes?.[0]?.count || 0);
     }, [drawing]);
 
-    // 2. VÉRIFICATION INITIALE DU LIKE (Est-ce que JE l'ai liké ?)
+    // 2. VÉRIFICATION INITIALE DU LIKE
     useEffect(() => {
         if (!user) return;
         const checkLikeStatus = async () => {
@@ -53,24 +47,21 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
         checkLikeStatus();
     }, [user, drawing.id]);
 
-    // 3. GESTION DU CLICK (Optimiste)
+    // 3. GESTION DU CLICK
     const handleLike = async () => {
         if (!user) return;
 
         const previousLiked = isLiked;
         const previousCount = likesCount;
 
-        // Calcul du nouveau total
         const newLikedState = !previousLiked;
         const newCount = newLikedState ? previousCount + 1 : Math.max(0, previousCount - 1);
 
-        // Mise à jour UI immédiate
         setIsLiked(newLikedState);
         setLikesCount(newCount);
 
         try {
             if (previousLiked) {
-                // Suppression du like
                 const { error } = await supabase
                     .from('likes')
                     .delete()
@@ -78,7 +69,6 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
                     .eq('drawing_id', drawing.id);
                 if (error) throw error;
             } else {
-                // Ajout du like
                 const { error } = await supabase
                     .from('likes')
                     .insert({
@@ -89,7 +79,6 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
             }
         } catch (error) {
             console.error("Erreur like:", error);
-            // Annulation en cas d'erreur (Rollback UI)
             setIsLiked(previousLiked);
             setLikesCount(previousCount);
         }
@@ -98,7 +87,18 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
     return (
         <View style={styles.cardContainer}>
             
-            <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent' }}>
+            {/* IMAGE + DESSIN */}
+            {/* Correction : On ajoute un fond gris et l'image native en background */}
+            <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: '#EEE' }}>
+                
+                {/* L'image originale (Nuage) */}
+                <Image 
+                    source={{ uri: drawing.cloud_image_url }}
+                    style={StyleSheet.absoluteFill} // Prend toute la place du conteneur
+                    resizeMode="cover"
+                />
+
+                {/* Le calque de dessin par-dessus */}
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
                         <DrawingViewer
@@ -106,7 +106,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
                             imageUri={drawing.cloud_image_url}
                             canvasData={drawing.canvas_data}
                             viewerSize={canvasSize}
-                            transparentMode={true} 
+                            transparentMode={true} // Le viewer est transparent pour laisser voir l'Image native dessous
                             animated={isActive} 
                             startVisible={false} 
                         />
@@ -191,8 +191,6 @@ export default function FeedPage() {
             const { data: cloudData } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();
             
             if (cloudData) {
-                // MODIFICATION ICI : On ajoute ', likes(count)' et ', comments(count)' à la requête select.
-                // Cela demande à Supabase de renvoyer le nombre de relations correspondantes.
                 const { data: drawingsData, error: drawingsError } = await supabase
                     .from('drawings')
                     .select('*, users(display_name, avatar_url), likes(count), comments(count)') 
