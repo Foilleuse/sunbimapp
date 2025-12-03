@@ -100,7 +100,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
                             imageUri={drawing.cloud_image_url} 
                             canvasData={drawing.canvas_data}
                             viewerSize={canvasSize}
-                            // CORRECTION : transparentMode à false pour voir le nuage DANS le viewer
+                            // Modification ici : remise à false pour afficher l'image du dessin
                             transparentMode={false} 
                             animated={isActive} 
                             startVisible={false} 
