@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Modal, Image, TouchableOpacity, FlatList, ActivityIndicator, Dimensions, Alert, Pressable, Platform, SafeAreaView } from 'react-native';
-import { X, User, UserPlus, UserCheck, Heart, MessageCircle } from 'lucide-react-native';
+import { X, User, UserPlus, UserCheck, Heart, MessageCircle, Lock } from 'lucide-react-native';
 import { supabase } from '../lib/supabaseClient';
 import { DrawingViewer } from './DrawingViewer';
 import { useAuth } from '../contexts/AuthContext';
@@ -19,20 +19,19 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
   const [drawings, setDrawings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // États pour le Follow
+  // NOUVEAU : État pour savoir si l'utilisateur courant a le droit de voir (a dessiné aujourd'hui)
+  const [canViewContent, setCanViewContent] = useState(false);
+
   const [isFollowing, setIsFollowing] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
 
-  // États pour l'agrandissement d'image
   const [selectedDrawing, setSelectedDrawing] = useState<any | null>(null);
   const [isHolding, setIsHolding] = useState(false);
   const [showComments, setShowComments] = useState(false);
   
-  // États d'interaction pour le dessin agrandi
   const [isLiked, setIsLiked] = useState(false);
   const [likesCount, setLikesCount] = useState(0);
 
-  // Configuration Grille
   const { width: screenWidth } = Dimensions.get('window');
   const SPACING = 1; 
   const NUM_COLS = 2;
@@ -40,7 +39,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
 
   useEffect(() => {
     if (visible && userId) {
-        fetchUserData();
+        checkPermissionAndFetch();
         if (currentUser && currentUser.id !== userId) {
             checkFollowStatus();
         }
@@ -49,16 +48,15 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
         setDrawings([]);
         setIsFollowing(false);
         setSelectedDrawing(null); 
+        setCanViewContent(false);
     }
   }, [visible, userId]);
 
   // Initialisation des stats quand un dessin est ouvert
   useEffect(() => {
     if (selectedDrawing && currentUser) {
-        // Init du compteur
         setLikesCount(selectedDrawing.likes?.[0]?.count || selectedDrawing.likes_count || 0);
         
-        // Vérifier si l'utilisateur a liké ce dessin
         const checkLikeStatus = async () => {
             const { count } = await supabase
                 .from('likes')
@@ -152,32 +150,71 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
     }
   };
 
-  const fetchUserData = async () => {
+  const checkPermissionAndFetch = async () => {
     try {
         setLoading(true);
 
-        const { data: profileData, error: profileError } = await supabase
+        // 1. Récupérer le profil public (toujours visible)
+        const { data: profileData } = await supabase
             .from('users') 
             .select('*')
             .eq('id', userId)
             .single();
         
-        if (!profileError && profileData) {
-            setUserProfile(profileData);
+        if (profileData) setUserProfile(profileData);
+
+        // 2. Vérifier si l'utilisateur courant a dessiné AUJOURD'HUI (Condition d'accès)
+        // Note : Si userId == currentUser.id, on a toujours accès (c'est mon profil)
+        let accessGranted = false;
+
+        if (currentUser && currentUser.id === userId) {
+            accessGranted = true;
+        } else if (currentUser) {
+            const today = new Date().toISOString().split('T')[0];
+            
+            // On cherche le nuage du jour
+            const { data: cloudData } = await supabase
+                .from('clouds')
+                .select('id')
+                .eq('published_for', today)
+                .maybeSingle();
+            
+            if (cloudData) {
+                // On vérifie si j'ai dessiné sur ce nuage
+                const { count } = await supabase
+                    .from('drawings')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('user_id', currentUser.id)
+                    .eq('cloud_id', cloudData.id);
+                
+                if (count && count > 0) {
+                    accessGranted = true;
+                }
+            } else {
+                // S'il n'y a pas de nuage aujourd'hui, on laisse peut-être voir l'historique ?
+                // Par défaut, on bloque si la logique est stricte "Play to see"
+                accessGranted = false; 
+            }
         }
 
-        // Ajout des jointures pour les likes et commentaires
-        const { data: drawingsData, error: drawingsError } = await supabase
-            .from('drawings')
-            .select('*, likes(count), comments(count)')
-            .eq('user_id', userId)
-            .order('created_at', { ascending: false });
+        setCanViewContent(accessGranted);
 
-        if (drawingsError) throw drawingsError;
-        setDrawings(drawingsData || []);
+        // 3. Si accès accordé, on charge les dessins
+        if (accessGranted) {
+            const { data: drawingsData, error: drawingsError } = await supabase
+                .from('drawings')
+                .select('*, likes(count), comments(count)')
+                .eq('user_id', userId)
+                .order('created_at', { ascending: false });
+
+            if (drawingsError) throw drawingsError;
+            setDrawings(drawingsData || []);
+        } else {
+            setDrawings([]); // Pas de données si pas d'accès
+        }
 
     } catch (e) {
-        console.error("Erreur chargement profil:", e);
+        console.error("Erreur chargement:", e);
     } finally {
         setLoading(false);
     }
@@ -206,13 +243,12 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
     </TouchableOpacity>
   );
 
-  // Helper pour les commentaires
   const commentsCount = selectedDrawing?.comments?.[0]?.count || selectedDrawing?.comments_count || 0;
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
         <View style={styles.container}>
-            {/* HEADER MODALE PRINCIPALE */}
+            {/* HEADER */}
             <View style={styles.header}>
                 <TouchableOpacity onPress={onClose} style={styles.closeBtn} hitSlop={15}>
                     <X color="#000" size={28} />
@@ -237,7 +273,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                         </Text>
                     </View>
 
-                    {/* ACTIONS : Bouton Follow Carré uniquement */}
                     {currentUser && currentUser.id !== userId && (
                         <View style={{ marginLeft: 10 }}>
                              <TouchableOpacity 
@@ -256,12 +291,12 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                 </View>
             </View>
 
-            {/* GALERIE */}
+            {/* CONTENU : GALERIE OU LOCK */}
             {loading ? (
                 <View style={styles.loadingContainer}>
                     <ActivityIndicator size="large" color="#000" />
                 </View>
-            ) : (
+            ) : canViewContent ? (
                 <FlatList
                     data={drawings}
                     renderItem={renderDrawingItem}
@@ -276,21 +311,29 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                     }
                     contentContainerStyle={{ paddingBottom: 40 }}
                 />
+            ) : (
+                // ÉTAT VERROUILLÉ
+                <View style={styles.lockedContainer}>
+                    <View style={styles.lockedIconContainer}>
+                        <Lock color="#000" size={40} />
+                    </View>
+                    <Text style={styles.lockedTitle}>Galerie Masquée</Text>
+                    <Text style={styles.lockedSubtitle}>
+                        Participe au nuage du jour pour débloquer les profils et explorer les créations des autres !
+                    </Text>
+                </View>
             )}
 
-            {/* MODALE D'AGRANDISSEMENT (Style PageSheet comme demandé) */}
+            {/* MODALE D'AGRANDISSEMENT */}
             <Modal visible={!!selectedDrawing} animationType="slide" presentationStyle="pageSheet" onRequestClose={closeDrawing}>
                 {selectedDrawing && (
                     <SafeAreaView style={styles.safeAreaContainer}>
-                        {/* Header plus compact et transparent pour l'agrandissement */}
-                        {/* Réduction de paddingVertical et suppression du style.closeBtn (gris) pour un transparent */}
                         <View style={[styles.header, { paddingVertical: 0, paddingTop: 10, paddingHorizontal: 15 }]}> 
                             <TouchableOpacity onPress={closeDrawing} style={styles.closeBtnTransparent} hitSlop={15}>
                                 <X color="#000" size={28} />
                             </TouchableOpacity>
                         </View>
 
-                        {/* Contenu Centré - Utilisation de flex pour maximiser l'espace */}
                         <View style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}> 
                             <Pressable 
                                 onPressIn={() => setIsHolding(true)} 
@@ -315,7 +358,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                             </Pressable>
                         </View>
 
-                         {/* Footer complet style Galerie */}
                          <View style={styles.overlayFooter}>
                             <View style={styles.userInfoRow}>
                                 <View style={styles.profilePlaceholder}>
@@ -332,7 +374,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                             </View>
 
                             <View style={styles.statsRow}>
-                                {/* Like */}
                                 <TouchableOpacity style={styles.statItem} onPress={handleLike}>
                                     <Heart 
                                         color={isLiked ? "#FF3B30" : "#000"} 
@@ -342,7 +383,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                                     <Text style={styles.statText}>{likesCount}</Text>
                                 </TouchableOpacity>
                                 
-                                {/* Commentaire */}
                                 <TouchableOpacity style={styles.statItem} onPress={() => setShowComments(true)}>
                                     <MessageCircle color="#000" size={24} />
                                     <Text style={styles.statText}>{commentsCount}</Text>
@@ -350,7 +390,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                             </View>
                          </View>
 
-                         {/* Modale Commentaires pour le dessin agrandi */}
                          <CommentsModal 
                             visible={showComments} 
                             onClose={() => setShowComments(false)} 
@@ -367,11 +406,9 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFF' },
-  safeAreaContainer: { flex: 1, backgroundColor: '#FFF' }, // Nouveau conteneur sûr
-  // Modification ici : réduction du padding vertical pour remonter le bouton
+  safeAreaContainer: { flex: 1, backgroundColor: '#FFF' },
   header: { paddingHorizontal: 15, paddingVertical: 10, alignItems: 'flex-end', borderBottomWidth: 0, borderColor: '#eee' }, 
   closeBtn: { padding: 5, backgroundColor: '#F0F0F0', borderRadius: 20 },
-  // Nouveau style sans fond gris
   closeBtnTransparent: { padding: 5, backgroundColor: 'transparent' },
   
   profileBlock: { 
@@ -429,9 +466,29 @@ const styles = StyleSheet.create({
   emptyState: { alignItems: 'center', marginTop: 50, gap: 10 },
   emptyText: { color: '#999', fontSize: 16 },
 
+  // Styles Locked
+  lockedContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingHorizontal: 40,
+      marginTop: -50 // Remonter un peu visuellement
+  },
+  lockedIconContainer: {
+      width: 80, height: 80, borderRadius: 40,
+      backgroundColor: '#F5F5F5',
+      justifyContent: 'center', alignItems: 'center',
+      marginBottom: 20
+  },
+  lockedTitle: {
+      fontSize: 20, fontWeight: '800', color: '#000', marginBottom: 10, textAlign: 'center'
+  },
+  lockedSubtitle: {
+      fontSize: 14, color: '#666', textAlign: 'center', lineHeight: 22
+  },
+
   hintText: { position: 'absolute', bottom: 10, alignSelf: 'center', color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width:1, height:1}, textShadowRadius: 1 },
   
-  // Footer Style Galerie
   overlayFooter: { 
       width: '100%',
       padding: 20, 
@@ -440,7 +497,7 @@ const styles = StyleSheet.create({
       alignItems: 'center', 
       borderTopWidth: 1, 
       borderTopColor: '#F0F0F0', 
-      marginTop: 10, // Réduit la marge pour coller au contenu
+      marginTop: 10, 
       backgroundColor: '#FFF'
   },
   userInfoRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
