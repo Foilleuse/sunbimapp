@@ -4,7 +4,7 @@ import { Heart, MessageCircle, User, Share2, Eye } from 'lucide-react-native';
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
-// AJOUT : Import du contexte d'authentification
+// Import Auth pour savoir qui like
 import { useAuth } from '../../src/contexts/AuthContext';
 
 let PagerView: any;
@@ -13,85 +13,77 @@ if (Platform.OS !== 'web') {
 } else { PagerView = View; }
 
 const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: any, canvasSize: number, index: number, currentIndex: number }) => {
-    const { user } = useAuth(); // Récupération de l'user pour savoir qui like
-
+    const { user } = useAuth();
+    
     // --- ETATS ---
     const [isLiked, setIsLiked] = useState(false);
-    // On initialise le compteur avec la valeur de la BDD, mais on le rend modifiable
+    // On initialise le compteur avec la donnée de la DB
     const [likesCount, setLikesCount] = useState(drawing.likes_count || 0);
     
-    const [isHolding, setIsHolding] = useState(false); // Piloté par le bouton Œil
+    const [isHolding, setIsHolding] = useState(false);
     
     const commentsCount = drawing.comments_count || 0;
     const author = drawing.users;
 
     const isActive = index === currentIndex; 
-    
     const shouldRenderDrawing = isActive;
 
-    // 0. Synchronisation si le feed est rafraîchi par le parent
+    // 1. SYNCHRONISATION : Si le parent met à jour la donnée (ex: pull-to-refresh), on met à jour le compteur local
     useEffect(() => {
         setLikesCount(drawing.likes_count || 0);
     }, [drawing.likes_count]);
 
-    // 1. VÉRIFICATION INITIALE : L'utilisateur a-t-il déjà liké ce dessin ?
+    // 2. VÉRIFICATION INITIALE : L'utilisateur a-t-il déjà liké ?
     useEffect(() => {
         if (!user) return;
-        
         const checkLikeStatus = async () => {
-            // On compte les lignes dans la table 'likes' pour ce couple user/drawing
             const { count } = await supabase
                 .from('likes')
                 .select('*', { count: 'exact', head: true })
                 .eq('user_id', user.id)
                 .eq('drawing_id', drawing.id);
             
-            if (count && count > 0) {
-                setIsLiked(true);
-            } else {
-                setIsLiked(false);
-            }
+            if (count && count > 0) setIsLiked(true);
+            else setIsLiked(false);
         };
-        
         checkLikeStatus();
     }, [user, drawing.id]);
 
-    // 2. ACTION LIKE (Optimiste)
+    // 3. ACTION LIKE (Optimiste)
     const handleLike = async () => {
-        if (!user) return; // Sécurité (ou afficher alerte connexion)
+        if (!user) return;
 
         const previousLiked = isLiked;
         const previousCount = likesCount;
 
-        // Mise à jour immédiate de l'interface
+        // Mise à jour immédiate de l'interface (avant réponse serveur)
         const newLikedState = !previousLiked;
         setIsLiked(newLikedState);
+        // Si on vient de liker -> +1, sinon -> -1
         setLikesCount(newLikedState ? previousCount + 1 : previousCount - 1);
 
         try {
             if (previousLiked) {
-                // Si c'était liké -> Suppression (Unlike)
+                // Si c'était liké -> DELETE
                 const { error } = await supabase
                     .from('likes')
                     .delete()
                     .eq('user_id', user.id)
                     .eq('drawing_id', drawing.id);
-                
                 if (error) throw error;
             } else {
-                // Si pas liké -> Ajout (Like)
+                // Si pas liké -> INSERT
                 const { error } = await supabase
                     .from('likes')
                     .insert({
                         user_id: user.id,
                         drawing_id: drawing.id
                     });
-                
                 if (error) throw error;
             }
         } catch (error) {
             console.error("Erreur like:", error);
-            // En cas d'erreur, on revient en arrière
+            // Rollback en cas d'erreur
             setIsLiked(previousLiked);
             setLikesCount(previousCount);
         }
@@ -100,7 +92,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
     return (
         <View style={styles.cardContainer}>
             
-            {/* IMAGE + DESSIN (Non interactif au toucher) - CODE INCHANGÉ */}
+            {/* IMAGE + DESSIN (Non interactif au toucher) */}
             <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent' }}>
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
@@ -118,9 +110,8 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
             </View>
             
             <View style={styles.cardInfo}>
-                {/* HEADER INFO - CODE INCHANGÉ */}
+                {/* HEADER INFO */}
                 <View style={styles.headerInfo}>
-                    
                     <View style={styles.titleRow}>
                         <Text style={styles.drawingTitle} numberOfLines={1}>
                             {drawing.label || "Sans titre"}
@@ -150,17 +141,18 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
                     </View>
                 </View>
 
-                {/* BARRE D'ACTIONS (Bas) */}
+                {/* BARRE D'ACTIONS */}
                 <View style={styles.actionBar}>
                     <View style={styles.leftActions}>
-                        {/* BOUTON LIKE CONNECTÉ */}
+                        
+                        {/* BOUTON LIKE CORRIGÉ */}
                         <TouchableOpacity style={styles.actionBtn} onPress={handleLike}>
                             <Heart 
                                 color={isLiked ? "#FF3B30" : "#000"} 
                                 fill={isLiked ? "#FF3B30" : "transparent"} 
                                 size={28} 
                             />
-                            {/* AFFICHE LE COMPTEUR DYNAMIQUE */}
+                            {/* AFFICHAGE DU COMPTEUR DYNAMIQUE */}
                             <Text style={styles.actionText}>{likesCount}</Text>
                         </TouchableOpacity>
 
@@ -212,25 +204,13 @@ export default function FeedPage() {
         } catch (e) { console.error(e); } finally { setLoading(false); }
     };
 
-    // Image de fond globale (La première dispo) - RESTAURÉE SANS FLOU
-    // Si vous ne vouliez PAS de fond du tout, supprimez ce bloc dans le return
-    const backgroundUrl = drawings.length > 0 ? drawings[0].cloud_image_url : null;
-
     if (loading) return <View style={styles.loadingContainer}><ActivityIndicator color="#000" size="large" /></View>;
 
     return (
         <View style={styles.container}>
             <SunbimHeader showCloseButton={false} />
-            <View style={{ flex: 1, position: 'relative' }}>
-                
-                {/* FOND D'ÉCRAN ORIGINAL (SI VOUS LE VOULIEZ COMME AVANT) */}
-                {/* Si vous voulez juste du blanc, supprimez ce bloc Image */}
-                {backgroundUrl && (
-                    <View style={{ position: 'absolute', top: 0, width: screenWidth, aspectRatio: 3/4, zIndex: -1 }}>
-                       <Image source={{uri: backgroundUrl}} style={{width: '100%', height: '100%'}} resizeMode="cover" />
-                    </View>
-                )}
-                
+            
+            <View style={{ flex: 1 }}>
                 {drawings.length > 0 ? (
                     <PagerView 
                         style={{ flex: 1 }} 
@@ -262,15 +242,15 @@ const styles = StyleSheet.create({
     loadingContainer: { flex: 1, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     text: { color: '#666', fontSize: 16 },
+    
     cardContainer: { flex: 1 },
     cardInfo: {
         flex: 1, 
         backgroundColor: '#FFFFFF', 
-        marginTop: -40, // Chevauchement léger pour le style
+        marginTop: -40, 
         paddingHorizontal: 20, 
         paddingTop: 25,
         shadowColor: "#000", shadowOffset: {width: 0, height: -4}, shadowOpacity: 0.05, shadowRadius: 4, elevation: 5,
-        // ANGLES RECTANGULAIRES (Suppression des borderRadius)
     },
     headerInfo: { marginBottom: 15 },
     
