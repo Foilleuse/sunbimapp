@@ -17,23 +17,20 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
     
     // --- ETATS ---
     const [isLiked, setIsLiked] = useState(false);
-    // On initialise le compteur avec la donnée de la DB
     const [likesCount, setLikesCount] = useState(drawing.likes_count || 0);
-    
-    const [isHolding, setIsHolding] = useState(false);
+    const [isHolding, setIsHolding] = useState(false); 
     
     const commentsCount = drawing.comments_count || 0;
     const author = drawing.users;
-
     const isActive = index === currentIndex; 
     const shouldRenderDrawing = isActive;
 
-    // 1. SYNCHRONISATION : Si le parent met à jour la donnée (ex: pull-to-refresh), on met à jour le compteur local
+    // 1. Synchronisation si le feed est rafraîchi
     useEffect(() => {
         setLikesCount(drawing.likes_count || 0);
     }, [drawing.likes_count]);
 
-    // 2. VÉRIFICATION INITIALE : L'utilisateur a-t-il déjà liké ?
+    // 2. Vérification initiale du like
     useEffect(() => {
         if (!user) return;
         const checkLikeStatus = async () => {
@@ -49,22 +46,21 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
         checkLikeStatus();
     }, [user, drawing.id]);
 
-    // 3. ACTION LIKE (Optimiste)
+    // 3. Action Like (Optimiste + BDD)
     const handleLike = async () => {
         if (!user) return;
 
         const previousLiked = isLiked;
         const previousCount = likesCount;
-
-        // Mise à jour immédiate de l'interface (avant réponse serveur)
         const newLikedState = !previousLiked;
+        
+        // Mise à jour immédiate de l'interface
         setIsLiked(newLikedState);
-        // Si on vient de liker -> +1, sinon -> -1
         setLikesCount(newLikedState ? previousCount + 1 : previousCount - 1);
 
         try {
             if (previousLiked) {
-                // Si c'était liké -> DELETE
+                // Suppression (Unlike)
                 const { error } = await supabase
                     .from('likes')
                     .delete()
@@ -72,7 +68,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
                     .eq('drawing_id', drawing.id);
                 if (error) throw error;
             } else {
-                // Si pas liké -> INSERT
+                // Ajout (Like)
                 const { error } = await supabase
                     .from('likes')
                     .insert({
@@ -92,7 +88,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
     return (
         <View style={styles.cardContainer}>
             
-            {/* IMAGE + DESSIN (Non interactif au toucher) */}
+            {/* IMAGE + DESSIN (INCHANGÉ) */}
             <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent' }}>
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
@@ -110,13 +106,12 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
             </View>
             
             <View style={styles.cardInfo}>
-                {/* HEADER INFO */}
+                {/* HEADER INFO (INCHANGÉ) */}
                 <View style={styles.headerInfo}>
                     <View style={styles.titleRow}>
                         <Text style={styles.drawingTitle} numberOfLines={1}>
                             {drawing.label || "Sans titre"}
                         </Text>
-
                         <TouchableOpacity 
                             style={[styles.eyeBtn, isHolding && styles.iconBtnActive]}
                             activeOpacity={1}
@@ -152,7 +147,6 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
                                 fill={isLiked ? "#FF3B30" : "transparent"} 
                                 size={28} 
                             />
-                            {/* AFFICHAGE DU COMPTEUR DYNAMIQUE */}
                             <Text style={styles.actionText}>{likesCount}</Text>
                         </TouchableOpacity>
 
@@ -205,12 +199,19 @@ export default function FeedPage() {
     };
 
     if (loading) return <View style={styles.loadingContainer}><ActivityIndicator color="#000" size="large" /></View>;
+    
+    const backgroundUrl = drawings.length > 0 ? drawings[0].cloud_image_url : null;
 
     return (
         <View style={styles.container}>
             <SunbimHeader showCloseButton={false} />
-            
-            <View style={{ flex: 1 }}>
+            <View style={{ flex: 1, position: 'relative' }}>
+                {backgroundUrl && (
+                    <View style={{ position: 'absolute', top: 0, width: screenWidth, aspectRatio: 3/4, zIndex: -1 }}>
+                       <Image source={{uri: backgroundUrl}} style={{width: '100%', height: '100%'}} resizeMode="cover" />
+                    </View>
+                )}
+                
                 {drawings.length > 0 ? (
                     <PagerView 
                         style={{ flex: 1 }} 
@@ -242,7 +243,6 @@ const styles = StyleSheet.create({
     loadingContainer: { flex: 1, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     text: { color: '#666', fontSize: 16 },
-    
     cardContainer: { flex: 1 },
     cardInfo: {
         flex: 1, 
@@ -253,40 +253,16 @@ const styles = StyleSheet.create({
         shadowColor: "#000", shadowOffset: {width: 0, height: -4}, shadowOpacity: 0.05, shadowRadius: 4, elevation: 5,
     },
     headerInfo: { marginBottom: 15 },
-    
-    titleRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center', 
-        marginBottom: 8
-    },
-    drawingTitle: { 
-        fontSize: 28, 
-        fontWeight: '900', 
-        color: '#000', 
-        letterSpacing: -0.5, 
-        flex: 1, 
-        marginRight: 10 
-    },
-    eyeBtn: {
-        padding: 5,
-        marginRight: -5 
-    },
-
+    titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+    drawingTitle: { fontSize: 28, fontWeight: '900', color: '#000', letterSpacing: -0.5, flex: 1, marginRight: 10 },
+    eyeBtn: { padding: 5, marginRight: -5 },
     userInfo: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     avatar: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#F0F0F0', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
     userName: { fontSize: 14, fontWeight: '600', color: '#333' },
     dateText: { fontSize: 14, color: '#999' },
-    
-    actionBar: { 
-        flexDirection: 'row', 
-        alignItems: 'center', 
-        justifyContent: 'space-between', 
-        marginTop: 5 
-    },
+    actionBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 5 },
     leftActions: { flexDirection: 'row', alignItems: 'center', gap: 20 },
     rightActions: { flexDirection: 'row', alignItems: 'center', gap: 15 },
-    
     actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     iconBtn: { padding: 5 },
     iconBtnActive: { opacity: 0.3 },
