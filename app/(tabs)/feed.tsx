@@ -23,7 +23,9 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
     
     const [isHolding, setIsHolding] = useState(false); 
     
-    const commentsCount = drawing.comments?.[0]?.count || drawing.comments_count || 0;
+    // MODIFICATION ICI : On récupère le count depuis la relation comments(count)
+    const commentsCount = drawing.comments?.[0]?.count || 0;
+    
     const author = drawing.users;
     const isActive = index === currentIndex; 
     const shouldRenderDrawing = isActive;
@@ -151,6 +153,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
                         {/* BOUTON COMMENTAIRES ACTIVÉ */}
                         <TouchableOpacity style={styles.actionBtn} onPress={() => setShowComments(true)}>
                             <MessageCircle color="#000" size={28} />
+                            {/* MODIFICATION ICI : Affiche le nombre réel de commentaires */}
                             <Text style={styles.actionText}>{commentsCount}</Text>
                         </TouchableOpacity>
                     </View>
