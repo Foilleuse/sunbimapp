@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Modal, Image, TouchableOpacity, FlatList, ActivityIndicator, Dimensions, Alert, Pressable } from 'react-native';
-import { X, User, UserPlus, UserCheck } from 'lucide-react-native'; // Suppression de MessageCircle
+import { X, User, UserPlus, UserCheck, Heart, MessageCircle } from 'lucide-react-native';
 import { supabase } from '../lib/supabaseClient';
 import { DrawingViewer } from './DrawingViewer';
 import { useAuth } from '../contexts/AuthContext';
+import { CommentsModal } from './CommentsModal';
 
 interface UserProfileModalProps {
   visible: boolean;
@@ -25,6 +26,11 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
   // États pour l'agrandissement d'image
   const [selectedDrawing, setSelectedDrawing] = useState<any | null>(null);
   const [isHolding, setIsHolding] = useState(false);
+  const [showComments, setShowComments] = useState(false);
+  
+  // États d'interaction pour le dessin agrandi
+  const [isLiked, setIsLiked] = useState(false);
+  const [likesCount, setLikesCount] = useState(0);
 
   // Configuration Grille
   const { width: screenWidth } = Dimensions.get('window');
@@ -45,6 +51,26 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
         setSelectedDrawing(null); 
     }
   }, [visible, userId]);
+
+  // Initialisation des stats quand un dessin est ouvert
+  useEffect(() => {
+    if (selectedDrawing && currentUser) {
+        // Init du compteur
+        setLikesCount(selectedDrawing.likes?.[0]?.count || selectedDrawing.likes_count || 0);
+        
+        // Vérifier si l'utilisateur a liké ce dessin
+        const checkLikeStatus = async () => {
+            const { count } = await supabase
+                .from('likes')
+                .select('*', { count: 'exact', head: true })
+                .eq('user_id', currentUser.id)
+                .eq('drawing_id', selectedDrawing.id);
+            
+            setIsLiked(count !== null && count > 0);
+        };
+        checkLikeStatus();
+    }
+  }, [selectedDrawing, currentUser]);
 
   const checkFollowStatus = async () => {
       try {
@@ -90,6 +116,42 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
       }
   };
 
+  const handleLike = async () => {
+    if (!currentUser || !selectedDrawing) return;
+
+    const previousLiked = isLiked;
+    const previousCount = likesCount;
+
+    const newLikedState = !previousLiked;
+    const newCount = newLikedState ? previousCount + 1 : Math.max(0, previousCount - 1);
+
+    setIsLiked(newLikedState);
+    setLikesCount(newCount);
+
+    try {
+        if (previousLiked) {
+            const { error } = await supabase
+                .from('likes')
+                .delete()
+                .eq('user_id', currentUser.id)
+                .eq('drawing_id', selectedDrawing.id);
+            if (error) throw error;
+        } else {
+            const { error } = await supabase
+                .from('likes')
+                .insert({
+                    user_id: currentUser.id,
+                    drawing_id: selectedDrawing.id
+                });
+            if (error) throw error;
+        }
+    } catch (error) {
+        console.error("Erreur like:", error);
+        setIsLiked(previousLiked);
+        setLikesCount(previousCount);
+    }
+  };
+
   const fetchUserData = async () => {
     try {
         setLoading(true);
@@ -104,9 +166,10 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
             setUserProfile(profileData);
         }
 
+        // Ajout des jointures pour les likes et commentaires
         const { data: drawingsData, error: drawingsError } = await supabase
             .from('drawings')
-            .select('*')
+            .select('*, likes(count), comments(count)')
             .eq('user_id', userId)
             .order('created_at', { ascending: false });
 
@@ -123,6 +186,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
   const openDrawing = (drawing: any) => setSelectedDrawing(drawing);
   const closeDrawing = () => {
       setSelectedDrawing(null);
+      setIsLiked(false);
+      setShowComments(false);
   };
 
   const renderDrawingItem = ({ item }: { item: any }) => (
@@ -140,6 +205,9 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
         />
     </TouchableOpacity>
   );
+
+  // Helper pour les commentaires
+  const commentsCount = selectedDrawing?.comments?.[0]?.count || selectedDrawing?.comments_count || 0;
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -210,7 +278,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                 />
             )}
 
-            {/* MODALE D'AGRANDISSEMENT */}
+            {/* MODALE D'AGRANDISSEMENT (Overlay interne, style Galerie) */}
             <Modal visible={!!selectedDrawing} animationType="fade" transparent={true} onRequestClose={closeDrawing}>
                 {selectedDrawing && (
                     <View style={styles.fullScreenOverlay}>
@@ -240,10 +308,47 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                             <Text style={styles.hintText}>Maintenir pour voir l'original</Text>
                         </Pressable>
 
+                         {/* Footer complet style Galerie */}
                          <View style={styles.overlayFooter}>
-                            <Text style={styles.overlayLabel}>{selectedDrawing.label || "Sans titre"}</Text>
-                            <Text style={styles.overlayDate}>{new Date(selectedDrawing.created_at).toLocaleDateString()}</Text>
+                            <View style={styles.userInfoRow}>
+                                <View style={styles.profilePlaceholder}>
+                                    {userProfile?.avatar_url ? (
+                                        <Image source={{uri: userProfile.avatar_url}} style={{width:40, height:40, borderRadius:20}} />
+                                    ) : (
+                                        <User color="#FFF" size={20} />
+                                    )}
+                                </View>
+                                <View>
+                                    <Text style={styles.userName}>{userProfile?.display_name || "Anonyme"}</Text>
+                                    {selectedDrawing.label && <Text style={styles.drawingLabel}>{selectedDrawing.label}</Text>}
+                                </View>
+                            </View>
+
+                            <View style={styles.statsRow}>
+                                {/* Like */}
+                                <TouchableOpacity style={styles.statItem} onPress={handleLike}>
+                                    <Heart 
+                                        color={isLiked ? "#FF3B30" : "#000"} 
+                                        fill={isLiked ? "#FF3B30" : "transparent"} 
+                                        size={24} 
+                                    />
+                                    <Text style={styles.statText}>{likesCount}</Text>
+                                </TouchableOpacity>
+                                
+                                {/* Commentaire */}
+                                <TouchableOpacity style={styles.statItem} onPress={() => setShowComments(true)}>
+                                    <MessageCircle color="#000" size={24} />
+                                    <Text style={styles.statText}>{commentsCount}</Text>
+                                </TouchableOpacity>
+                            </View>
                          </View>
+
+                         {/* Modale Commentaires pour le dessin agrandi */}
+                         <CommentsModal 
+                            visible={showComments} 
+                            onClose={() => setShowComments(false)} 
+                            drawingId={selectedDrawing.id} 
+                        />
                     </View>
                 )}
             </Modal>
@@ -295,17 +400,16 @@ const styles = StyleSheet.create({
       lineHeight: 18
   },
 
-  // Bouton carré simple
   iconOnlyBtn: {
       width: 44, 
       height: 44, 
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: '#EEE', // Gris clair par défaut
+      backgroundColor: '#EEE', 
       borderRadius: 12,
   },
   followingBtn: {
-      backgroundColor: '#FFF', // Fond blanc si suivi
+      backgroundColor: '#FFF', 
       borderWidth: 2,
       borderColor: '#000'
   },
@@ -314,12 +418,12 @@ const styles = StyleSheet.create({
   emptyState: { alignItems: 'center', marginTop: 50, gap: 10 },
   emptyText: { color: '#999', fontSize: 16 },
 
-  // Styles Overlay Agrandissement
+  // Styles Overlay Agrandissement (Identiques à Gallery)
   fullScreenOverlay: { 
       flex: 1, 
-      backgroundColor: '#FFFFFF', // Fond blanc opaque comme demandé
-      justifyContent: 'center', 
-      alignItems: 'center' 
+      backgroundColor: '#FFFFFF', 
+      justifyContent: 'center', // Le footer est en bas grâce au flux, mais ici on centre le contenu principal
+      paddingTop: 60 // Espace pour le bouton fermer
   },
   closeOverlayBtn: {
       position: 'absolute',
@@ -327,14 +431,28 @@ const styles = StyleSheet.create({
       right: 20,
       zIndex: 10,
       padding: 10,
-      backgroundColor: '#F0F0F0', // Cohérence avec les autres boutons de fermeture
+      backgroundColor: '#F0F0F0',
       borderRadius: 25,
   },
   hintText: { position: 'absolute', bottom: 10, alignSelf: 'center', color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width:1, height:1}, textShadowRadius: 1 },
-  overlayFooter: {
-      marginTop: 20,
-      alignItems: 'center'
+  
+  // Footer Style Galerie
+  overlayFooter: { 
+      width: '100%',
+      padding: 20, 
+      flexDirection: 'row', 
+      justifyContent: 'space-between', 
+      alignItems: 'center', 
+      borderTopWidth: 1, 
+      borderTopColor: '#F0F0F0', 
+      marginTop: 10,
+      backgroundColor: '#FFF'
   },
-  overlayLabel: { fontSize: 22, fontWeight: '800', color: '#000' },
-  overlayDate: { fontSize: 14, color: '#999', marginTop: 5 }
+  userInfoRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  profilePlaceholder: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#CCC', justifyContent: 'center', alignItems: 'center', overflow:'hidden' },
+  userName: { fontWeight: '700', fontSize: 14, color: '#000' },
+  drawingLabel: { color: '#666', fontSize: 12, marginTop: 2 },
+  statsRow: { flexDirection: 'row', gap: 15 },
+  statItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  statText: { fontWeight: '600', fontSize: 16, color: '#000' },
 });
