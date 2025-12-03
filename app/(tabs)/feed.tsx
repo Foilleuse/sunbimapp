@@ -14,28 +14,28 @@ if (Platform.OS !== 'web') {
 const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: any, canvasSize: number, index: number, currentIndex: number }) => {
     const { user } = useAuth();
     
-    // --- ETATS DU LIKE ---
+    // --- ETATS ---
     const [isLiked, setIsLiked] = useState(false);
     const [likesCount, setLikesCount] = useState(drawing.likes_count || 0);
     
-    const [isHolding, setIsHolding] = useState(false);
+    const [isHolding, setIsHolding] = useState(false); 
+    
     const commentsCount = drawing.comments_count || 0;
     const author = drawing.users;
-
     const isActive = index === currentIndex; 
     const shouldRenderDrawing = isActive;
 
-    // 0. SYNCHRONISATION : Si le feed se rafraîchit, on met à jour le compteur local
+    // 0. Synchronisation si la donnée parente change
     useEffect(() => {
         setLikesCount(drawing.likes_count || 0);
     }, [drawing.likes_count]);
 
-    // 1. VÉRIFICATION AU CHARGEMENT
+    // 1. Vérification Initiale (Est-ce que j'ai liké ?)
     useEffect(() => {
         if (!user) return;
         
         const checkLikeStatus = async () => {
-            // On utilise .count() pour être efficace
+            // On compte les lignes (0 ou 1)
             const { count } = await supabase
                 .from('likes')
                 .select('*', { count: 'exact', head: true })
@@ -48,25 +48,23 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
                 setIsLiked(false);
             }
         };
-        
         checkLikeStatus();
     }, [user, drawing.id]);
 
-    // 2. ACTION LIKE
+    // 2. Action Like
     const handleLike = async () => {
         if (!user) return;
 
         const previousLiked = isLiked;
-        // Si on aimait déjà, on va faire -1. Sinon +1.
-        const newCount = previousLiked ? likesCount - 1 : likesCount + 1;
+        const previousCount = likesCount;
 
         // UI Optimiste
         setIsLiked(!previousLiked);
-        setLikesCount(newCount);
+        setLikesCount(previousLiked ? previousCount - 1 : previousCount + 1);
 
         try {
             if (previousLiked) {
-                // Suppression (Unlike)
+                // Suppression
                 const { error } = await supabase
                     .from('likes')
                     .delete()
@@ -74,7 +72,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
                     .eq('drawing_id', drawing.id);
                 if (error) throw error;
             } else {
-                // Ajout (Like)
+                // Ajout
                 const { error } = await supabase
                     .from('likes')
                     .insert({
@@ -85,17 +83,24 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
             }
         } catch (error) {
             console.error("Erreur like:", error);
-            // Rollback
+            // Rollback en cas d'erreur
             setIsLiked(previousLiked);
-            setLikesCount(likesCount); // On remet l'ancien compte
+            setLikesCount(previousCount);
         }
     };
 
     return (
         <View style={styles.cardContainer}>
             
-            {/* IMAGE + DESSIN (INCHANGÉ) */}
-            <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent' }}>
+            {/* IMAGE + DESSIN */}
+            <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: '#000', overflow: 'hidden' }}>
+                
+                <Image 
+                    source={{ uri: drawing.cloud_image_url }} 
+                    style={StyleSheet.absoluteFill} 
+                    resizeMode="cover" 
+                />
+
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
                         <DrawingViewer
@@ -112,12 +117,12 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
             </View>
             
             <View style={styles.cardInfo}>
-                {/* HEADER INFO (INCHANGÉ) */}
                 <View style={styles.headerInfo}>
                     <View style={styles.titleRow}>
                         <Text style={styles.drawingTitle} numberOfLines={1}>
                             {drawing.label || "Sans titre"}
                         </Text>
+
                         <TouchableOpacity 
                             style={[styles.eyeBtn, isHolding && styles.iconBtnActive]}
                             activeOpacity={1}
@@ -180,7 +185,7 @@ export default function FeedPage() {
     const [drawings, setDrawings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [currentIndex, setCurrentIndex] = useState(0);
-    const { width: screenWidth } = Dimensions.get('window');
+    const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
     useEffect(() => { fetchTodaysFeed(); }, []);
 
@@ -203,7 +208,7 @@ export default function FeedPage() {
         } catch (e) { console.error(e); } finally { setLoading(false); }
     };
 
-    // Image de fond globale
+    // Remise en place du fond d'écran statique (flou)
     const backgroundUrl = drawings.length > 0 ? drawings[0].cloud_image_url : null;
 
     if (loading) return <View style={styles.loadingContainer}><ActivityIndicator color="#000" size="large" /></View>;
@@ -217,7 +222,7 @@ export default function FeedPage() {
                     source={{uri: backgroundUrl}} 
                     style={[
                         StyleSheet.absoluteFill, 
-                        { width: screenWidth, height: '100%', zIndex: -1 }
+                        { width: screenWidth, height: screenHeight, zIndex: -1 }
                     ]} 
                     resizeMode="cover"
                     blurRadius={50} 
