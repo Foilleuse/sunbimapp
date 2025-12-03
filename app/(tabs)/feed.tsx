@@ -92,7 +92,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
     return (
         <View style={styles.cardContainer}>
             
-            <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: '#EEE' }}>
+            <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent' }}>
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
                         <DrawingViewer
@@ -100,16 +100,14 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
                             imageUri={drawing.cloud_image_url} 
                             canvasData={drawing.canvas_data}
                             viewerSize={canvasSize}
-                            // CORRECTION : On remet transparentMode à false pour que le viewer affiche l'image
+                            // CORRECTION : transparentMode à false pour voir le nuage DANS le viewer
                             transparentMode={false} 
                             animated={isActive} 
                             startVisible={false} 
                         />
                     )}
                 </View>
-                {/* Si on appuie (isHolding), on cache le dessin mais on doit voir l'image originale */}
-                {/* Le DrawingViewer gère déjà l'affichage de l'image de fond si transparentMode=false */}
-                {/* Si on veut voir l'image "pure" quand on hold, on peut ajouter une Image en absolute derrière */}
+                {/* Fallback image en arrière plan au cas où, ou pour le mode "holding" */}
                  <Image 
                     source={{ uri: drawing.cloud_image_url }}
                     style={[StyleSheet.absoluteFill, { zIndex: -1 }]}
@@ -117,6 +115,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
                 />
             </View>
             
+            {/* Fond transparent pour voir le ciel autour */}
             <View style={styles.cardInfo}>
                 <View style={styles.headerInfo}>
                     <View style={styles.titleRow}>
@@ -195,8 +194,6 @@ export default function FeedPage() {
     const [drawings, setDrawings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [currentIndex, setCurrentIndex] = useState(0);
-    // Plus besoin de backgroundCloud car on met un fond uni bleu ciel
-    // const [backgroundCloud, setBackgroundCloud] = useState<string | null>(null);
     const { width: screenWidth } = Dimensions.get('window');
 
     const [selectedUser, setSelectedUser] = useState<any>(null);
@@ -210,8 +207,6 @@ export default function FeedPage() {
             const { data: cloudData } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();
             
             if (cloudData) {
-                // Pas d'image de fond à charger ici pour le background global
-                
                 const { data: drawingsData, error: drawingsError } = await supabase
                     .from('drawings')
                     .select('*, users(id, display_name, avatar_url), likes(count), comments(count)') 
@@ -239,9 +234,15 @@ export default function FeedPage() {
 
     return (
         <View style={styles.container}>
-            <SunbimHeader showCloseButton={false} />
+            {/* FOND BLEU CIEL */}
+            <View style={styles.skyBackground} />
+
+            {/* HEADER TRANSPARENT */}
+            <View style={{position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10}}>
+                <SunbimHeader showCloseButton={false} />
+            </View>
             
-            <View style={{ flex: 1, position: 'relative' }}>
+            <View style={{ flex: 1, position: 'relative', zIndex: 1, paddingTop: 60 }}> 
                 {drawings.length > 0 ? (
                     <PagerView 
                         style={{ flex: 1 }} 
@@ -279,18 +280,21 @@ export default function FeedPage() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#FFFFFF' },
-    loadingContainer: { flex: 1, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
+    container: { flex: 1 }, 
+    skyBackground: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: '#87CEEB', // Bleu Ciel
+    },
+    loadingContainer: { flex: 1, backgroundColor: '#87CEEB', justifyContent: 'center', alignItems: 'center' },
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    text: { color: '#666', fontSize: 16 },
+    text: { color: '#FFF', fontSize: 16 }, // Texte blanc pour contraste sur bleu
     cardContainer: { flex: 1 },
     cardInfo: {
         flex: 1, 
-        backgroundColor: '#FFFFFF', 
+        backgroundColor: 'transparent', // Transparent pour voir le ciel
         marginTop: -40, 
         paddingHorizontal: 20, 
         paddingTop: 25,
-        shadowColor: "#000", shadowOffset: {width: 0, height: -4}, shadowOpacity: 0.05, shadowRadius: 4, elevation: 5,
     },
     headerInfo: { marginBottom: 15 },
     titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
