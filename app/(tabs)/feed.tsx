@@ -92,7 +92,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
     return (
         <View style={styles.cardContainer}>
             
-            <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent' }}>
+            <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: '#EEE' }}>
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
                         <DrawingViewer
@@ -100,15 +100,23 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
                             imageUri={drawing.cloud_image_url} 
                             canvasData={drawing.canvas_data}
                             viewerSize={canvasSize}
-                            transparentMode={true} 
+                            // CORRECTION : On remet transparentMode à false pour que le viewer affiche l'image
+                            transparentMode={false} 
                             animated={isActive} 
                             startVisible={false} 
                         />
                     )}
                 </View>
+                {/* Si on appuie (isHolding), on cache le dessin mais on doit voir l'image originale */}
+                {/* Le DrawingViewer gère déjà l'affichage de l'image de fond si transparentMode=false */}
+                {/* Si on veut voir l'image "pure" quand on hold, on peut ajouter une Image en absolute derrière */}
+                 <Image 
+                    source={{ uri: drawing.cloud_image_url }}
+                    style={[StyleSheet.absoluteFill, { zIndex: -1 }]}
+                    resizeMode="cover"
+                />
             </View>
             
-            {/* Fond transparent pour voir le ciel */}
             <View style={styles.cardInfo}>
                 <View style={styles.headerInfo}>
                     <View style={styles.titleRow}>
@@ -231,17 +239,9 @@ export default function FeedPage() {
 
     return (
         <View style={styles.container}>
-            {/* FOND BLEU CIEL */}
-            <View style={styles.skyBackground} />
-
-            {/* HEADER TRANSPARENT (Ou avec fond transparent s'il a une prop style) */}
-            <View style={{position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10}}>
-                <SunbimHeader showCloseButton={false} />
-            </View>
+            <SunbimHeader showCloseButton={false} />
             
-            <View style={{ flex: 1, position: 'relative', zIndex: 1, paddingTop: 60 }}> 
-                {/* paddingTop pour compenser le header absolu */}
-                
+            <View style={{ flex: 1, position: 'relative' }}>
                 {drawings.length > 0 ? (
                     <PagerView 
                         style={{ flex: 1 }} 
@@ -279,23 +279,18 @@ export default function FeedPage() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1 }, // Plus de background blanc ici
-    skyBackground: {
-        ...StyleSheet.absoluteFillObject,
-        backgroundColor: '#87CEEB', // Bleu Ciel
-    },
-    loadingContainer: { flex: 1, backgroundColor: '#87CEEB', justifyContent: 'center', alignItems: 'center' },
+    container: { flex: 1, backgroundColor: '#FFFFFF' },
+    loadingContainer: { flex: 1, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    text: { color: '#FFF', fontSize: 16 }, // Texte blanc pour contraste sur bleu
+    text: { color: '#666', fontSize: 16 },
     cardContainer: { flex: 1 },
     cardInfo: {
         flex: 1, 
-        backgroundColor: 'transparent', // Transparent pour voir le ciel
+        backgroundColor: '#FFFFFF', 
         marginTop: -40, 
         paddingHorizontal: 20, 
         paddingTop: 25,
-        // Suppression de l'ombre portée qui ferait bizarre sur du transparent
-        // ou on peut la garder si on veut détacher le texte
+        shadowColor: "#000", shadowOffset: {width: 0, height: -4}, shadowOpacity: 0.05, shadowRadius: 4, elevation: 5,
     },
     headerInfo: { marginBottom: 15 },
     titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
