@@ -4,6 +4,8 @@ import { Heart, MessageCircle, User, Share2, Eye } from 'lucide-react-native';
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
+// AJOUT : Import du contexte d'authentification
+import { useAuth } from '../../src/contexts/AuthContext';
 
 let PagerView: any;
 if (Platform.OS !== 'web') {
@@ -11,21 +13,77 @@ if (Platform.OS !== 'web') {
 } else { PagerView = View; }
 
 const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: any, canvasSize: number, index: number, currentIndex: number }) => {
-    const [isLiked, setIsLiked] = useState(false);
-    const [isHolding, setIsHolding] = useState(false); // Piloté par le bouton Œil
+    const { user } = useAuth(); // Récupération de l'user
     
-    const likesCount = drawing.likes_count || 0;
+    // ETATS DU LIKE
+    const [isLiked, setIsLiked] = useState(false);
+    const [likesCount, setLikesCount] = useState(drawing.likes_count || 0);
+    
+    const [isHolding, setIsHolding] = useState(false);
+    
     const commentsCount = drawing.comments_count || 0;
     const author = drawing.users;
 
     const isActive = index === currentIndex; 
-    
     const shouldRenderDrawing = isActive;
+
+    // 1. Vérifier si déjà liké au montage
+    useEffect(() => {
+        if (!user) return;
+        const checkLike = async () => {
+            // On compte si une ligne existe dans 'likes' pour ce user et ce drawing
+            const { count } = await supabase
+                .from('likes')
+                .select('id', { count: 'exact', head: true })
+                .eq('user_id', user.id)
+                .eq('drawing_id', drawing.id);
+            
+            if (count && count > 0) {
+                setIsLiked(true);
+            }
+        };
+        checkLike();
+    }, [user, drawing.id]);
+
+    // 2. Gestion du clic Like
+    const handleLikePress = async () => {
+        if (!user) return; // Ou afficher une alerte de connexion
+
+        // Optimistic Update : On change l'UI tout de suite
+        const previousLiked = isLiked;
+        const previousCount = likesCount;
+        
+        setIsLiked(!previousLiked);
+        setLikesCount(previousLiked ? previousCount - 1 : previousCount + 1);
+
+        try {
+            if (previousLiked) {
+                // Si c'était liké -> on supprime
+                const { error } = await supabase
+                    .from('likes')
+                    .delete()
+                    .eq('user_id', user.id)
+                    .eq('drawing_id', drawing.id);
+                if (error) throw error;
+            } else {
+                // Si pas liké -> on ajoute
+                const { error } = await supabase
+                    .from('likes')
+                    .insert({ user_id: user.id, drawing_id: drawing.id });
+                if (error) throw error;
+            }
+        } catch (error) {
+            console.error("Erreur like:", error);
+            // Rollback en cas d'erreur
+            setIsLiked(previousLiked);
+            setLikesCount(previousCount);
+        }
+    };
 
     return (
         <View style={styles.cardContainer}>
             
-            {/* IMAGE + DESSIN (Non interactif au toucher) */}
+            {/* IMAGE + DESSIN (INCHANGÉ) */}
             <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent' }}>
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
@@ -43,16 +101,13 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
             </View>
             
             <View style={styles.cardInfo}>
-                {/* HEADER INFO : Titre + Bouton Œil sur la même ligne */}
+                {/* HEADER INFO (INCHANGÉ) */}
                 <View style={styles.headerInfo}>
-                    
-                    {/* LIGNE TITRE ET ŒIL */}
                     <View style={styles.titleRow}>
                         <Text style={styles.drawingTitle} numberOfLines={1}>
                             {drawing.label || "Sans titre"}
                         </Text>
 
-                        {/* BOUTON ŒIL DÉPLACÉ ICI (Aligné à droite) */}
                         <TouchableOpacity 
                             style={[styles.eyeBtn, isHolding && styles.iconBtnActive]}
                             activeOpacity={1}
@@ -77,13 +132,20 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
                     </View>
                 </View>
 
-                {/* BARRE D'ACTIONS (Bas) */}
+                {/* BARRE D'ACTIONS */}
                 <View style={styles.actionBar}>
                     <View style={styles.leftActions}>
-                        <TouchableOpacity style={styles.actionBtn} onPress={() => setIsLiked(!isLiked)}>
-                            <Heart color={isLiked ? "#FF3B30" : "#000"} fill={isLiked ? "#FF3B30" : "transparent"} size={28} />
-                            <Text style={styles.actionText}>{likesCount + (isLiked ? 1 : 0)}</Text>
+                        
+                        {/* BOUTON LIKE CONNECTÉ */}
+                        <TouchableOpacity style={styles.actionBtn} onPress={handleLikePress}>
+                            <Heart 
+                                color={isLiked ? "#FF3B30" : "#000"} 
+                                fill={isLiked ? "#FF3B30" : "transparent"} 
+                                size={28} 
+                            />
+                            <Text style={styles.actionText}>{likesCount}</Text>
                         </TouchableOpacity>
+
                         <TouchableOpacity style={styles.actionBtn}>
                             <MessageCircle color="#000" size={28} />
                             <Text style={styles.actionText}>{commentsCount}</Text>
@@ -181,47 +243,22 @@ const styles = StyleSheet.create({
     cardInfo: {
         flex: 1, 
         backgroundColor: '#FFFFFF', 
-        marginTop: -40, // Chevauchement léger pour le style
+        marginTop: -40, 
         paddingHorizontal: 20, 
         paddingTop: 25,
         shadowColor: "#000", shadowOffset: {width: 0, height: -4}, shadowOpacity: 0.05, shadowRadius: 4, elevation: 5,
-        // ANGLES RECTANGULAIRES (Suppression des borderRadius)
     },
     headerInfo: { marginBottom: 15 },
-    
-    titleRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center', 
-        marginBottom: 8
-    },
-    drawingTitle: { 
-        fontSize: 28, 
-        fontWeight: '900', 
-        color: '#000', 
-        letterSpacing: -0.5, 
-        flex: 1, 
-        marginRight: 10 
-    },
-    eyeBtn: {
-        padding: 5,
-        marginRight: -5 
-    },
-
+    titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+    drawingTitle: { fontSize: 28, fontWeight: '900', color: '#000', letterSpacing: -0.5, flex: 1, marginRight: 10 },
+    eyeBtn: { padding: 5, marginRight: -5 },
     userInfo: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     avatar: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#F0F0F0', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
     userName: { fontSize: 14, fontWeight: '600', color: '#333' },
     dateText: { fontSize: 14, color: '#999' },
-    
-    actionBar: { 
-        flexDirection: 'row', 
-        alignItems: 'center', 
-        justifyContent: 'space-between', 
-        marginTop: 5 
-    },
+    actionBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 5 },
     leftActions: { flexDirection: 'row', alignItems: 'center', gap: 20 },
     rightActions: { flexDirection: 'row', alignItems: 'center', gap: 15 },
-    
     actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     iconBtn: { padding: 5 },
     iconBtnActive: { opacity: 0.3 },
