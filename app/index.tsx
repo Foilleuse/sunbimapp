@@ -29,7 +29,7 @@ export default function DrawPage() {
   
   // --- SPLASH SCREEN INTERNE ---
   const [showSplash, setShowSplash] = useState(true);
-  const splashOpacity = useRef(new Animated.Value(1)).current; // Opacité du splash
+  const splashOpacity = useRef(new Animated.Value(1)).current; 
   
   const [strokeColor, setStrokeColor] = useState('#000000');
   const [strokeWidth, setStrokeWidth] = useState(6);
@@ -56,16 +56,15 @@ export default function DrawPage() {
 
   // --- ANIMATION D'OUVERTURE (SPLASH) ---
   useEffect(() => {
-    // On attend 2 secondes (lecture du texte), puis on fade out
     const timer = setTimeout(() => {
         Animated.timing(splashOpacity, {
             toValue: 0,
-            duration: 800, // Durée du fondu (0.8s)
+            duration: 500, // Durée ajustée à 0.5s
             useNativeDriver: true,
         }).start(() => {
-            setShowSplash(false); // On retire la vue une fois invisible
+            setShowSplash(false); 
         });
-    }, 2000);
+    }, 2000); // Reste affiché 2s avant de fondre
 
     return () => clearTimeout(timer);
   }, []);
@@ -211,6 +210,7 @@ export default function DrawPage() {
   return (
     <View style={styles.container}>
       
+      {/* HEADER TOUJOURS VISIBLE (zIndex > Splash) */}
       <View style={styles.header}>
         <Text style={styles.headerText}>sunbim</Text>
         {updateLabel ? <Text style={styles.versionText}>{updateLabel}</Text> : null}
@@ -253,7 +253,7 @@ export default function DrawPage() {
           </View>
       )}
 
-      {/* MODALES... (inchangées) */}
+      {/* MODALES... */}
       <Modal animationType="slide" transparent={true} visible={authModalVisible} onRequestClose={() => setAuthModalVisible(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
             <View style={styles.modalContent}>
@@ -316,20 +316,21 @@ export default function DrawPage() {
           )}
       </Animated.View>
 
-      {/* --- SPLASH SCREEN INTERNE (Overlay Blanc) --- */}
+      {/* --- SPLASH SCREEN INTERNE --- */}
       {showSplash && (
         <Animated.View 
             style={[
                 StyleSheet.absoluteFill, 
                 { 
                     backgroundColor: 'white', 
-                    opacity: splashOpacity, // L'opacité va diminuer de 1 à 0
-                    zIndex: 10000, // Toujours au dessus de tout
+                    opacity: splashOpacity, 
+                    zIndex: 5, // Inférieur au header (10) mais supérieur au canvas
                     justifyContent: 'center', 
-                    alignItems: 'center' 
+                    alignItems: 'center',
+                    paddingTop: 100 // Pour décaler le texte sous le header
                 }
             ]}
-            pointerEvents={showSplash ? "auto" : "none"} // Désactive les clics une fois caché
+            pointerEvents={showSplash ? "auto" : "none"}
         >
             <Text style={styles.splashText}>Dessine ce que tu vois</Text>
         </Animated.View>
@@ -342,9 +343,12 @@ export default function DrawPage() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
   canvasContainer: { width: '100%', height: '100%', backgroundColor: '#000' },
+  
+  // Header toujours au-dessus (zIndex 10)
   header: { position: 'absolute', top: 0, left: 0, right: 0, paddingTop: 60, paddingBottom: 15, alignItems: 'center', zIndex: 10, pointerEvents: 'none' },
   headerText: { fontSize: 32, fontWeight: '900', color: '#FFFFFF', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 0 },
   versionText: { fontSize: 10, color: 'rgba(255,255,255,0.5)', marginTop: 2, textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 1 },
+  
   noCloudText: { fontSize: 18, color: '#666', textAlign: 'center' },
   errorText: { color: 'red', textAlign: 'center' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' },
@@ -359,7 +363,6 @@ const styles = StyleSheet.create({
   switchText: { color: '#666', fontSize: 14, textDecorationLine: 'underline' },
   finalTitle: { fontSize: 32, fontWeight: '900', color: '#000', textAlign: 'center', letterSpacing: -1, textShadowColor: 'rgba(255,255,255,0.8)', textShadowOffset: {width: 0, height:0}, textShadowRadius: 10 },
   
-  // Style du Splash Screen Texte
   splashText: {
       fontSize: 24,
       fontWeight: '900',
