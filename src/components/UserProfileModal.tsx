@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Modal, Image, TouchableOpacity, FlatList, ActivityIndicator, Dimensions, Alert, Pressable, Platform } from 'react-native';
+import { View, Text, StyleSheet, Modal, Image, TouchableOpacity, FlatList, ActivityIndicator, Dimensions, Alert, Pressable, Platform, SafeAreaView } from 'react-native';
 import { X, User, UserPlus, UserCheck, Heart, MessageCircle } from 'lucide-react-native';
 import { supabase } from '../lib/supabaseClient';
 import { DrawingViewer } from './DrawingViewer';
@@ -281,16 +281,16 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
             {/* MODALE D'AGRANDISSEMENT (Style PageSheet comme demandé) */}
             <Modal visible={!!selectedDrawing} animationType="slide" presentationStyle="pageSheet" onRequestClose={closeDrawing}>
                 {selectedDrawing && (
-                    <View style={styles.container}>
-                        {/* Header plus compact pour l'agrandissement */}
-                        <View style={[styles.header, { paddingVertical: 5 }]}> 
+                    <SafeAreaView style={styles.safeAreaContainer}>
+                        {/* Header plus compact pour l'agrandissement, positionné pour ne pas gaspiller d'espace */}
+                        <View style={[styles.header, { paddingVertical: 5, paddingHorizontal: 15 }]}> 
                             <TouchableOpacity onPress={closeDrawing} style={styles.closeBtn} hitSlop={15}>
                                 <X color="#000" size={28} />
                             </TouchableOpacity>
                         </View>
 
                         {/* Contenu Centré - Utilisation de flex pour maximiser l'espace */}
-                        <View style={{flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: -20}}> 
+                        <View style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}> 
                             <Pressable 
                                 onPressIn={() => setIsHolding(true)} 
                                 onPressOut={() => setIsHolding(false)}
@@ -355,7 +355,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                             onClose={() => setShowComments(false)} 
                             drawingId={selectedDrawing.id} 
                         />
-                    </View>
+                    </SafeAreaView>
                 )}
             </Modal>
 
@@ -366,6 +366,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFF' },
+  safeAreaContainer: { flex: 1, backgroundColor: '#FFF' }, // Nouveau conteneur sûr
   // Modification ici : réduction du padding vertical pour remonter le bouton
   header: { paddingHorizontal: 15, paddingVertical: 10, alignItems: 'flex-end', borderBottomWidth: 0, borderColor: '#eee' }, 
   closeBtn: { padding: 5, backgroundColor: '#F0F0F0', borderRadius: 20 },
@@ -436,7 +437,7 @@ const styles = StyleSheet.create({
       alignItems: 'center', 
       borderTopWidth: 1, 
       borderTopColor: '#F0F0F0', 
-      marginTop: 10,
+      marginTop: 10, // Réduit la marge pour coller au contenu
       backgroundColor: '#FFF'
   },
   userInfoRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
