@@ -53,12 +53,31 @@ export default function GalleryPage() {
 
     const fetchGallery = async (searchQuery = searchText) => {
         try {
+            setLoading(true);
             const today = new Date().toISOString().split('T')[0];
             const { data: cloudData } = await supabase.from('clouds').select('id').eq('published_for', today).maybeSingle();
 
             if (!cloudData) {
                 setDrawings([]);
                 return;
+            }
+
+            // --- FILTRAGE LIKES ---
+            let likedIds: string[] = [];
+            if (onlyLiked && user) {
+                // Si filtre activé, on récupère d'abord les IDs des dessins likés par l'user
+                const { data: userLikes } = await supabase
+                    .from('likes')
+                    .select('drawing_id')
+                    .eq('user_id', user.id);
+                
+                if (!userLikes || userLikes.length === 0) {
+                    // Aucun like -> liste vide directe
+                    setDrawings([]);
+                    setLoading(false);
+                    return;
+                }
+                likedIds = userLikes.map(l => l.drawing_id);
             }
 
             // AJOUT : likes(count), comments(count) pour récupérer les stats
@@ -68,6 +87,11 @@ export default function GalleryPage() {
                 .eq('cloud_id', cloudData.id)
                 .order('created_at', { ascending: false });
 
+            // Application du filtre Like
+            if (onlyLiked && likedIds.length > 0) {
+                query = query.in('id', likedIds);
+            }
+
             if (searchQuery.trim().length > 0) query = query.ilike('label', `%${searchQuery.trim()}%`);
             
             const { data, error } = await query;
@@ -76,10 +100,13 @@ export default function GalleryPage() {
         } catch (e) { console.error(e); } finally { setLoading(false); setRefreshing(false); }
     };
 
-    useEffect(() => { fetchGallery(); }, []);
+    // Rechargement quand onlyLiked change
+    useEffect(() => { fetchGallery(); }, [onlyLiked]);
     
-    // MODIFICATION ICI : Ajout du nettoyage (return function) pour fermer le viewer au blur
+    // Ajout du nettoyage (return function) pour fermer le viewer au blur
     useFocusEffect(useCallback(() => { 
+        // On ne fetch ici que si on n'est pas déjà en train de charger à cause du useEffect onlyLiked
+        // Mais pour simplifier, on laisse le fetchGallery qui gère son état loading
         fetchGallery(); 
         
         return () => {
