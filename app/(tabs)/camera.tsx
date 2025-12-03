@@ -4,19 +4,21 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import { Cloud } from 'lucide-react-native';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
+// Imports Supabase & Auth
 import { supabase } from '../../src/lib/supabaseClient';
 import { useAuth } from '../../src/contexts/AuthContext';
+// Import pour convertir l'image en format compatible Supabase
 import { decode } from 'base64-arraybuffer';
 
 export default function CameraPage() {
   const { user } = useAuth();
-  const router = useRouter();
-  const cameraRef = useRef<CameraView>(null);
-
   const [permission, requestPermission] = useCameraPermissions();
   const [zoom, setZoom] = useState(0);
   const [isTakingPhoto, setIsTakingPhoto] = useState(false); 
   const [isUploading, setIsUploading] = useState(false);
+
+  const cameraRef = useRef<CameraView>(null);
+  const router = useRouter();
 
   const { width: screenWidth } = Dimensions.get('window');
   const CAMERA_HEIGHT = screenWidth * (4 / 3);
@@ -34,9 +36,9 @@ export default function CameraPage() {
   if (!permission.granted) {
     return (
       <View style={styles.container}>
-        <Text style={styles.message}>Permission caméra requise.</Text>
+        <Text style={styles.message}>Permission caméra requise pour capturer les nuages.</Text>
         <TouchableOpacity style={styles.permissionBtn} onPress={requestPermission}>
-          <Text style={styles.permissionText}>Accorder</Text>
+          <Text style={styles.permissionText}>Accorder la permission</Text>
         </TouchableOpacity>
       </View>
     );
@@ -51,19 +53,23 @@ export default function CameraPage() {
       }
   };
 
+  // --- FONCTION D'ENVOI ---
   const uploadToSupabase = async (base64Image: string) => {
       if (!user) {
-          Alert.alert("Oups", "Connecte-toi pour envoyer tes nuages !");
+          Alert.alert("Connexion requise", "Connectez-vous pour envoyer vos photos.");
           return;
       }
 
       setIsUploading(true);
       try {
-          // 1. Conversion
+          // 1. Conversion Base64 -> ArrayBuffer (Format binaire pour Supabase)
           const arrayBuffer = decode(base64Image);
+          
+          // 2. Génération d'un nom de fichier unique
+          // ex: user_id/167890123.jpg
           const fileName = `${user.id}/${Date.now()}.jpg`;
 
-          // 2. Upload Storage (Nom du bucket avec tiret est OK ici)
+          // 3. Upload dans le Bucket 'cloud-submissions'
           const { error: uploadError } = await supabase.storage
               .from('cloud-submissions')
               .upload(fileName, arrayBuffer, {
@@ -73,33 +79,30 @@ export default function CameraPage() {
 
           if (uploadError) throw uploadError;
 
-          // 3. URL
+          // 4. Récupération de l'URL publique de l'image
           const { data: { publicUrl } } = supabase.storage
               .from('cloud-submissions')
               .getPublicUrl(fileName);
 
-          // 4. Sauvegarde Base de Données
-          // TENTATIVE DE CORRECTION : On utilise la syntaxe string standard.
-          // Si "cloud-submissions" est le nom exact de la TABLE (pas du bucket), cela devrait marcher.
-          // Si l'erreur persiste, c'est souvent un problème de Row Level Security (RLS) sur Supabase.
+          // 5. Enregistrement dans la Table 'cloud_submissions'
+          // Note: 'cloud_submissions' avec underscore pour la table SQL
           const { error: dbError } = await supabase
-              .from('cloud-submissions') // Assurez-vous que c'est bien le nom de la TABLE, pas juste du bucket
+              .from('cloud_submissions') 
               .insert({
                   user_id: user.id,
                   image_url: publicUrl,
-                  status: 'pending'
+                  status: 'pending' // En attente de validation
               });
 
           if (dbError) throw dbError;
 
-          Alert.alert("Succès !", "Ton nuage a été envoyé.", [
+          Alert.alert("Envoyé !", "Votre nuage a bien été reçu.", [
               { text: "Super", onPress: () => router.back() }
           ]);
 
       } catch (e: any) {
-          console.error("Erreur complète:", e);
-          // Message d'erreur plus précis pour le debug
-          Alert.alert("Erreur d'envoi", e.message || JSON.stringify(e));
+          console.error("Erreur upload:", e);
+          Alert.alert("Erreur d'envoi", e.message || "Vérifiez votre connexion internet.");
       } finally {
           setIsUploading(false);
       }
@@ -109,22 +112,24 @@ export default function CameraPage() {
     if (cameraRef.current && !isTakingPhoto && !isUploading) {
         setIsTakingPhoto(true);
         try {
+            // On demande l'image en Base64 pour faciliter l'upload
             const photo = await cameraRef.current.takePictureAsync({
                 quality: 0.7,
-                base64: true,
+                base64: true, 
                 skipProcessing: false, 
                 shutterSound: true,
             });
             
             if (photo && photo.base64) {
+                // Si la photo est prise, on lance l'upload immédiatement
                 await uploadToSupabase(photo.base64);
             } else {
-                throw new Error("Erreur lors de la capture.");
+                Alert.alert("Erreur", "Aucune image reçue de la caméra.");
             }
 
-        } catch (e: any) {
+        } catch (e) {
             console.error("Erreur capture:", e);
-            Alert.alert("Erreur", e.message);
+            Alert.alert("Erreur", "Impossible de prendre la photo.");
         } finally {
             setIsTakingPhoto(false);
         }
@@ -145,6 +150,7 @@ export default function CameraPage() {
                 flash="off" 
             />
             
+            {/* Barre de Zoom */}
             <View style={styles.zoomContainer}>
                 {['1x', '1.5x', '2x'].map((z) => {
                     let isActive = false;
@@ -167,6 +173,7 @@ export default function CameraPage() {
                 })}
             </View>
 
+            {/* Overlay de chargement */}
             {isUploading && (
                 <View style={styles.loadingOverlay}>
                     <ActivityIndicator size="large" color="#FFF" />
@@ -182,7 +189,7 @@ export default function CameraPage() {
                 activeOpacity={0.7}
                 disabled={isTakingPhoto || isUploading}
             >
-                {isTakingPhoto ? (
+                {isTakingPhoto || isUploading ? (
                     <ActivityIndicator color="#FFF" />
                 ) : (
                     <Cloud color="#FFF" size={72} fill="#FFF" />
@@ -202,18 +209,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: '#111',
     position: 'relative',
-  },
-  loadingOverlay: {
-      ...StyleSheet.absoluteFillObject,
-      backgroundColor: 'rgba(0,0,0,0.7)',
-      justifyContent: 'center',
-      alignItems: 'center',
-      zIndex: 50
-  },
-  loadingText: {
-      color: '#FFF',
-      marginTop: 10,
-      fontWeight: '600'
   },
   message: { textAlign: 'center', color: '#FFF', marginTop: 100 },
   permissionBtn: {
@@ -258,5 +253,17 @@ const styles = StyleSheet.create({
       justifyContent: 'center',
       alignItems: 'center',
       padding: 10,
+  },
+  loadingOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: 'rgba(0,0,0,0.7)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      zIndex: 50
+  },
+  loadingText: {
+      color: '#FFF',
+      marginTop: 10,
+      fontWeight: '600'
   }
 });
