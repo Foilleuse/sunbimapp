@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Modal, Image, TouchableOpacity, FlatList, ActivityIndicator, Dimensions, Alert, Pressable, Platform, SafeAreaView } from 'react-native';
-import { X, User, UserPlus, UserCheck, Heart, MessageCircle, Lock } from 'lucide-react-native';
+import { X, User, UserPlus, UserCheck, Heart, MessageCircle } from 'lucide-react-native'; // Lock supprimé car plus d'écran verrouillé global
 import { supabase } from '../lib/supabaseClient';
 import { DrawingViewer } from './DrawingViewer';
 import { useAuth } from '../contexts/AuthContext';
@@ -19,8 +19,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
   const [drawings, setDrawings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // État pour savoir si l'utilisateur courant a le droit de voir (a dessiné aujourd'hui)
-  const [canViewContent, setCanViewContent] = useState(false);
+  // NOUVEAU : Liste des ID de nuages que l'utilisateur courant a "débloqués" (en participant)
+  const [unlockedCloudIds, setUnlockedCloudIds] = useState<string[]>([]);
 
   const [isFollowing, setIsFollowing] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
@@ -42,26 +42,23 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
 
     const initModal = async () => {
         if (visible && userId) {
-            // Reset state first to avoid flashing content
             if (isMounted) {
                 setLoading(true);
-                setCanViewContent(false); 
                 setDrawings([]);
+                setUnlockedCloudIds([]);
             }
 
-            // On lance les vérifications
             if (currentUser && currentUser.id !== userId) {
                 checkFollowStatus();
             }
-            await checkPermissionAndFetch(isMounted);
+            await fetchData(isMounted);
         } else {
-            // Reset complet à la fermeture
             if (isMounted) {
                 setLoading(true);
                 setDrawings([]);
                 setIsFollowing(false);
                 setSelectedDrawing(null); 
-                setCanViewContent(false);
+                setUnlockedCloudIds([]);
             }
         }
     };
@@ -169,9 +166,10 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
     }
   };
 
-  const checkPermissionAndFetch = async (isMounted: boolean) => {
+  // Nouvelle fonction unifiée pour tout charger
+  const fetchData = async (isMounted: boolean) => {
     try {
-        // 1. Récupérer le profil public (toujours visible)
+        // 1. Profil Utilisateur
         const { data: profileData } = await supabase
             .from('users') 
             .select('*')
@@ -180,68 +178,33 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
         
         if (isMounted && profileData) setUserProfile(profileData);
 
-        // 2. Vérifier si l'utilisateur courant a le droit de voir
-        let accessGranted = false;
+        // 2. Dessins de l'utilisateur CIBLÉ
+        const { data: drawingsData, error: drawingsError } = await supabase
+            .from('drawings')
+            .select('*, likes(count), comments(count)')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false });
 
-        if (currentUser && currentUser.id === userId) {
-            // C'est mon profil -> accès direct
-            accessGranted = true;
-        } else if (currentUser) {
-            const today = new Date().toISOString().split('T')[0];
-            
-            // Récupérer le nuage du jour
-            const { data: cloudData } = await supabase
-                .from('clouds')
-                .select('id')
-                .eq('published_for', today)
-                .maybeSingle();
-            
-            if (cloudData) {
-                // Vérifier si currentUser a publié un dessin pour CE nuage
-                const { count } = await supabase
-                    .from('drawings')
-                    .select('*', { count: 'exact', head: true })
-                    .eq('user_id', currentUser.id)
-                    .eq('cloud_id', cloudData.id);
-                
-                // Si count > 0, j'ai participé -> Accès autorisé
-                if (count !== null && count > 0) {
-                    accessGranted = true;
-                } else {
-                    console.log("Accès refusé : Pas de dessin pour le nuage du jour");
-                }
-            } else {
-                // Pas de nuage aujourd'hui -> On bloque l'accès par sécurité (Play to see)
-                console.log("Accès refusé : Pas de nuage aujourd'hui");
-                accessGranted = false;
-            }
-        }
+        if (drawingsError) throw drawingsError;
+        if (isMounted) setDrawings(drawingsData || []);
 
-        if (isMounted) setCanViewContent(accessGranted);
-
-        // 3. Charger les dessins UNIQUEMENT si l'accès est accordé
-        // NOTE: On charge quand même les dessins si l'accès est refusé MAIS on ne les affiche pas ? 
-        // Non, c'est mieux de ne pas charger du tout pour économiser la bande passante et sécuriser.
-        // Mais si tu veux afficher les miniatures floutées, il faudrait charger.
-        // Ici on suit la logique "Masqué avec cadenas", donc on ne charge pas.
-        
-        if (accessGranted) {
-            const { data: drawingsData, error: drawingsError } = await supabase
+        // 3. Récupérer les participations de l'utilisateur COURANT (pour savoir ce qu'il a le droit de voir)
+        if (currentUser) {
+            // On récupère tous les cloud_id où j'ai dessiné
+            const { data: myDrawings } = await supabase
                 .from('drawings')
-                .select('*, likes(count), comments(count)')
-                .eq('user_id', userId)
-                .order('created_at', { ascending: false });
-
-            if (!drawingsError && isMounted) {
-                setDrawings(drawingsData || []);
+                .select('cloud_id')
+                .eq('user_id', currentUser.id);
+            
+            if (isMounted && myDrawings) {
+                // On crée une liste simple d'IDs
+                const myCloudIds = myDrawings.map(d => d.cloud_id);
+                setUnlockedCloudIds(myCloudIds);
             }
-        } else {
-            if (isMounted) setDrawings([]); // Vide si pas d'accès
         }
 
     } catch (e) {
-        console.error("Erreur chargement:", e);
-        if (isMounted) setCanViewContent(false);
+        console.error("Erreur chargement données profil:", e);
     } finally {
         if (isMounted) setLoading(false);
     }
@@ -254,23 +217,36 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
       setShowComments(false);
   };
 
-  const renderDrawingItem = ({ item }: { item: any }) => (
-    <TouchableOpacity 
-        onPress={() => openDrawing(item)}
-        style={{ width: ITEM_SIZE, aspectRatio: 3/4, marginBottom: SPACING, backgroundColor: '#F9F9F9', overflow: 'hidden' }}
-    >
-        <DrawingViewer 
-            imageUri={item.cloud_image_url}
-            canvasData={item.canvas_data}
-            viewerSize={ITEM_SIZE}
-            transparentMode={false}
-            animated={false}
-            startVisible={true}
-        />
-    </TouchableOpacity>
-  );
+  const renderDrawingItem = ({ item }: { item: any }) => {
+    // CONDITION D'AFFICHAGE DU DESSIN :
+    // 1. C'est mon propre profil (je vois tout)
+    // 2. OU j'ai dessiné sur ce nuage (cloud_id présent dans ma liste unlockedCloudIds)
+    const isUnlocked = (currentUser?.id === userId) || unlockedCloudIds.includes(item.cloud_id);
+
+    return (
+        <TouchableOpacity 
+            onPress={() => openDrawing(item)}
+            style={{ width: ITEM_SIZE, aspectRatio: 3/4, marginBottom: SPACING, backgroundColor: '#F9F9F9', overflow: 'hidden' }}
+        >
+            <DrawingViewer 
+                imageUri={item.cloud_image_url}
+                // Si pas débloqué, on passe un tableau vide -> Affiche juste le nuage (photo sans dessin)
+                canvasData={isUnlocked ? item.canvas_data : []}
+                viewerSize={ITEM_SIZE}
+                transparentMode={false}
+                animated={false}
+                startVisible={true}
+            />
+        </TouchableOpacity>
+    );
+  };
 
   const commentsCount = selectedDrawing?.comments?.[0]?.count || selectedDrawing?.comments_count || 0;
+  
+  // Vérification unlock pour le dessin sélectionné (agrandi)
+  const isSelectedUnlocked = selectedDrawing && (
+      (currentUser?.id === userId) || unlockedCloudIds.includes(selectedDrawing.cloud_id)
+  );
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -318,12 +294,12 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                 </View>
             </View>
 
-            {/* CONTENU : GALERIE OU LOCK */}
+            {/* GALERIE (Toujours affichée, mais contenu filtré via renderDrawingItem) */}
             {loading ? (
                 <View style={styles.loadingContainer}>
                     <ActivityIndicator size="large" color="#000" />
                 </View>
-            ) : canViewContent ? (
+            ) : (
                 <FlatList
                     data={drawings}
                     renderItem={renderDrawingItem}
@@ -338,17 +314,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                     }
                     contentContainerStyle={{ paddingBottom: 40 }}
                 />
-            ) : (
-                // ÉTAT VERROUILLÉ
-                <View style={styles.lockedContainer}>
-                    <View style={styles.lockedIconContainer}>
-                        <Lock color="#000" size={40} />
-                    </View>
-                    <Text style={styles.lockedTitle}>Galerie Masquée</Text>
-                    <Text style={styles.lockedSubtitle}>
-                        Participe au nuage du jour pour débloquer les profils et explorer les créations des autres !
-                    </Text>
-                </View>
             )}
 
             {/* MODALE D'AGRANDISSEMENT */}
@@ -374,14 +339,16 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                                 />
                                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                                     <DrawingViewer
-                                        imageUri={selectedDrawing.cloud_image_url} canvasData={selectedDrawing.canvas_data}
+                                        imageUri={selectedDrawing.cloud_image_url} 
+                                        // Si pas débloqué, tableau vide -> photo sans dessin
+                                        canvasData={isSelectedUnlocked ? selectedDrawing.canvas_data : []}
                                         viewerSize={screenWidth} 
                                         transparentMode={true} 
                                         startVisible={false} 
                                         animated={true}
                                     />
                                 </View>
-                                <Text style={styles.hintText}>Maintenir pour voir l'original</Text>
+                                {isSelectedUnlocked && <Text style={styles.hintText}>Maintenir pour voir l'original</Text>}
                             </Pressable>
                         </View>
 
@@ -492,27 +459,6 @@ const styles = StyleSheet.create({
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   emptyState: { alignItems: 'center', marginTop: 50, gap: 10 },
   emptyText: { color: '#999', fontSize: 16 },
-
-  // Styles Locked
-  lockedContainer: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-      paddingHorizontal: 40,
-      marginTop: -50 
-  },
-  lockedIconContainer: {
-      width: 80, height: 80, borderRadius: 40,
-      backgroundColor: '#F5F5F5',
-      justifyContent: 'center', alignItems: 'center',
-      marginBottom: 20
-  },
-  lockedTitle: {
-      fontSize: 20, fontWeight: '800', color: '#000', marginBottom: 10, textAlign: 'center'
-  },
-  lockedSubtitle: {
-      fontSize: 14, color: '#666', textAlign: 'center', lineHeight: 22
-  },
 
   hintText: { position: 'absolute', bottom: 10, alignSelf: 'center', color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width:1, height:1}, textShadowRadius: 1 },
   
