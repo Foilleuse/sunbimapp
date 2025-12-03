@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Modal, Image, TouchableOpacity, FlatList, ActivityIndicator, Dimensions, Alert, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Modal, Image, TouchableOpacity, FlatList, ActivityIndicator, Dimensions, Alert, Pressable, Platform } from 'react-native';
 import { X, User, UserPlus, UserCheck, Heart, MessageCircle } from 'lucide-react-native';
 import { supabase } from '../lib/supabaseClient';
 import { DrawingViewer } from './DrawingViewer';
@@ -282,15 +282,15 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
             <Modal visible={!!selectedDrawing} animationType="slide" presentationStyle="pageSheet" onRequestClose={closeDrawing}>
                 {selectedDrawing && (
                     <View style={styles.container}>
-                        {/* Header standard pour fermer */}
-                        <View style={styles.header}>
+                        {/* Header plus compact pour l'agrandissement */}
+                        <View style={[styles.header, { paddingVertical: 5 }]}> 
                             <TouchableOpacity onPress={closeDrawing} style={styles.closeBtn} hitSlop={15}>
                                 <X color="#000" size={28} />
                             </TouchableOpacity>
                         </View>
 
-                        {/* Contenu Centré */}
-                        <View style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}>
+                        {/* Contenu Centré - Utilisation de flex pour maximiser l'espace */}
+                        <View style={{flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: -20}}> 
                             <Pressable 
                                 onPressIn={() => setIsHolding(true)} 
                                 onPressOut={() => setIsHolding(false)}
