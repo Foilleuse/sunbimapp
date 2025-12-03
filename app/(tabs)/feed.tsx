@@ -109,7 +109,7 @@ export default function FeedPage() {
     const [drawings, setDrawings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [currentIndex, setCurrentIndex] = useState(0);
-    const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+    const { width: screenWidth } = Dimensions.get('window');
 
     useEffect(() => { fetchTodaysFeed(); }, []);
 
@@ -132,33 +132,13 @@ export default function FeedPage() {
         } catch (e) { console.error(e); } finally { setLoading(false); }
     };
 
-    // Image de fond (La première dispo)
-    const backgroundUrl = drawings.length > 0 ? drawings[0].cloud_image_url : null;
-
     if (loading) return <View style={styles.loadingContainer}><ActivityIndicator color="#000" size="large" /></View>;
 
     return (
         <View style={styles.container}>
+            <SunbimHeader showCloseButton={false} />
             
-            {/* --- FOND D'ÉCRAN : Image du jour Plein Écran + Flou --- */}
-            {backgroundUrl && (
-                <Image 
-                    source={{uri: backgroundUrl}} 
-                    style={[
-                        StyleSheet.absoluteFill, // Prend tout l'espace, même derrière le header
-                        { width: screenWidth, height: screenHeight }
-                    ]} 
-                    resizeMode="cover"
-                    blurRadius={50} // Flou Gaussien fort
-                />
-            )}
-
-            {/* Header transparent */}
-            <View style={{ zIndex: 1, backgroundColor: 'transparent' }}>
-                <SunbimHeader showCloseButton={false} />
-            </View>
-            
-            <View style={{ flex: 1, zIndex: 1 }}>
+            <View style={{ flex: 1 }}>
                 {drawings.length > 0 ? (
                     <PagerView 
                         style={{ flex: 1 }} 
@@ -186,13 +166,13 @@ export default function FeedPage() {
 }
 
 const styles = StyleSheet.create({
-    // Fond noir par défaut (avant chargement image)
-    container: { flex: 1, backgroundColor: '#000' }, 
+    // Fond blanc simple
+    container: { flex: 1, backgroundColor: '#FFFFFF' }, 
     
-    loadingContainer: { flex: 1, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
+    loadingContainer: { flex: 1, backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center' },
     
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    text: { color: '#FFF', fontSize: 16 },
+    text: { color: '#666', fontSize: 16 },
     
     cardContainer: { flex: 1 },
     cardInfo: {
