@@ -38,20 +38,29 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
   const ITEM_SIZE = (screenWidth - (SPACING * (NUM_COLS - 1))) / NUM_COLS;
 
   useEffect(() => {
-    if (visible && userId) {
-        checkPermissionAndFetch();
-        if (currentUser && currentUser.id !== userId) {
-            checkFollowStatus();
+    let isMounted = true;
+
+    const initModal = async () => {
+        if (visible && userId) {
+            // On lance les vérifications
+            if (currentUser && currentUser.id !== userId) {
+                checkFollowStatus();
+            }
+            await checkPermissionAndFetch(isMounted);
+        } else {
+            // Reset complet à la fermeture
+            setLoading(true);
+            setDrawings([]);
+            setIsFollowing(false);
+            setSelectedDrawing(null); 
+            setCanViewContent(false);
         }
-    } else {
-        // Reset à la fermeture
-        setLoading(true);
-        setDrawings([]);
-        setIsFollowing(false);
-        setSelectedDrawing(null); 
-        setCanViewContent(false);
-    }
-  }, [visible, userId]);
+    };
+
+    initModal();
+
+    return () => { isMounted = false; };
+  }, [visible, userId, currentUser]);
 
   // Initialisation des stats quand un dessin est ouvert
   useEffect(() => {
@@ -151,9 +160,9 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
     }
   };
 
-  const checkPermissionAndFetch = async () => {
+  const checkPermissionAndFetch = async (isMounted: boolean) => {
     try {
-        setLoading(true);
+        if (isMounted) setLoading(true);
 
         // 1. Récupérer le profil public (toujours visible)
         const { data: profileData } = await supabase
@@ -162,17 +171,15 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
             .eq('id', userId)
             .single();
         
-        if (profileData) setUserProfile(profileData);
+        if (isMounted && profileData) setUserProfile(profileData);
 
         // 2. Vérifier si l'utilisateur courant a le droit de voir
         let accessGranted = false;
 
-        // Cas 1 : C'est mon propre profil -> Accès autorisé
         if (currentUser && currentUser.id === userId) {
+            // C'est mon profil -> accès direct
             accessGranted = true;
-        } 
-        // Cas 2 : Je visite un autre profil -> Vérification de participation au nuage du jour
-        else if (currentUser) {
+        } else if (currentUser) {
             const today = new Date().toISOString().split('T')[0];
             
             // Récupérer le nuage du jour
@@ -193,18 +200,14 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                 // Si count > 0, j'ai participé -> Accès autorisé
                 if (count !== null && count > 0) {
                     accessGranted = true;
-                } else {
-                    console.log("Accès refusé : Pas de dessin pour le nuage du jour");
                 }
             } else {
-                // S'il n'y a pas de nuage aujourd'hui, on bloque par défaut ou on autorise l'historique
-                // Ici on bloque pour être strict (comme le Feed)
-                console.log("Accès refusé : Pas de nuage aujourd'hui");
-                accessGranted = false; 
+                // Pas de nuage aujourd'hui -> On bloque l'accès par sécurité (Play to see)
+                accessGranted = false;
             }
         }
 
-        setCanViewContent(accessGranted);
+        if (isMounted) setCanViewContent(accessGranted);
 
         // 3. Charger les dessins UNIQUEMENT si l'accès est accordé
         if (accessGranted) {
@@ -214,17 +217,18 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                 .eq('user_id', userId)
                 .order('created_at', { ascending: false });
 
-            if (drawingsError) throw drawingsError;
-            setDrawings(drawingsData || []);
+            if (!drawingsError && isMounted) {
+                setDrawings(drawingsData || []);
+            }
         } else {
-            setDrawings([]); // Vide si pas d'accès
+            if (isMounted) setDrawings([]); // Vide si pas d'accès
         }
 
     } catch (e) {
         console.error("Erreur chargement:", e);
-        setCanViewContent(false); // Sécurité en cas d'erreur
+        if (isMounted) setCanViewContent(false);
     } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
     }
   };
 
@@ -480,7 +484,7 @@ const styles = StyleSheet.create({
       justifyContent: 'center',
       alignItems: 'center',
       paddingHorizontal: 40,
-      marginTop: -50 // Remonter un peu visuellement
+      marginTop: -50 
   },
   lockedIconContainer: {
       width: 80, height: 80, borderRadius: 40,
