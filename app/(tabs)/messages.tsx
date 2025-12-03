@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, FlatList, Image, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Image, ActivityIndicator, TouchableOpacity, Dimensions } from 'react-native';
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../../src/lib/supabaseClient';
 import { useAuth } from '../../src/contexts/AuthContext';
@@ -6,6 +6,7 @@ import { SunbimHeader } from '../../src/components/SunbimHeader';
 import { User, UserMinus, UserCheck } from 'lucide-react-native';
 import { useFocusEffect } from 'expo-router';
 import { UserProfileModal } from '../../src/components/UserProfileModal'; 
+import { DrawingViewer } from '../../src/components/DrawingViewer'; // Import nécessaire
 
 export default function FriendsPage() {
   const { user } = useAuth();
@@ -14,6 +15,9 @@ export default function FriendsPage() {
   
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
+
+  // Pour la miniature du dessin
+  const MINI_DRAWING_SIZE = 60; 
 
   useFocusEffect(
     useCallback(() => {
@@ -24,8 +28,14 @@ export default function FriendsPage() {
   const fetchFollowing = async () => {
     try {
       setLoading(true);
-      
-      // ÉTAPE 1 : Récupérer la liste des abonnements (IDs)
+      const today = new Date().toISOString().split('T')[0];
+
+      // 1. Récupérer le nuage du jour (pour trouver le dessin correspondant)
+      const { data: cloudData } = await supabase.from('clouds').select('id, image_url').eq('published_for', today).maybeSingle();
+      const todayCloudId = cloudData?.id;
+      const todayCloudUrl = cloudData?.image_url;
+
+      // 2. Récupérer les abonnements
       const { data: followsData, error: followsError } = await supabase
         .from('follows')
         .select('id, following_id')
@@ -33,13 +43,12 @@ export default function FriendsPage() {
 
       if (followsError) throw followsError;
 
-      // Si aucun abonnement, on arrête là
       if (!followsData || followsData.length === 0) {
           setFollowing([]);
           return;
       }
 
-      // ÉTAPE 2 : Récupérer les infos des utilisateurs correspondants
+      // 3. Récupérer les infos des utilisateurs
       const followingIds = followsData.map(f => f.following_id);
       
       const { data: usersData, error: usersError } = await supabase
@@ -49,19 +58,35 @@ export default function FriendsPage() {
 
       if (usersError) throw usersError;
 
-      // ÉTAPE 3 : Fusionner les données pour l'affichage
-      const formattedData = followsData.map(follow => {
-          // On trouve le profil correspondant à l'ID suivi
-          const userProfile = usersData?.find(u => u.id === follow.following_id);
+      // 4. Récupérer les dessins du jour pour ces utilisateurs
+      let todaysDrawings: any[] = [];
+      if (todayCloudId && followingIds.length > 0) {
+          const { data: drawingsData } = await supabase
+            .from('drawings')
+            .select('user_id, canvas_data, cloud_image_url')
+            .eq('cloud_id', todayCloudId)
+            .in('user_id', followingIds);
           
-          // Si le profil n'existe pas (ex: utilisateur supprimé), on l'ignore
+          todaysDrawings = drawingsData || [];
+      }
+
+      // 5. Fusionner tout
+      const formattedData = followsData.map(follow => {
+          const userProfile = usersData?.find(u => u.id === follow.following_id);
           if (!userProfile) return null;
           
+          // Trouver le dessin du jour pour cet utilisateur
+          const userDrawing = todaysDrawings.find(d => d.user_id === follow.following_id);
+
           return {
-              followId: follow.id, // ID de la relation (pour unfollow)
-              ...userProfile       // Infos de l'utilisateur (id, nom, avatar...)
+              followId: follow.id, 
+              ...userProfile,
+              todaysDrawing: userDrawing ? {
+                  canvasData: userDrawing.canvas_data,
+                  cloudImageUrl: userDrawing.cloud_image_url || todayCloudUrl // Fallback si manquant dans drawing
+              } : null
           };
-      }).filter(item => item !== null); // On nettoie les nulls
+      }).filter(item => item !== null);
 
       setFollowing(formattedData);
 
@@ -122,14 +147,31 @@ export default function FriendsPage() {
             </View>
         </View>
         
-        {/* BOUTON ACTION (Ne plus suivre) */}
-        <TouchableOpacity 
-            style={styles.unfollowBtn} 
-            onPress={() => handleUnfollow(item.followId, item.id)}
-            hitSlop={10}
-        >
-            <UserCheck size={20} color="#000" />
-        </TouchableOpacity>
+        {/* DESSIN DU JOUR (à droite) ou BOUTON ACTION */}
+        <View style={styles.rightContainer}>
+            {item.todaysDrawing ? (
+                <View style={styles.miniDrawingContainer}>
+                    <DrawingViewer 
+                        imageUri={item.todaysDrawing.cloudImageUrl}
+                        canvasData={item.todaysDrawing.canvasData}
+                        viewerSize={MINI_DRAWING_SIZE}
+                        transparentMode={false} // On veut voir le nuage en fond
+                        animated={false}
+                        startVisible={true}
+                    />
+                </View>
+            ) : (
+                // Si pas de dessin, on affiche le bouton unfollow (ou rien, selon préférence)
+                // Ici je garde le bouton pour pouvoir gérer les amis
+                <TouchableOpacity 
+                    style={styles.unfollowBtn} 
+                    onPress={() => handleUnfollow(item.followId, item.id)}
+                    hitSlop={10}
+                >
+                    <UserCheck size={20} color="#000" />
+                </TouchableOpacity>
+            )}
+        </View>
     </TouchableOpacity>
   );
 
@@ -138,8 +180,6 @@ export default function FriendsPage() {
       <SunbimHeader showCloseButton={false} />
       
       <View style={styles.content}>
-        {/* Suppression du Titre et du Sous-titre ici */}
-
         {loading ? (
             <ActivityIndicator style={{marginTop: 20}} color="#000" />
         ) : (
@@ -158,7 +198,6 @@ export default function FriendsPage() {
         )}
       </View>
 
-      {/* Modale Profil Utilisateur */}
       {selectedUser && (
         <UserProfileModal
             visible={isProfileModalVisible}
@@ -181,7 +220,8 @@ const styles = StyleSheet.create({
       justifyContent: 'space-between', 
       paddingVertical: 15, 
       borderBottomWidth: 1, 
-      borderBottomColor: '#F5F5F5' 
+      borderBottomColor: '#F5F5F5',
+      height: 80 // Hauteur fixe pour alignement
   },
   friendInfoContainer: { 
       flexDirection: 'row', 
@@ -190,13 +230,27 @@ const styles = StyleSheet.create({
       marginRight: 10
   },
   avatarContainer: { marginRight: 15 },
-  avatar: { width: 56, height: 56, borderRadius: 28 },
-  placeholderAvatar: { backgroundColor: '#F0F0F0', justifyContent: 'center', alignItems: 'center' },
+  avatar: { width: 50, height: 50, borderRadius: 25 },
+  placeholderAvatar: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#F0F0F0', justifyContent: 'center', alignItems: 'center' },
   
   textContainer: { flex: 1, justifyContent: 'center' },
   friendName: { fontSize: 16, fontWeight: '700', color: '#000', marginBottom: 2 },
   friendBio: { fontSize: 13, color: '#888' },
   
+  rightContainer: {
+      justifyContent: 'center',
+      alignItems: 'center',
+      minWidth: 60
+  },
+  miniDrawingContainer: {
+      width: 60,
+      height: 80, // Ratio 3:4 approximatif pour le viewer
+      borderRadius: 8,
+      overflow: 'hidden',
+      backgroundColor: '#EEE',
+      borderWidth: 1,
+      borderColor: '#F0F0F0'
+  },
   unfollowBtn: { 
       padding: 10,
       backgroundColor: '#F5F5F5',
