@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform, Image, Pressable, ImageBackground } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform, Image, Pressable } from 'react-native';
 import { useEffect, useState, memo } from 'react';
 import { Heart, MessageCircle, User, Share2, Eye } from 'lucide-react-native';
 import { supabase } from '../../src/lib/supabaseClient';
@@ -92,6 +92,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
     return (
         <View style={styles.cardContainer}>
             
+            {/* ZONE DE DESSIN TRANSPARENTE (L'image est derrière, gérée par le parent) */}
             <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent' }}>
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
@@ -100,17 +101,13 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
                             imageUri={drawing.cloud_image_url} 
                             canvasData={drawing.canvas_data}
                             viewerSize={canvasSize}
-                            transparentMode={false} 
+                            transparentMode={true} // Transparent pour voir l'image statique derrière
                             animated={isActive} 
                             startVisible={false} 
                         />
                     )}
                 </View>
-                 <Image 
-                    source={{ uri: drawing.cloud_image_url }}
-                    style={[StyleSheet.absoluteFill, { zIndex: -1 }]}
-                    resizeMode="cover"
-                />
+                {/* Plus d'image fallback ici car l'image est globale et statique */}
             </View>
             
             <View style={styles.cardInfo}>
@@ -191,13 +188,11 @@ export default function FeedPage() {
     const [drawings, setDrawings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [currentIndex, setCurrentIndex] = useState(0);
+    const [backgroundCloud, setBackgroundCloud] = useState<string | null>(null);
     const { width: screenWidth } = Dimensions.get('window');
 
     const [selectedUser, setSelectedUser] = useState<any>(null);
     const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
-
-    // Image placeholder locale (adapter le chemin si besoin)
-    const backgroundImageSource = require('../../assets/cloud-placeholder.jpg');
 
     useEffect(() => { fetchTodaysFeed(); }, []);
 
@@ -207,6 +202,10 @@ export default function FeedPage() {
             const { data: cloudData } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();
             
             if (cloudData) {
+                // On récupère l'image du nuage pour le fond statique
+                const optimizedBg = getOptimizedImageUrl(cloudData.image_url, screenWidth);
+                setBackgroundCloud(optimizedBg || cloudData.image_url);
+
                 const { data: drawingsData, error: drawingsError } = await supabase
                     .from('drawings')
                     .select('*, users(id, display_name, avatar_url), likes(count), comments(count)') 
@@ -233,65 +232,72 @@ export default function FeedPage() {
     if (loading) return <View style={styles.loadingContainer}><ActivityIndicator color="#000" size="large" /></View>;
 
     return (
-        <ImageBackground 
-            source={backgroundImageSource} 
-            style={styles.background}
-            resizeMode="cover"
-        >
-            <View style={styles.container}>
-                <SunbimHeader showCloseButton={false} />
+        <View style={styles.container}>
+            <SunbimHeader showCloseButton={false} />
+            
+            <View style={{ flex: 1, position: 'relative' }}>
                 
-                <View style={{ flex: 1, position: 'relative' }}>
-                    
-                    {drawings.length > 0 ? (
-                        <PagerView 
-                            style={{ flex: 1 }} 
-                            initialPage={0} 
-                            onPageSelected={(e: any) => setCurrentIndex(e.nativeEvent.position)}
-                            offscreenPageLimit={1} 
-                        >
-                            {drawings.map((drawing, index) => (
-                                <View key={drawing.id} style={{ flex: 1 }}>
-                                    <FeedCard 
-                                        drawing={drawing} 
-                                        canvasSize={screenWidth} 
-                                        index={index}
-                                        currentIndex={currentIndex}
-                                        onUserPress={handleUserPress}
-                                    />
-                                </View>
-                            ))}
-                        </PagerView>
-                    ) : (
-                        <View style={styles.centerBox}><Text style={styles.text}>La galerie est vide.</Text></View>
-                    )}
-                </View>
-
-                {selectedUser && (
-                    <UserProfileModal
-                        visible={isProfileModalVisible}
-                        onClose={() => setIsProfileModalVisible(false)}
-                        userId={selectedUser.id}
-                        initialUser={selectedUser}
+                {/* IMAGE DE FOND STATIQUE (Derrière le PagerView) */}
+                {backgroundCloud && (
+                    <Image 
+                        source={{ uri: backgroundCloud }}
+                        style={{ 
+                            position: 'absolute', 
+                            top: 0, 
+                            left: 0,
+                            width: screenWidth, 
+                            aspectRatio: 3/4, // Garde le même ratio que les dessins
+                            zIndex: 0 
+                        }}
+                        resizeMode="cover"
                     />
                 )}
+
+                {drawings.length > 0 ? (
+                    <PagerView 
+                        style={{ flex: 1, zIndex: 1 }} // Au-dessus de l'image
+                        initialPage={0} 
+                        onPageSelected={(e: any) => setCurrentIndex(e.nativeEvent.position)}
+                        offscreenPageLimit={1} 
+                    >
+                        {drawings.map((drawing, index) => (
+                            <View key={drawing.id} style={{ flex: 1 }}>
+                                <FeedCard 
+                                    drawing={drawing} 
+                                    canvasSize={screenWidth} 
+                                    index={index}
+                                    currentIndex={currentIndex}
+                                    onUserPress={handleUserPress}
+                                />
+                            </View>
+                        ))}
+                    </PagerView>
+                ) : (
+                    <View style={styles.centerBox}><Text style={styles.text}>La galerie est vide.</Text></View>
+                )}
             </View>
-        </ImageBackground>
+
+            {selectedUser && (
+                <UserProfileModal
+                    visible={isProfileModalVisible}
+                    onClose={() => setIsProfileModalVisible(false)}
+                    userId={selectedUser.id}
+                    initialUser={selectedUser}
+                />
+            )}
+        </View>
     );
 }
 
 const styles = StyleSheet.create({
-    background: {
-        flex: 1,
-    },
-    container: { flex: 1, backgroundColor: 'transparent' },
+    container: { flex: 1, backgroundColor: '#FFFFFF' },
     loadingContainer: { flex: 1, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     text: { color: '#666', fontSize: 16 },
     cardContainer: { flex: 1 },
     cardInfo: {
         flex: 1, 
-        backgroundColor: 'transparent', 
+        backgroundColor: '#FFFFFF', 
         marginTop: -40, 
         paddingHorizontal: 20, 
         paddingTop: 25,
