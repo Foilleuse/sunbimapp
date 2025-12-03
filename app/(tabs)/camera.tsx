@@ -85,8 +85,9 @@ export default function CameraPage() {
               .getPublicUrl(fileName);
 
           // 5. Sauvegarde en base
+          // CORRECTION ICI : Nom de table avec tiret 'cloud-submissions'
           const { error: dbError } = await supabase
-              .from('cloud_submissions')
+              .from('cloud-submissions') // <-- Modifié ici
               .insert({
                   user_id: user.id,
                   image_url: publicUrl,
