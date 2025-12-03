@@ -20,7 +20,10 @@ export default function ProfilePage() {
   const [selectedDrawing, setSelectedDrawing] = useState<any | null>(null);
   const [isHolding, setIsHolding] = useState(false);
   const [showComments, setShowComments] = useState(false);
+  
+  // États d'interaction pour le dessin sélectionné
   const [isLiked, setIsLiked] = useState(false);
+  const [likesCount, setLikesCount] = useState(0);
 
   // Auth
   const [email, setEmail] = useState('');
@@ -38,6 +41,26 @@ export default function ProfilePage() {
     if (user) fetchHistory();
   }, [user]);
 
+  // Initialisation des stats quand un dessin est ouvert
+  useEffect(() => {
+    if (selectedDrawing && user) {
+        // Init du compteur (si disponible via la jointure, sinon 0)
+        setLikesCount(selectedDrawing.likes?.[0]?.count || 0);
+        
+        // Vérifier si l'utilisateur a liké ce dessin
+        const checkLikeStatus = async () => {
+            const { count } = await supabase
+                .from('likes')
+                .select('*', { count: 'exact', head: true })
+                .eq('user_id', user.id)
+                .eq('drawing_id', selectedDrawing.id);
+            
+            setIsLiked(count !== null && count > 0);
+        };
+        checkLikeStatus();
+    }
+  }, [selectedDrawing, user]);
+
   const fetchHistory = async () => {
     try {
         const today = new Date().toISOString().split('T')[0];
@@ -50,9 +73,10 @@ export default function ProfilePage() {
 
         if (cloudsError) throw cloudsError;
 
+        // MODIFICATION : Ajout de likes(count) et comments(count)
         const { data: userDrawings, error: drawingsError } = await supabase
             .from('drawings')
-            .select('*')
+            .select('*, likes(count), comments(count)')
             .eq('user_id', user?.id);
 
         if (drawingsError) throw drawingsError;
@@ -100,7 +124,6 @@ export default function ProfilePage() {
     try {
         await signOut(); // Déconnecte de Supabase
         // Redirection forcée vers l'Index (Page de dessin)
-        // Le replace évite de pouvoir faire "Retour" vers le profil connecté
         router.replace('/'); 
     } catch (error) {
         console.error("Erreur déconnexion:", error);
@@ -108,7 +131,50 @@ export default function ProfilePage() {
   };
 
   const openDrawing = (drawing: any) => setSelectedDrawing(drawing);
-  const closeDrawing = () => setSelectedDrawing(null);
+  const closeDrawing = () => {
+      setSelectedDrawing(null);
+      setIsLiked(false);
+      setShowComments(false);
+  };
+
+  const handleLike = async () => {
+    if (!user || !selectedDrawing) return;
+
+    const previousLiked = isLiked;
+    const previousCount = likesCount;
+
+    const newLikedState = !previousLiked;
+    const newCount = newLikedState ? previousCount + 1 : Math.max(0, previousCount - 1);
+
+    setIsLiked(newLikedState);
+    setLikesCount(newCount);
+
+    try {
+        if (previousLiked) {
+            const { error } = await supabase
+                .from('likes')
+                .delete()
+                .eq('user_id', user.id)
+                .eq('drawing_id', selectedDrawing.id);
+            if (error) throw error;
+        } else {
+            const { error } = await supabase
+                .from('likes')
+                .insert({
+                    user_id: user.id,
+                    drawing_id: selectedDrawing.id
+                });
+            if (error) throw error;
+        }
+    } catch (error) {
+        console.error("Erreur like:", error);
+        setIsLiked(previousLiked);
+        setLikesCount(previousCount);
+    }
+  };
+
+  // Récupération du nombre de commentaires
+  const commentsCount = selectedDrawing?.comments?.[0]?.count || 0;
 
   // --- RENDER ITEM ---
   const renderItem = ({ item }: { item: any }) => {
@@ -252,7 +318,7 @@ export default function ProfilePage() {
       </View>
 
       {/* MODALE DÉTAIL DESSIN */}
-      <Modal visible={!!selectedDrawing} animationType="slide" presentationStyle="pageSheet">
+      <Modal visible={!!selectedDrawing} animationType="slide" presentationStyle="pageSheet" onRequestClose={closeDrawing}>
           {selectedDrawing && (
               <View style={styles.modalContainer}>
                   <View style={styles.modalHeader}>
@@ -266,29 +332,42 @@ export default function ProfilePage() {
                     onPressOut={() => setIsHolding(false)}
                     style={{ width: screenWidth, aspectRatio: 3/4, backgroundColor: '#F0F0F0' }}
                   >
-                      <DrawingViewer 
-                          imageUri={selectedDrawing.cloud_image_url}
-                          canvasData={isHolding ? [] : selectedDrawing.canvas_data}
-                          viewerSize={screenWidth}
-                          transparentMode={true}
-                          animated={true}
-                          startVisible={false}
-                      />
+                      {/* Ajout de l'image de fond pour le mode transparent (cohérence avec feed/gallery) */}
+                      <Image 
+                            source={{ uri: selectedDrawing.cloud_image_url }}
+                            style={[StyleSheet.absoluteFill, { opacity: 1 }]}
+                            resizeMode="cover"
+                        />
+                      <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
+                        <DrawingViewer 
+                            imageUri={selectedDrawing.cloud_image_url}
+                            canvasData={selectedDrawing.canvas_data}
+                            viewerSize={screenWidth}
+                            transparentMode={true} // Transparent pour voir l'image native dessous
+                            animated={true}
+                            startVisible={false}
+                        />
+                      </View>
                       <Text style={styles.hintText}>Maintenir pour voir l'original</Text>
                   </Pressable>
 
                   <View style={styles.modalFooter}>
                       <View>
-                          <Text style={styles.drawingLabel}>{selectedDrawing.label}</Text>
+                          <Text style={styles.drawingLabel}>{selectedDrawing.label || "Sans titre"}</Text>
                           <Text style={styles.dateText}>{new Date(selectedDrawing.created_at).toLocaleDateString()}</Text>
                       </View>
                       
                       <View style={styles.statsRowSmall}>
-                          <TouchableOpacity onPress={() => setIsLiked(!isLiked)}>
+                          {/* Gestion du Like */}
+                          <TouchableOpacity style={{flexDirection: 'row', alignItems: 'center', gap: 4}} onPress={handleLike}>
                               <Heart color={isLiked ? "#FF3B30" : "#000"} fill={isLiked ? "#FF3B30" : "transparent"} size={28} />
+                              <Text style={{fontWeight: '600', fontSize: 16}}>{likesCount}</Text>
                           </TouchableOpacity>
-                          <TouchableOpacity onPress={() => setShowComments(true)}>
+
+                          {/* Gestion du Commentaire */}
+                          <TouchableOpacity style={{flexDirection: 'row', alignItems: 'center', gap: 4}} onPress={() => setShowComments(true)}>
                               <MessageCircle color="#000" size={28} />
+                              <Text style={{fontWeight: '600', fontSize: 16}}>{commentsCount}</Text>
                           </TouchableOpacity>
                       </View>
                   </View>
