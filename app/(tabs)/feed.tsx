@@ -25,18 +25,18 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
     return (
         <View style={styles.cardContainer}>
             
-            {/* ZONE IMAGE NETTE (3:4) + DESSIN */}
-            {/* C'est ici qu'on voit le nuage net */}
+            {/* ZONE IMAGE + DESSIN (Format 3:4) */}
             <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: '#000', overflow: 'hidden' }}>
                 
-                {/* 1. IMAGE NETTE DE FOND DE CARTE */}
+                {/* 1. IMAGE NETTE (Le support du dessin) */}
+                {/* Elle est dans la carte, donc elle swipe avec le dessin */}
                 <Image 
                     source={{ uri: drawing.cloud_image_url }} 
                     style={StyleSheet.absoluteFill} 
                     resizeMode="cover" 
                 />
 
-                {/* 2. DESSIN PAR DESSUS (Fond transparent) */}
+                {/* 2. DESSIN (Superposé) */}
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
                         <DrawingViewer
@@ -44,7 +44,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
                             imageUri={drawing.cloud_image_url}
                             canvasData={drawing.canvas_data}
                             viewerSize={canvasSize}
-                            transparentMode={true} // Transparent pour voir l'image nette <Image> dessous
+                            transparentMode={true} // Fond transparent pour voir l'image <Image> dessous
                             animated={isActive} 
                             startVisible={false} 
                         />
@@ -53,16 +53,14 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
             </View>
             
             <View style={styles.cardInfo}>
-                {/* HEADER INFO : Titre + Bouton Œil sur la même ligne */}
+                {/* HEADER INFO */}
                 <View style={styles.headerInfo}>
                     
-                    {/* LIGNE TITRE ET ŒIL */}
                     <View style={styles.titleRow}>
                         <Text style={styles.drawingTitle} numberOfLines={1}>
                             {drawing.label || "Sans titre"}
                         </Text>
 
-                        {/* BOUTON ŒIL DÉPLACÉ ICI (Aligné à droite) */}
                         <TouchableOpacity 
                             style={[styles.eyeBtn, isHolding && styles.iconBtnActive]}
                             activeOpacity={1}
@@ -87,7 +85,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
                     </View>
                 </View>
 
-                {/* BARRE D'ACTIONS (Bas) */}
+                {/* BARRE D'ACTIONS */}
                 <View style={styles.actionBar}>
                     <View style={styles.leftActions}>
                         <TouchableOpacity style={styles.actionBtn} onPress={() => setIsLiked(!isLiked)}>
@@ -119,7 +117,7 @@ export default function FeedPage() {
     const [drawings, setDrawings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [currentIndex, setCurrentIndex] = useState(0);
-    const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+    const { width: screenWidth } = Dimensions.get('window');
 
     useEffect(() => { fetchTodaysFeed(); }, []);
 
@@ -143,27 +141,9 @@ export default function FeedPage() {
     };
 
     if (loading) return <View style={styles.loadingContainer}><ActivityIndicator color="#000" size="large" /></View>;
-    
-    // Image de fond (La première dispo) pour l'ambiance
-    const backgroundUrl = drawings.length > 0 ? drawings[0].cloud_image_url : null;
 
     return (
         <View style={styles.container}>
-            
-            {/* --- FOND D'ÉCRAN GLOBAL (AMBIANCE FLOUE) --- */}
-            {/* Placé tout au fond, couvre tout l'écran */}
-            {backgroundUrl && (
-                <Image 
-                    source={{uri: backgroundUrl}} 
-                    style={[
-                        StyleSheet.absoluteFill, 
-                        { width: screenWidth, height: screenHeight, zIndex: -1 }
-                    ]} 
-                    resizeMode="cover"
-                    blurRadius={50} // Flou fort
-                />
-            )}
-
             <SunbimHeader showCloseButton={false} />
             
             <View style={{ flex: 1 }}>
@@ -194,13 +174,12 @@ export default function FeedPage() {
 }
 
 const styles = StyleSheet.create({
-    // Fond noir par défaut (visible si l'image de fond ne charge pas)
-    container: { flex: 1, backgroundColor: '#000' }, 
+    container: { flex: 1, backgroundColor: '#FFFFFF' }, // Fond blanc propre
     
-    loadingContainer: { flex: 1, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
+    loadingContainer: { flex: 1, backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center' },
     
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    text: { color: '#FFF', fontSize: 16 },
+    text: { color: '#666', fontSize: 16 },
     
     cardContainer: { flex: 1 },
     cardInfo: {
