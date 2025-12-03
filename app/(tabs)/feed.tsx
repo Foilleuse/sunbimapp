@@ -92,6 +92,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
     return (
         <View style={styles.cardContainer}>
             
+            {/* ZONE DE DESSIN TRANSPARENTE (L'image est derrière, gérée par le parent) */}
             <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent' }}>
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
@@ -100,18 +101,13 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
                             imageUri={drawing.cloud_image_url} 
                             canvasData={drawing.canvas_data}
                             viewerSize={canvasSize}
-                            transparentMode={false} // Afficher l'image du nuage dans le viewer
+                            transparentMode={true} // Transparent pour voir l'image statique derrière
                             animated={isActive} 
                             startVisible={false} 
                         />
                     )}
                 </View>
-                {/* Fallback image en arrière plan au cas où, ou pour le mode "holding" */}
-                 <Image 
-                    source={{ uri: drawing.cloud_image_url }}
-                    style={[StyleSheet.absoluteFill, { zIndex: -1 }]}
-                    resizeMode="cover"
-                />
+                {/* Plus d'image fallback ici car l'image est globale et statique */}
             </View>
             
             <View style={styles.cardInfo}>
@@ -206,8 +202,9 @@ export default function FeedPage() {
             const { data: cloudData } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();
             
             if (cloudData) {
-                // Pas d'image de fond floue
-                setBackgroundCloud(null); 
+                // On récupère l'image du nuage pour le fond statique
+                const optimizedBg = getOptimizedImageUrl(cloudData.image_url, screenWidth);
+                setBackgroundCloud(optimizedBg || cloudData.image_url);
 
                 const { data: drawingsData, error: drawingsError } = await supabase
                     .from('drawings')
@@ -239,11 +236,26 @@ export default function FeedPage() {
             <SunbimHeader showCloseButton={false} />
             
             <View style={{ flex: 1, position: 'relative' }}>
-                {/* Suppression du fond flou */}
                 
+                {/* IMAGE DE FOND STATIQUE (Derrière le PagerView) */}
+                {backgroundCloud && (
+                    <Image 
+                        source={{ uri: backgroundCloud }}
+                        style={{ 
+                            position: 'absolute', 
+                            top: 0, 
+                            left: 0,
+                            width: screenWidth, 
+                            aspectRatio: 3/4, // Garde le même ratio que les dessins
+                            zIndex: 0 
+                        }}
+                        resizeMode="cover"
+                    />
+                )}
+
                 {drawings.length > 0 ? (
                     <PagerView 
-                        style={{ flex: 1 }} 
+                        style={{ flex: 1, zIndex: 1 }} // Au-dessus de l'image
                         initialPage={0} 
                         onPageSelected={(e: any) => setCurrentIndex(e.nativeEvent.position)}
                         offscreenPageLimit={1} 
