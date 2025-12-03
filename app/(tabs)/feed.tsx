@@ -27,6 +27,15 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
             
             {/* IMAGE + DESSIN (Non interactif au toucher) */}
             <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent' }}>
+                {/* Ici, on n'affiche PAS l'image de fond floue, car elle est gérée par le parent (FeedPage).
+                   On affiche seulement l'image NETTE (3:4) qui sert de support au dessin.
+                */}
+                <Image 
+                    source={{ uri: drawing.cloud_image_url }} 
+                    style={StyleSheet.absoluteFill} 
+                    resizeMode="cover" 
+                />
+
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
                         <DrawingViewer
@@ -34,7 +43,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
                             imageUri={drawing.cloud_image_url}
                             canvasData={drawing.canvas_data}
                             viewerSize={canvasSize}
-                            transparentMode={true} 
+                            transparentMode={true} // Important: fond transparent pour voir l'image nette dessous
                             animated={isActive} 
                             startVisible={false} 
                         />
@@ -132,28 +141,33 @@ export default function FeedPage() {
         } catch (e) { console.error(e); } finally { setLoading(false); }
     };
 
-    if (loading) return <View style={styles.loadingContainer}><ActivityIndicator color="#000" size="large" /></View>;
-    
+    // Image de fond (La première dispo)
     const backgroundUrl = drawings.length > 0 ? drawings[0].cloud_image_url : null;
+
+    if (loading) return <View style={styles.loadingContainer}><ActivityIndicator color="#000" size="large" /></View>;
 
     return (
         <View style={styles.container}>
             
-            {/* --- FOND D'ÉCRAN : Image du jour Plein Écran + Flou --- */}
+            {/* --- FOND D'ÉCRAN STATIQUE (PLEIN ÉCRAN + FLOU) --- */}
             {backgroundUrl && (
                 <Image 
                     source={{uri: backgroundUrl}} 
                     style={[
-                        StyleSheet.absoluteFill, // Remplit tout l'écran
+                        StyleSheet.absoluteFill, // Couvre tout l'écran, derrière tout
                         { width: screenWidth, height: screenHeight, zIndex: -1 }
                     ]} 
                     resizeMode="cover"
-                    blurRadius={40} // Flou Gaussien
+                    blurRadius={50} // Flou fort pour l'ambiance
                 />
             )}
 
-            <SunbimHeader showCloseButton={false} />
+            {/* Header transparent */}
+            <View style={{ zIndex: 10, backgroundColor: 'transparent' }}>
+                <SunbimHeader showCloseButton={false} />
+            </View>
             
+            {/* Contenu défilant */}
             <View style={{ flex: 1 }}>
                 {drawings.length > 0 ? (
                     <PagerView 
@@ -182,18 +196,19 @@ export default function FeedPage() {
 }
 
 const styles = StyleSheet.create({
-    // Fond noir par défaut si l'image tarde à charger
-    container: { flex: 1, backgroundColor: '#000' },
+    // Fond noir par défaut (visible si l'image de fond charge lentement)
+    container: { flex: 1, backgroundColor: '#000' }, 
     
     loadingContainer: { flex: 1, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
+    
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    text: { color: '#FFF', fontSize: 16 },
+    text: { color: '#FFF', fontSize: 16 }, // Texte blanc pour être visible sur fond sombre
     
     cardContainer: { flex: 1 },
     cardInfo: {
         flex: 1, 
         backgroundColor: '#FFFFFF', 
-        marginTop: -40, 
+        marginTop: -40, // Chevauchement léger pour le style
         paddingHorizontal: 20, 
         paddingTop: 25,
         shadowColor: "#000", shadowOffset: {width: 0, height: -4}, shadowOpacity: 0.05, shadowRadius: 4, elevation: 5,
