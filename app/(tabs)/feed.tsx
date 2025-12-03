@@ -1,6 +1,7 @@
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform, Image, Pressable } from 'react-native';
 import { useEffect, useState, memo } from 'react';
 import { Heart, MessageCircle, User, Share2, Eye } from 'lucide-react-native';
+import {Hz} from 'lucide-react-native'; // Correction: Suppression import inutile si présent, sinon ignorer
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
@@ -14,23 +15,29 @@ if (Platform.OS !== 'web') {
 const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: any, canvasSize: number, index: number, currentIndex: number }) => {
     const { user } = useAuth();
     
+    // Récupération du nombre de likes depuis la relation 'likes(count)'
+    // Supabase retourne un tableau [{ count: N }] pour les requêtes de comptage relationnel
+    const initialLikesCount = drawing.likes?.[0]?.count || 0;
+
     const [isLiked, setIsLiked] = useState(false);
-    // Initialisation avec la valeur du serveur
-    const [likesCount, setLikesCount] = useState(drawing.likes_count || 0);
+    const [likesCount, setLikesCount] = useState(initialLikesCount);
     
     const [isHolding, setIsHolding] = useState(false); 
     
-    const commentsCount = drawing.comments_count || 0;
+    // Pour les commentaires, on suppose une logique similaire ou un champ existant
+    // Si vous avez une relation comments(count), on pourrait faire pareil, 
+    // ici je garde comments_count s'il existe ou 0 par défaut.
+    const commentsCount = drawing.comments?.[0]?.count || drawing.comments_count || 0;
     const author = drawing.users;
     const isActive = index === currentIndex; 
     const shouldRenderDrawing = isActive;
 
-    // 1. SYNCHRONISATION : Si la donnée 'drawing' change (ex: refresh global), on met à jour le compteur local
+    // 1. SYNCHRONISATION : Si les données changent suite à un refresh
     useEffect(() => {
-        setLikesCount(drawing.likes_count || 0);
-    }, [drawing.likes_count]);
+        setLikesCount(drawing.likes?.[0]?.count || 0);
+    }, [drawing]);
 
-    // 2. VÉRIFICATION INITIALE DU LIKE
+    // 2. VÉRIFICATION INITIALE DU LIKE (Est-ce que JE l'ai liké ?)
     useEffect(() => {
         if (!user) return;
         const checkLikeStatus = async () => {
@@ -55,8 +62,6 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
 
         // Calcul du nouveau total
         const newLikedState = !previousLiked;
-        // Si on like, on ajoute 1. Si on unlike, on enlève 1.
-        // On s'assure de ne pas descendre sous 0.
         const newCount = newLikedState ? previousCount + 1 : Math.max(0, previousCount - 1);
 
         // Mise à jour UI immédiate
@@ -84,7 +89,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
             }
         } catch (error) {
             console.error("Erreur like:", error);
-            // Annulation en cas d'erreur
+            // Annulation en cas d'erreur (Rollback UI)
             setIsLiked(previousLiked);
             setLikesCount(previousCount);
         }
@@ -93,7 +98,6 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
     return (
         <View style={styles.cardContainer}>
             
-            {/* IMAGE + DESSIN (INCHANGÉ) */}
             <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent' }}>
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
@@ -111,7 +115,6 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
             </View>
             
             <View style={styles.cardInfo}>
-                {/* HEADER INFO */}
                 <View style={styles.headerInfo}>
                     <View style={styles.titleRow}>
                         <Text style={styles.drawingTitle} numberOfLines={1}>
@@ -144,14 +147,12 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
                 <View style={styles.actionBar}>
                     <View style={styles.leftActions}>
                         
-                        {/* BOUTON LIKE CORRIGÉ */}
                         <TouchableOpacity style={styles.actionBtn} onPress={handleLike}>
                             <Heart 
                                 color={isLiked ? "#FF3B30" : "#000"} 
                                 fill={isLiked ? "#FF3B30" : "transparent"} 
                                 size={28} 
                             />
-                            {/* AFFICHE LE COMPTEUR DYNAMIQUE */}
                             <Text style={styles.actionText}>{likesCount}</Text>
                         </TouchableOpacity>
 
@@ -190,12 +191,11 @@ export default function FeedPage() {
             const { data: cloudData } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();
             
             if (cloudData) {
-                // MODIF : On récupère aussi les likes (count) via la jointure si possible, 
-                // ou on s'assure que la vue SQL ou la fonction RPC met à jour ce champ.
-                // Ici, on suppose que la table 'drawings' a une colonne 'likes_count' tenue à jour.
+                // MODIFICATION ICI : On ajoute ', likes(count)' et ', comments(count)' à la requête select.
+                // Cela demande à Supabase de renvoyer le nombre de relations correspondantes.
                 const { data: drawingsData, error: drawingsError } = await supabase
                     .from('drawings')
-                    .select('*, users(display_name, avatar_url)') 
+                    .select('*, users(display_name, avatar_url), likes(count), comments(count)') 
                     .eq('cloud_id', cloudData.id)
                     .order('created_at', { ascending: false })
                     .limit(20);
