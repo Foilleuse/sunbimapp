@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Modal, Image, TouchableOpacity, FlatList, ActivityIndicator, Dimensions, Alert, Pressable, Platform, SafeAreaView } from 'react-native';
-import { X, User, UserPlus, UserCheck, Heart, MessageCircle } from 'lucide-react-native'; // Lock supprimé car plus d'écran verrouillé global
+import { X, User, UserPlus, UserCheck, Heart, MessageCircle, Lock, AlertCircle } from 'lucide-react-native'; // Ajout AlertCircle
 import { supabase } from '../lib/supabaseClient';
 import { DrawingViewer } from './DrawingViewer';
 import { useAuth } from '../contexts/AuthContext';
@@ -19,7 +19,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
   const [drawings, setDrawings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // NOUVEAU : Liste des ID de nuages que l'utilisateur courant a "débloqués" (en participant)
+  // Liste des ID de nuages que l'utilisateur courant a "débloqués"
   const [unlockedCloudIds, setUnlockedCloudIds] = useState<string[]>([]);
 
   const [isFollowing, setIsFollowing] = useState(false);
@@ -166,10 +166,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
     }
   };
 
-  // Nouvelle fonction unifiée pour tout charger
   const fetchData = async (isMounted: boolean) => {
     try {
-        // 1. Profil Utilisateur
         const { data: profileData } = await supabase
             .from('users') 
             .select('*')
@@ -178,7 +176,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
         
         if (isMounted && profileData) setUserProfile(profileData);
 
-        // 2. Dessins de l'utilisateur CIBLÉ
         const { data: drawingsData, error: drawingsError } = await supabase
             .from('drawings')
             .select('*, likes(count), comments(count)')
@@ -188,16 +185,13 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
         if (drawingsError) throw drawingsError;
         if (isMounted) setDrawings(drawingsData || []);
 
-        // 3. Récupérer les participations de l'utilisateur COURANT (pour savoir ce qu'il a le droit de voir)
         if (currentUser) {
-            // On récupère tous les cloud_id où j'ai dessiné
             const { data: myDrawings } = await supabase
                 .from('drawings')
                 .select('cloud_id')
                 .eq('user_id', currentUser.id);
             
             if (isMounted && myDrawings) {
-                // On crée une liste simple d'IDs
                 const myCloudIds = myDrawings.map(d => d.cloud_id);
                 setUnlockedCloudIds(myCloudIds);
             }
@@ -218,32 +212,36 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
   };
 
   const renderDrawingItem = ({ item }: { item: any }) => {
-    // CONDITION D'AFFICHAGE DU DESSIN :
-    // 1. C'est mon propre profil (je vois tout)
-    // 2. OU j'ai dessiné sur ce nuage (cloud_id présent dans ma liste unlockedCloudIds)
     const isUnlocked = (currentUser?.id === userId) || unlockedCloudIds.includes(item.cloud_id);
 
     return (
         <TouchableOpacity 
             onPress={() => openDrawing(item)}
-            style={{ width: ITEM_SIZE, aspectRatio: 3/4, marginBottom: SPACING, backgroundColor: '#F9F9F9', overflow: 'hidden' }}
+            style={{ width: ITEM_SIZE, aspectRatio: 3/4, marginBottom: SPACING, backgroundColor: '#F9F9F9', overflow: 'hidden', position: 'relative' }}
         >
             <DrawingViewer 
                 imageUri={item.cloud_image_url}
-                // Si pas débloqué, on passe un tableau vide -> Affiche juste le nuage (photo sans dessin)
                 canvasData={isUnlocked ? item.canvas_data : []}
                 viewerSize={ITEM_SIZE}
                 transparentMode={false}
                 animated={false}
                 startVisible={true}
             />
+            {/* OVERLAY SI NON DÉBLOQUÉ */}
+            {!isUnlocked && (
+                <View style={styles.missedOverlay}>
+                    <AlertCircle color="#000" size={32} style={{ marginBottom: 5 }} />
+                    <Text style={styles.missedDate}>
+                        {new Date(item.created_at).toLocaleDateString(undefined, {day: '2-digit', month: '2-digit'})}
+                    </Text>
+                </View>
+            )}
         </TouchableOpacity>
     );
   };
 
   const commentsCount = selectedDrawing?.comments?.[0]?.count || selectedDrawing?.comments_count || 0;
   
-  // Vérification unlock pour le dessin sélectionné (agrandi)
   const isSelectedUnlocked = selectedDrawing && (
       (currentUser?.id === userId) || unlockedCloudIds.includes(selectedDrawing.cloud_id)
   );
@@ -251,14 +249,12 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
         <View style={styles.container}>
-            {/* HEADER */}
             <View style={styles.header}>
                 <TouchableOpacity onPress={onClose} style={styles.closeBtn} hitSlop={15}>
                     <X color="#000" size={28} />
                 </TouchableOpacity>
             </View>
 
-            {/* INFO UTILISATEUR */}
             <View style={styles.profileBlock}>
                 <View style={styles.profileInfoContainer}>
                     {userProfile?.avatar_url ? (
@@ -294,7 +290,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                 </View>
             </View>
 
-            {/* GALERIE (Toujours affichée, mais contenu filtré via renderDrawingItem) */}
             {loading ? (
                 <View style={styles.loadingContainer}>
                     <ActivityIndicator size="large" color="#000" />
@@ -328,7 +323,10 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
 
                         <View style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}> 
                             <Pressable 
-                                onPressIn={() => setIsHolding(true)} 
+                                onPressIn={() => {
+                                    // On permet le "hold to see original" SEULEMENT si c'est débloqué
+                                    if (isSelectedUnlocked) setIsHolding(true);
+                                }} 
                                 onPressOut={() => setIsHolding(false)}
                                 style={{ width: screenWidth, aspectRatio: 3/4, backgroundColor: '#F0F0F0' }}
                             >
@@ -340,7 +338,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                                     <DrawingViewer
                                         imageUri={selectedDrawing.cloud_image_url} 
-                                        // Si pas débloqué, tableau vide -> photo sans dessin
                                         canvasData={isSelectedUnlocked ? selectedDrawing.canvas_data : []}
                                         viewerSize={screenWidth} 
                                         transparentMode={true} 
@@ -348,6 +345,15 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                                         animated={true}
                                     />
                                 </View>
+                                {/* Overlay "!" si masqué en grand aussi */}
+                                {!isSelectedUnlocked && (
+                                    <View style={styles.missedOverlay}>
+                                        <AlertCircle color="#000" size={48} style={{ marginBottom: 10 }} />
+                                        <Text style={[styles.missedDate, { fontSize: 20 }]}>
+                                            {new Date(selectedDrawing.created_at).toLocaleDateString(undefined, {day: '2-digit', month: '2-digit'})}
+                                        </Text>
+                                    </View>
+                                )}
                                 {isSelectedUnlocked && <Text style={styles.hintText}>Maintenir pour voir l'original</Text>}
                             </Pressable>
                         </View>
@@ -459,6 +465,28 @@ const styles = StyleSheet.create({
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   emptyState: { alignItems: 'center', marginTop: 50, gap: 10 },
   emptyText: { color: '#999', fontSize: 16 },
+
+  // NOUVEAUX STYLES POUR L'OVERLAY DE VERROUILLAGE
+  missedOverlay: { 
+      position: 'absolute', 
+      top: 0, 
+      left: 0, 
+      right: 0, 
+      bottom: 0, 
+      justifyContent: 'center', 
+      alignItems: 'center', 
+      backgroundColor: 'rgba(255,255,255,0.4)' 
+  },
+  missedDate: { 
+      fontSize: 16, 
+      fontWeight: '700', 
+      color: '#000', 
+      backgroundColor: 'rgba(255,255,255,0.8)', 
+      paddingHorizontal: 8, 
+      paddingVertical: 2, 
+      borderRadius: 4, 
+      overflow: 'hidden' 
+  },
 
   hintText: { position: 'absolute', bottom: 10, alignSelf: 'center', color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width:1, height:1}, textShadowRadius: 1 },
   
