@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Modal, FlatList, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Image, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, Modal, FlatList, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Image, ActivityIndicator, Alert, Keyboard } from 'react-native';
 import { X, Send, User } from 'lucide-react-native';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
@@ -58,7 +58,8 @@ export const CommentsModal: React.FC<CommentsModalProps> = ({ visible, onClose, 
       if (error) throw error;
 
       setNewComment('');
-      fetchComments(); // Rafraîchir pour voir le nouveau message
+      Keyboard.dismiss();
+      fetchComments(); 
       
     } catch (e: any) {
       Alert.alert("Erreur Envoi", e.message);
@@ -85,25 +86,30 @@ export const CommentsModal: React.FC<CommentsModalProps> = ({ visible, onClose, 
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View style={styles.container}>
-        <View style={styles.header}>
-            <Text style={styles.title}>Commentaires</Text>
-            <TouchableOpacity onPress={onClose}><X color="#000" size={24}/></TouchableOpacity>
-        </View>
+      <KeyboardAvoidingView 
+        style={{ flex: 1 }} 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+      >
+        <View style={styles.container}>
+            <View style={styles.header}>
+                <Text style={styles.title}>Commentaires</Text>
+                <TouchableOpacity onPress={onClose} hitSlop={10}><X color="#000" size={24}/></TouchableOpacity>
+            </View>
 
-        {loading ? (
-            <ActivityIndicator style={{marginTop: 20}} color="#000"/>
-        ) : (
-            <FlatList
-                data={comments}
-                renderItem={renderComment}
-                keyExtractor={item => item.id}
-                contentContainerStyle={{ padding: 20 }}
-                ListEmptyComponent={<Text style={styles.empty}>Soyez le premier à commenter !</Text>}
-            />
-        )}
+            {loading ? (
+                <ActivityIndicator style={{marginTop: 20}} color="#000"/>
+            ) : (
+                <FlatList
+                    data={comments}
+                    renderItem={renderComment}
+                    keyExtractor={item => item.id}
+                    contentContainerStyle={{ padding: 20, paddingBottom: 20 }}
+                    ListEmptyComponent={<Text style={styles.empty}>Soyez le premier à commenter !</Text>}
+                    inverted={false} 
+                />
+            )}
 
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
             <View style={styles.inputBar}>
                 <TextInput 
                     style={styles.input} 
@@ -111,21 +117,27 @@ export const CommentsModal: React.FC<CommentsModalProps> = ({ visible, onClose, 
                     value={newComment}
                     onChangeText={setNewComment}
                     editable={!!user}
+                    multiline
+                    maxLength={150}
                 />
-                <TouchableOpacity onPress={handleSend} disabled={!user || sending || !newComment.trim()}>
-                    {sending ? <ActivityIndicator color="#000"/> : <Send color={(!user || !newComment.trim()) ? "#CCC" : "#000"} size={24} />}
+                <TouchableOpacity 
+                    onPress={handleSend} 
+                    disabled={!user || sending || !newComment.trim()}
+                    style={styles.sendBtn}
+                >
+                    {sending ? <ActivityIndicator color="#000" size="small"/> : <Send color={(!user || !newComment.trim()) ? "#CCC" : "#000"} size={24} />}
                 </TouchableOpacity>
             </View>
-        </KeyboardAvoidingView>
-      </View>
+        </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFF' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', padding: 20, borderBottomWidth: 1, borderColor: '#F0F0F0', alignItems: 'center' },
-  title: { fontSize: 18, fontWeight: 'bold' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', padding: 15, borderBottomWidth: 1, borderColor: '#F0F0F0', alignItems: 'center' },
+  title: { fontSize: 16, fontWeight: 'bold' },
   commentItem: { flexDirection: 'row', marginBottom: 15 },
   avatarContainer: { marginRight: 10 },
   avatar: { width: 32, height: 32, borderRadius: 16 },
@@ -134,6 +146,30 @@ const styles = StyleSheet.create({
   author: { fontWeight: '700', fontSize: 12, marginBottom: 2 },
   content: { fontSize: 14 },
   empty: { textAlign: 'center', color: '#999', marginTop: 20 },
-  inputBar: { flexDirection: 'row', padding: 15, borderTopWidth: 1, borderColor: '#F0F0F0', alignItems: 'center', paddingBottom: 30 },
-  input: { flex: 1, backgroundColor: '#F5F5F5', borderRadius: 20, paddingHorizontal: 15, height: 40, marginRight: 10 },
+  inputBar: { 
+      flexDirection: 'row', 
+      padding: 10, 
+      borderTopWidth: 1, 
+      borderColor: '#F0F0F0', 
+      alignItems: 'flex-end', 
+      backgroundColor: '#FFF',
+      paddingBottom: Platform.OS === 'ios' ? 20 : 10 
+  },
+  input: { 
+      flex: 1, 
+      backgroundColor: '#F5F5F5', 
+      borderRadius: 20, 
+      paddingHorizontal: 15, 
+      paddingTop: 10, 
+      paddingBottom: 10,
+      minHeight: 40, 
+      maxHeight: 100,
+      marginRight: 10,
+      fontSize: 14
+  },
+  sendBtn: {
+      height: 40,
+      justifyContent: 'center',
+      alignItems: 'center'
+  }
 });
