@@ -24,36 +24,47 @@ export default function FriendsPage() {
   const fetchFollowing = async () => {
     try {
       setLoading(true);
-      // Requête avec alias 'following' pointant vers la table users via la clé étrangère following_id
-      const { data, error } = await supabase
+      
+      // ÉTAPE 1 : Récupérer la liste des abonnements (IDs)
+      const { data: followsData, error: followsError } = await supabase
         .from('follows')
-        .select(`
-          id,
-          following:users!following_id (
-            id,
-            display_name,
-            avatar_url,
-            bio
-          )
-        `)
+        .select('id, following_id')
         .eq('follower_id', user?.id);
 
-      if (error) throw error;
+      if (followsError) throw followsError;
+
+      // Si aucun abonnement, on arrête là
+      if (!followsData || followsData.length === 0) {
+          setFollowing([]);
+          return;
+      }
+
+      // ÉTAPE 2 : Récupérer les infos des utilisateurs correspondants
+      const followingIds = followsData.map(f => f.following_id);
       
-      // Transformation des données pour aplatir la structure
-      // On vérifie bien que 'item.following' existe (c'est l'objet user joint)
-      const formattedData = data?.map((item: any) => {
-          if (!item.following) return null; // Sécurité si user supprimé mais follow restant
+      const { data: usersData, error: usersError } = await supabase
+        .from('users')
+        .select('id, display_name, avatar_url, bio')
+        .in('id', followingIds);
+
+      if (usersError) throw usersError;
+
+      // ÉTAPE 3 : Fusionner les données pour l'affichage
+      const formattedData = followsData.map(follow => {
+          // On trouve le profil correspondant à l'ID suivi
+          const userProfile = usersData?.find(u => u.id === follow.following_id);
+          
+          // Si le profil n'existe pas (ex: utilisateur supprimé), on l'ignore
+          if (!userProfile) return null;
+          
           return {
-            followId: item.id, // ID de la relation follow
-            id: item.following.id, // ID de l'utilisateur suivi (ESSENTIEL pour le profil)
-            display_name: item.following.display_name,
-            avatar_url: item.following.avatar_url,
-            bio: item.following.bio
+              followId: follow.id, // ID de la relation (pour unfollow)
+              ...userProfile       // Infos de l'utilisateur (id, nom, avatar...)
           };
-      }).filter(item => item !== null) || [];
+      }).filter(item => item !== null); // On nettoie les nulls
 
       setFollowing(formattedData);
+
     } catch (e) {
       console.error("Erreur chargement amis:", e);
       setFollowing([]); 
@@ -67,11 +78,10 @@ export default function FriendsPage() {
           const { error } = await supabase
             .from('follows')
             .delete()
-            .eq('id', followId); // Suppression directe par ID de relation (plus simple si on l'a)
+            .eq('id', followId); 
             
           if (error) throw error;
           
-          // Mise à jour optimiste de la liste
           setFollowing(prev => prev.filter(item => item.id !== userIdToUnfollow));
       } catch (e) {
           console.error("Erreur unfollow:", e);
@@ -137,7 +147,7 @@ export default function FriendsPage() {
             <FlatList
                 data={following}
                 renderItem={renderFriend}
-                keyExtractor={item => item.id} // Utiliser l'ID utilisateur comme clé stable
+                keyExtractor={item => item.id} 
                 contentContainerStyle={{ paddingBottom: 20 }}
                 ListEmptyComponent={
                     <View style={styles.emptyState}>
