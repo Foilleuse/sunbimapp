@@ -5,6 +5,8 @@ import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
 import { useFocusEffect } from 'expo-router';
 import { Search, Heart, Cloud, CloudOff, XCircle, User, MessageCircle } from 'lucide-react-native';
+import { useAuth } from '../../src/contexts/AuthContext';
+import { CommentsModal } from '../../src/components/CommentsModal';
 
 const GalleryItem = memo(({ item, itemSize, showClouds, onPress }: any) => {
     return (
@@ -28,14 +30,22 @@ const GalleryItem = memo(({ item, itemSize, showClouds, onPress }: any) => {
 });
 
 export default function GalleryPage() {
+    const { user } = useAuth();
     const [drawings, setDrawings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [showClouds, setShowClouds] = useState(true);
     const [onlyLiked, setOnlyLiked] = useState(false);
     const [searchText, setSearchText] = useState('');
+    
+    // États pour le dessin sélectionné en plein écran
     const [selectedDrawing, setSelectedDrawing] = useState<any | null>(null);
     const [isHolding, setIsHolding] = useState(false);
+    
+    // États pour les interactions (Likes/Commentaires) sur le dessin sélectionné
+    const [isLiked, setIsLiked] = useState(false);
+    const [likesCount, setLikesCount] = useState(0);
+    const [showComments, setShowComments] = useState(false);
 
     const { width: screenWidth } = Dimensions.get('window');
     const SPACING = 1; 
@@ -51,7 +61,13 @@ export default function GalleryPage() {
                 return;
             }
 
-            let query = supabase.from('drawings').select('*, users(display_name, avatar_url)').eq('cloud_id', cloudData.id).order('created_at', { ascending: false });
+            // AJOUT : likes(count), comments(count) pour récupérer les stats
+            let query = supabase
+                .from('drawings')
+                .select('*, users(display_name, avatar_url), likes(count), comments(count)')
+                .eq('cloud_id', cloudData.id)
+                .order('created_at', { ascending: false });
+
             if (searchQuery.trim().length > 0) query = query.ilike('label', `%${searchQuery.trim()}%`);
             
             const { data, error } = await query;
@@ -63,14 +79,73 @@ export default function GalleryPage() {
     useEffect(() => { fetchGallery(); }, []);
     useFocusEffect(useCallback(() => { fetchGallery(); }, []));
 
+    // Effet pour initialiser l'état "Liked" quand un dessin est ouvert
+    useEffect(() => {
+        if (selectedDrawing && user) {
+            // Init count
+            setLikesCount(selectedDrawing.likes?.[0]?.count || 0);
+            
+            // Vérif si l'user a liké
+            const checkLikeStatus = async () => {
+                const { count } = await supabase
+                    .from('likes')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('user_id', user.id)
+                    .eq('drawing_id', selectedDrawing.id);
+                
+                setIsLiked(count !== null && count > 0);
+            };
+            checkLikeStatus();
+        }
+    }, [selectedDrawing, user]);
+
     const onRefresh = () => { setRefreshing(true); fetchGallery(); };
     const handleSearchSubmit = () => { setLoading(true); fetchGallery(); Keyboard.dismiss(); };
     const clearSearch = () => { setSearchText(''); setLoading(true); fetchGallery(''); Keyboard.dismiss(); };
 
     const openViewer = useCallback((drawing: any) => setSelectedDrawing(drawing), []);
-    const closeViewer = () => setSelectedDrawing(null);
+    const closeViewer = () => { setSelectedDrawing(null); setIsLiked(false); };
+
+    const handleLike = async () => {
+        if (!user || !selectedDrawing) return;
+
+        const previousLiked = isLiked;
+        const previousCount = likesCount;
+
+        const newLikedState = !previousLiked;
+        const newCount = newLikedState ? previousCount + 1 : Math.max(0, previousCount - 1);
+
+        setIsLiked(newLikedState);
+        setLikesCount(newCount);
+
+        try {
+            if (previousLiked) {
+                const { error } = await supabase
+                    .from('likes')
+                    .delete()
+                    .eq('user_id', user.id)
+                    .eq('drawing_id', selectedDrawing.id);
+                if (error) throw error;
+            } else {
+                const { error } = await supabase
+                    .from('likes')
+                    .insert({
+                        user_id: user.id,
+                        drawing_id: selectedDrawing.id
+                    });
+                if (error) throw error;
+            }
+            // Optionnel : Rafraîchir la liste en arrière-plan pour que le compteur soit à jour au retour
+            // fetchGallery(); 
+        } catch (error) {
+            console.error("Erreur like:", error);
+            setIsLiked(previousLiked);
+            setLikesCount(previousCount);
+        }
+    };
 
     const author = selectedDrawing?.users;
+    const commentsCount = selectedDrawing?.comments?.[0]?.count || 0;
 
     const renderItem = useCallback(({ item }: { item: any }) => (
         <GalleryItem 
@@ -118,10 +193,21 @@ export default function GalleryPage() {
                 {selectedDrawing && (
                     <View style={styles.fullScreenOverlay}>
                         <Pressable onPressIn={() => setIsHolding(true)} onPressOut={() => setIsHolding(false)} style={{ width: screenWidth, aspectRatio: 3/4, backgroundColor: '#F0F0F0' }}>
-                            <DrawingViewer
-                                imageUri={selectedDrawing.cloud_image_url} canvasData={isHolding ? [] : selectedDrawing.canvas_data}
-                                viewerSize={screenWidth} transparentMode={!showClouds} startVisible={false} animated={true}
+                            {/* Ajout de l'image de fond pour le mode transparent */}
+                            <Image 
+                                source={{ uri: selectedDrawing.cloud_image_url }}
+                                style={[StyleSheet.absoluteFill, { opacity: 1 }]} // Toujours visible
+                                resizeMode="cover"
                             />
+                            <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
+                                <DrawingViewer
+                                    imageUri={selectedDrawing.cloud_image_url} canvasData={selectedDrawing.canvas_data}
+                                    viewerSize={screenWidth} 
+                                    transparentMode={true} // On force la transparence pour voir l'image native dessous
+                                    startVisible={false} 
+                                    animated={true}
+                                />
+                            </View>
                             <Text style={styles.hintText}>Maintenir pour voir l'original</Text>
                         </Pressable>
 
@@ -141,10 +227,30 @@ export default function GalleryPage() {
                             </View>
 
                             <View style={styles.statsRow}>
-                                <View style={styles.statItem}><Heart color="#000" size={24} /><Text style={styles.statText}>{selectedDrawing.likes_count || 0}</Text></View>
-                                <View style={styles.statItem}><MessageCircle color="#000" size={24} /><Text style={styles.statText}>{selectedDrawing.comments_count || 0}</Text></View>
+                                {/* Gestion du Like */}
+                                <TouchableOpacity style={styles.statItem} onPress={handleLike}>
+                                    <Heart 
+                                        color={isLiked ? "#FF3B30" : "#000"} 
+                                        fill={isLiked ? "#FF3B30" : "transparent"} 
+                                        size={24} 
+                                    />
+                                    <Text style={styles.statText}>{likesCount}</Text>
+                                </TouchableOpacity>
+                                
+                                {/* Gestion du Commentaire */}
+                                <TouchableOpacity style={styles.statItem} onPress={() => setShowComments(true)}>
+                                    <MessageCircle color="#000" size={24} />
+                                    <Text style={styles.statText}>{commentsCount}</Text>
+                                </TouchableOpacity>
                             </View>
                         </View>
+
+                        {/* Modale de commentaires */}
+                        <CommentsModal 
+                            visible={showComments} 
+                            onClose={() => setShowComments(false)} 
+                            drawingId={selectedDrawing.id} 
+                        />
                     </View>
                 )}
             </View>
