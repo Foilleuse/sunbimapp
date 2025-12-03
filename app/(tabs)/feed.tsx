@@ -25,18 +25,8 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
     return (
         <View style={styles.cardContainer}>
             
-            {/* ZONE IMAGE + DESSIN (Format 3:4) */}
-            <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: '#000', overflow: 'hidden' }}>
-                
-                {/* 1. IMAGE NETTE (Le support du dessin) */}
-                {/* Elle est dans la carte, donc elle swipe avec le dessin */}
-                <Image 
-                    source={{ uri: drawing.cloud_image_url }} 
-                    style={StyleSheet.absoluteFill} 
-                    resizeMode="cover" 
-                />
-
-                {/* 2. DESSIN (Superposé) */}
+            {/* IMAGE + DESSIN (Non interactif au toucher) */}
+            <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent' }}>
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
                         <DrawingViewer
@@ -44,7 +34,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
                             imageUri={drawing.cloud_image_url}
                             canvasData={drawing.canvas_data}
                             viewerSize={canvasSize}
-                            transparentMode={true} // Fond transparent pour voir l'image <Image> dessous
+                            transparentMode={true} 
                             animated={isActive} 
                             startVisible={false} 
                         />
@@ -53,14 +43,16 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
             </View>
             
             <View style={styles.cardInfo}>
-                {/* HEADER INFO */}
+                {/* HEADER INFO : Titre + Bouton Œil sur la même ligne */}
                 <View style={styles.headerInfo}>
                     
+                    {/* LIGNE TITRE ET ŒIL */}
                     <View style={styles.titleRow}>
                         <Text style={styles.drawingTitle} numberOfLines={1}>
                             {drawing.label || "Sans titre"}
                         </Text>
 
+                        {/* BOUTON ŒIL DÉPLACÉ ICI (Aligné à droite) */}
                         <TouchableOpacity 
                             style={[styles.eyeBtn, isHolding && styles.iconBtnActive]}
                             activeOpacity={1}
@@ -85,7 +77,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
                     </View>
                 </View>
 
-                {/* BARRE D'ACTIONS */}
+                {/* BARRE D'ACTIONS (Bas) */}
                 <View style={styles.actionBar}>
                     <View style={styles.leftActions}>
                         <TouchableOpacity style={styles.actionBtn} onPress={() => setIsLiked(!isLiked)}>
@@ -141,12 +133,19 @@ export default function FeedPage() {
     };
 
     if (loading) return <View style={styles.loadingContainer}><ActivityIndicator color="#000" size="large" /></View>;
+    
+    const backgroundUrl = drawings.length > 0 ? drawings[0].cloud_image_url : null;
 
     return (
         <View style={styles.container}>
             <SunbimHeader showCloseButton={false} />
-            
-            <View style={{ flex: 1 }}>
+            <View style={{ flex: 1, position: 'relative' }}>
+                {backgroundUrl && (
+                    <View style={{ position: 'absolute', top: 0, width: screenWidth, aspectRatio: 3/4, zIndex: -1 }}>
+                       <Image source={{uri: backgroundUrl}} style={{width: '100%', height: '100%'}} resizeMode="cover" />
+                    </View>
+                )}
+                
                 {drawings.length > 0 ? (
                     <PagerView 
                         style={{ flex: 1 }} 
@@ -174,21 +173,19 @@ export default function FeedPage() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#FFFFFF' }, // Fond blanc propre
-    
-    loadingContainer: { flex: 1, backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center' },
-    
+    container: { flex: 1, backgroundColor: '#FFFFFF' },
+    loadingContainer: { flex: 1, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     text: { color: '#666', fontSize: 16 },
-    
     cardContainer: { flex: 1 },
     cardInfo: {
         flex: 1, 
         backgroundColor: '#FFFFFF', 
-        marginTop: -40, 
+        marginTop: -40, // Chevauchement léger pour le style
         paddingHorizontal: 20, 
         paddingTop: 25,
         shadowColor: "#000", shadowOffset: {width: 0, height: -4}, shadowOpacity: 0.05, shadowRadius: 4, elevation: 5,
+        // ANGLES RECTANGULAIRES (Suppression des borderRadius)
     },
     headerInfo: { marginBottom: 15 },
     
