@@ -1,44 +1,98 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Modal, Image, TouchableOpacity, FlatList, ActivityIndicator, Dimensions } from 'react-native';
-import { X, User, AlertCircle } from 'lucide-react-native';
+import { View, Text, StyleSheet, Modal, Image, TouchableOpacity, FlatList, ActivityIndicator, Dimensions, Alert } from 'react-native';
+import { X, User, UserPlus, UserCheck, MessageCircle } from 'lucide-react-native';
 import { supabase } from '../lib/supabaseClient';
 import { DrawingViewer } from './DrawingViewer';
+import { useAuth } from '../contexts/AuthContext';
 
 interface UserProfileModalProps {
   visible: boolean;
   onClose: () => void;
   userId: string;
-  initialUser?: any; // Données partielles (nom, avatar) pour affichage immédiat
+  initialUser?: any; 
 }
 
 export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onClose, userId, initialUser }) => {
+  const { user: currentUser } = useAuth();
   const [userProfile, setUserProfile] = useState<any>(initialUser || null);
   const [drawings, setDrawings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // États pour le Follow
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [followLoading, setFollowLoading] = useState(false);
 
+  // Configuration Grille (Identique à profile.tsx)
   const { width: screenWidth } = Dimensions.get('window');
   const SPACING = 1; 
-  const NUM_COLS = 3; 
+  const NUM_COLS = 2; // Passage à 2 colonnes
   const ITEM_SIZE = (screenWidth - (SPACING * (NUM_COLS - 1))) / NUM_COLS;
 
   useEffect(() => {
     if (visible && userId) {
         fetchUserData();
+        if (currentUser && currentUser.id !== userId) {
+            checkFollowStatus();
+        }
     } else {
-        // Reset states on close
         setLoading(true);
         setDrawings([]);
+        setIsFollowing(false);
     }
   }, [visible, userId]);
+
+  const checkFollowStatus = async () => {
+      try {
+          const { count } = await supabase
+            .from('follows')
+            .select('*', { count: 'exact', head: true })
+            .eq('follower_id', currentUser?.id)
+            .eq('following_id', userId);
+          
+          setIsFollowing(count !== null && count > 0);
+      } catch (e) {
+          console.error("Erreur check follow:", e);
+      }
+  };
+
+  const toggleFollow = async () => {
+      if (!currentUser) return;
+      setFollowLoading(true);
+      try {
+          if (isFollowing) {
+              // Unfollow
+              const { error } = await supabase
+                .from('follows')
+                .delete()
+                .eq('follower_id', currentUser.id)
+                .eq('following_id', userId);
+              if (error) throw error;
+              setIsFollowing(false);
+          } else {
+              // Follow
+              const { error } = await supabase
+                .from('follows')
+                .insert({
+                    follower_id: currentUser.id,
+                    following_id: userId
+                });
+              if (error) throw error;
+              setIsFollowing(true);
+          }
+      } catch (e: any) {
+          Alert.alert("Erreur", "Impossible de modifier l'abonnement.");
+          console.error(e);
+      } finally {
+          setFollowLoading(false);
+      }
+  };
 
   const fetchUserData = async () => {
     try {
         setLoading(true);
 
-        // 1. Récupérer le profil complet (pour la bio par exemple)
-        // On suppose que la table 'profiles' ou 'users' est accessible publiquement en lecture
         const { data: profileData, error: profileError } = await supabase
-            .from('users') // Ou 'profiles' selon votre configuration, 'users' est souvent une vue sur auth.users
+            .from('users') 
             .select('*')
             .eq('id', userId)
             .single();
@@ -47,7 +101,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
             setUserProfile(profileData);
         }
 
-        // 2. Récupérer les dessins de l'utilisateur
         const { data: drawingsData, error: drawingsError } = await supabase
             .from('drawings')
             .select('*')
@@ -80,26 +133,59 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
         <View style={styles.container}>
-            {/* HEADER */}
+            {/* HEADER MODALE */}
             <View style={styles.header}>
-                <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+                <TouchableOpacity onPress={onClose} style={styles.closeBtn} hitSlop={15}>
                     <X color="#000" size={28} />
                 </TouchableOpacity>
             </View>
 
-            {/* INFO UTILISATEUR */}
-            <View style={styles.userInfoContainer}>
-                <View style={styles.avatarContainer}>
+            {/* INFO UTILISATEUR (Style identique à profile.tsx) */}
+            <View style={styles.profileBlock}>
+                <View style={styles.profileInfoContainer}>
                     {userProfile?.avatar_url ? (
-                        <Image source={{ uri: userProfile.avatar_url }} style={styles.avatar} />
+                        <Image source={{ uri: userProfile.avatar_url }} style={styles.profileAvatar} />
                     ) : (
-                        <View style={[styles.avatar, styles.placeholderAvatar]}>
-                            <User size={30} color="#666" />
+                        <View style={[styles.profileAvatar, styles.placeholderAvatar]}>
+                            <User size={35} color="#666" />
                         </View>
                     )}
+                    
+                    <View style={styles.profileTextContainer}>
+                        <Text style={styles.displayName}>{userProfile?.display_name || "Utilisateur"}</Text>
+                        <Text style={styles.bio} numberOfLines={3}>
+                            {userProfile?.bio || "Aucune bio renseignée."}
+                        </Text>
+                    </View>
                 </View>
-                <Text style={styles.userName}>{userProfile?.display_name || "Utilisateur"}</Text>
-                {userProfile?.bio && <Text style={styles.userBio}>{userProfile.bio}</Text>}
+
+                {/* BARRE D'ACTIONS */}
+                {currentUser && currentUser.id !== userId && (
+                    <View style={styles.profileActions}>
+                        {/* BOUTON FOLLOW */}
+                        <TouchableOpacity 
+                            style={[styles.actionButton, styles.primaryBtn, isFollowing && styles.followingBtn]} 
+                            onPress={toggleFollow}
+                            disabled={followLoading}
+                        >
+                            {followLoading ? (
+                                <ActivityIndicator color={isFollowing ? "#000" : "#FFF"} size="small" />
+                            ) : (
+                                <>
+                                    {isFollowing ? <UserCheck color="#000" size={18} /> : <UserPlus color="#FFF" size={18} />}
+                                    <Text style={[styles.actionButtonText, isFollowing && styles.followingText]}>
+                                        {isFollowing ? "Suivi" : "Suivre"}
+                                    </Text>
+                                </>
+                            )}
+                        </TouchableOpacity>
+
+                        {/* BOUTON MESSAGE (Visuel uniquement pour l'instant) */}
+                        <TouchableOpacity style={styles.iconOnlyBtn} onPress={() => Alert.alert("Message", "Fonctionnalité à venir")}>
+                            <MessageCircle color="#000" size={20} />
+                        </TouchableOpacity>
+                    </View>
+                )}
             </View>
 
             {/* GALERIE */}
@@ -116,7 +202,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                     columnWrapperStyle={{ gap: SPACING }}
                     ListEmptyComponent={
                         <View style={styles.emptyState}>
-                            <AlertCircle color="#CCC" size={32} />
+                            <User color="#CCC" size={32} />
                             <Text style={styles.emptyText}>Aucun dessin publié.</Text>
                         </View>
                     }
@@ -130,15 +216,86 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFF' },
-  header: { padding: 15, alignItems: 'flex-end' },
-  closeBtn: { padding: 5 },
-  userInfoContainer: { alignItems: 'center', paddingHorizontal: 20, marginBottom: 20 },
-  avatarContainer: { marginBottom: 10, shadowColor: "#000", shadowOffset: {width:0, height:2}, shadowOpacity:0.1, shadowRadius:4 },
-  avatar: { width: 80, height: 80, borderRadius: 40 },
-  placeholderAvatar: { backgroundColor: '#F0F0F0', justifyContent: 'center', alignItems: 'center' },
-  userName: { fontSize: 22, fontWeight: '800', color: '#000', marginBottom: 5 },
-  userBio: { fontSize: 14, color: '#666', textAlign: 'center', marginHorizontal: 20 },
+  header: { padding: 15, alignItems: 'flex-end', borderBottomWidth: 0, borderColor: '#eee' }, // Header minimaliste
+  closeBtn: { padding: 5, backgroundColor: '#F0F0F0', borderRadius: 20 },
   
+  // BLOC PROFIL (Repris de profile.tsx)
+  profileBlock: { 
+      paddingBottom: 20, 
+      paddingHorizontal: 20, 
+      backgroundColor: '#FFF'
+  },
+  profileInfoContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 20,
+  },
+  profileAvatar: { 
+      width: 80, 
+      height: 80, 
+      borderRadius: 40,
+      marginRight: 15 
+  },
+  placeholderAvatar: { 
+      backgroundColor: '#F0F0F0', 
+      justifyContent: 'center', 
+      alignItems: 'center' 
+  },
+  profileTextContainer: {
+      flex: 1,
+      justifyContent: 'center'
+  },
+  displayName: { 
+      fontSize: 22, 
+      fontWeight: '900', 
+      color: '#000',
+      marginBottom: 4
+  },
+  bio: { 
+      fontSize: 14, 
+      color: '#666',
+      lineHeight: 20
+  },
+
+  // ACTIONS
+  profileActions: {
+      flexDirection: 'row',
+      gap: 10,
+  },
+  actionButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#000', // Noir par défaut (Suivre)
+      paddingVertical: 10,
+      borderRadius: 10,
+      gap: 6
+  },
+  primaryBtn: {
+      flex: 1, 
+  },
+  followingBtn: {
+      backgroundColor: '#F0F0F0', // Gris si déjà suivi
+      borderWidth: 1,
+      borderColor: '#DDD'
+  },
+  actionButtonText: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: '#FFF'
+  },
+  followingText: {
+      color: '#000'
+  },
+  iconOnlyBtn: {
+      width: 45, 
+      height: 45, 
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#F5F5F5',
+      borderRadius: 10,
+  },
+
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   emptyState: { alignItems: 'center', marginTop: 50, gap: 10 },
   emptyText: { color: '#999', fontSize: 16 }
