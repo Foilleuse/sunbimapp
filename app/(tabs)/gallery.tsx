@@ -77,7 +77,18 @@ export default function GalleryPage() {
     };
 
     useEffect(() => { fetchGallery(); }, []);
-    useFocusEffect(useCallback(() => { fetchGallery(); }, []));
+    
+    // MODIFICATION ICI : Ajout du nettoyage (return function) pour fermer le viewer au blur
+    useFocusEffect(useCallback(() => { 
+        fetchGallery(); 
+        
+        return () => {
+            // Cette fonction s'exécute quand on quitte l'écran (changement d'onglet)
+            setSelectedDrawing(null);
+            setIsLiked(false);
+            setShowComments(false); // On ferme aussi les commentaires si ouverts
+        };
+    }, []));
 
     // Effet pour initialiser l'état "Liked" quand un dessin est ouvert
     useEffect(() => {
