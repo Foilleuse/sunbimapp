@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Modal, Image, TouchableOpacity, FlatList, ActivityIndicator, Dimensions, Alert } from 'react-native';
-import { X, User, UserPlus, UserCheck, MessageCircle } from 'lucide-react-native';
+import { View, Text, StyleSheet, Modal, Image, TouchableOpacity, FlatList, ActivityIndicator, Dimensions, Alert, Pressable } from 'react-native';
+import { X, User, UserPlus, UserCheck, Heart, MessageCircle } from 'lucide-react-native'; // Ajout icônes manquantes si besoin
 import { supabase } from '../lib/supabaseClient';
 import { DrawingViewer } from './DrawingViewer';
 import { useAuth } from '../contexts/AuthContext';
+import { CommentsModal } from './CommentsModal'; // Pour pouvoir voir les commentaires du dessin agrandi si on veut
 
 interface UserProfileModalProps {
   visible: boolean;
@@ -22,10 +23,15 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
   const [isFollowing, setIsFollowing] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
 
-  // Configuration Grille (Identique à profile.tsx)
+  // États pour l'agrandissement d'image
+  const [selectedDrawing, setSelectedDrawing] = useState<any | null>(null);
+  const [isHolding, setIsHolding] = useState(false);
+  const [showComments, setShowComments] = useState(false); // Optionnel : si on veut commenter le dessin agrandi
+
+  // Configuration Grille
   const { width: screenWidth } = Dimensions.get('window');
   const SPACING = 1; 
-  const NUM_COLS = 2; // Passage à 2 colonnes
+  const NUM_COLS = 2;
   const ITEM_SIZE = (screenWidth - (SPACING * (NUM_COLS - 1))) / NUM_COLS;
 
   useEffect(() => {
@@ -38,6 +44,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
         setLoading(true);
         setDrawings([]);
         setIsFollowing(false);
+        setSelectedDrawing(null); // Reset sélection
     }
   }, [visible, userId]);
 
@@ -60,7 +67,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
       setFollowLoading(true);
       try {
           if (isFollowing) {
-              // Unfollow
               const { error } = await supabase
                 .from('follows')
                 .delete()
@@ -69,7 +75,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
               if (error) throw error;
               setIsFollowing(false);
           } else {
-              // Follow
               const { error } = await supabase
                 .from('follows')
                 .insert({
@@ -101,9 +106,10 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
             setUserProfile(profileData);
         }
 
+        // On récupère aussi les likes/comments count pour l'affichage agrandi
         const { data: drawingsData, error: drawingsError } = await supabase
             .from('drawings')
-            .select('*')
+            .select('*, likes(count), comments(count)')
             .eq('user_id', userId)
             .order('created_at', { ascending: false });
 
@@ -117,8 +123,17 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
     }
   };
 
+  const openDrawing = (drawing: any) => setSelectedDrawing(drawing);
+  const closeDrawing = () => {
+      setSelectedDrawing(null);
+      setShowComments(false);
+  };
+
   const renderDrawingItem = ({ item }: { item: any }) => (
-    <View style={{ width: ITEM_SIZE, aspectRatio: 3/4, marginBottom: SPACING, backgroundColor: '#F9F9F9', overflow: 'hidden' }}>
+    <TouchableOpacity 
+        onPress={() => openDrawing(item)}
+        style={{ width: ITEM_SIZE, aspectRatio: 3/4, marginBottom: SPACING, backgroundColor: '#F9F9F9', overflow: 'hidden' }}
+    >
         <DrawingViewer 
             imageUri={item.cloud_image_url}
             canvasData={item.canvas_data}
@@ -127,7 +142,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
             animated={false}
             startVisible={true}
         />
-    </View>
+    </TouchableOpacity>
   );
 
   return (
@@ -140,7 +155,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                 </TouchableOpacity>
             </View>
 
-            {/* INFO UTILISATEUR (Style identique à profile.tsx) */}
+            {/* INFO UTILISATEUR */}
             <View style={styles.profileBlock}>
                 <View style={styles.profileInfoContainer}>
                     {userProfile?.avatar_url ? (
@@ -157,35 +172,26 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                             {userProfile?.bio || "Aucune bio renseignée."}
                         </Text>
                     </View>
+
+                    {/* ACTIONS (Maintenant à côté du texte, ou en colonne selon la place) */}
+                    {/* Pour garder le layout demandé : Avatar gauche, Texte milieu, Actions droite (si possible) ou en dessous */}
+                    {/* Le layout actuel 'profileInfoContainer' est 'row'. On peut ajouter les actions à la fin de cette row */}
+                    {currentUser && currentUser.id !== userId && (
+                        <View style={{ marginLeft: 10 }}>
+                             <TouchableOpacity 
+                                style={[styles.iconOnlyBtn, isFollowing && styles.followingBtn]} 
+                                onPress={toggleFollow}
+                                disabled={followLoading}
+                            >
+                                {followLoading ? (
+                                    <ActivityIndicator color={isFollowing ? "#000" : "#000"} size="small" />
+                                ) : (
+                                    isFollowing ? <UserCheck color="#000" size={20} /> : <UserPlus color="#000" size={20} />
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    )}
                 </View>
-
-                {/* BARRE D'ACTIONS */}
-                {currentUser && currentUser.id !== userId && (
-                    <View style={styles.profileActions}>
-                        {/* BOUTON FOLLOW */}
-                        <TouchableOpacity 
-                            style={[styles.actionButton, styles.primaryBtn, isFollowing && styles.followingBtn]} 
-                            onPress={toggleFollow}
-                            disabled={followLoading}
-                        >
-                            {followLoading ? (
-                                <ActivityIndicator color={isFollowing ? "#000" : "#FFF"} size="small" />
-                            ) : (
-                                <>
-                                    {isFollowing ? <UserCheck color="#000" size={18} /> : <UserPlus color="#FFF" size={18} />}
-                                    <Text style={[styles.actionButtonText, isFollowing && styles.followingText]}>
-                                        {isFollowing ? "Suivi" : "Suivre"}
-                                    </Text>
-                                </>
-                            )}
-                        </TouchableOpacity>
-
-                        {/* BOUTON MESSAGE (Visuel uniquement pour l'instant) */}
-                        <TouchableOpacity style={styles.iconOnlyBtn} onPress={() => Alert.alert("Message", "Fonctionnalité à venir")}>
-                            <MessageCircle color="#000" size={20} />
-                        </TouchableOpacity>
-                    </View>
-                )}
             </View>
 
             {/* GALERIE */}
@@ -209,6 +215,46 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                     contentContainerStyle={{ paddingBottom: 40 }}
                 />
             )}
+
+            {/* MODALE D'AGRANDISSEMENT (Interne) */}
+            <Modal visible={!!selectedDrawing} animationType="fade" transparent={true} onRequestClose={closeDrawing}>
+                {selectedDrawing && (
+                    <View style={styles.fullScreenOverlay}>
+                        <TouchableOpacity style={styles.closeOverlayBtn} onPress={closeDrawing}>
+                            <X color="#000" size={30} />
+                        </TouchableOpacity>
+
+                        <Pressable 
+                            onPressIn={() => setIsHolding(true)} 
+                            onPressOut={() => setIsHolding(false)}
+                            style={{ width: screenWidth, aspectRatio: 3/4, backgroundColor: '#F0F0F0' }}
+                        >
+                            <Image 
+                                source={{ uri: selectedDrawing.cloud_image_url }}
+                                style={[StyleSheet.absoluteFill, { opacity: 1 }]}
+                                resizeMode="cover"
+                            />
+                            <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
+                                <DrawingViewer
+                                    imageUri={selectedDrawing.cloud_image_url} canvasData={selectedDrawing.canvas_data}
+                                    viewerSize={screenWidth} 
+                                    transparentMode={true} 
+                                    startVisible={false} 
+                                    animated={true}
+                                />
+                            </View>
+                            <Text style={styles.hintText}>Maintenir pour voir l'original</Text>
+                        </Pressable>
+
+                         {/* Footer minimaliste pour le dessin agrandi */}
+                         <View style={styles.overlayFooter}>
+                            <Text style={styles.overlayLabel}>{selectedDrawing.label || "Sans titre"}</Text>
+                            <Text style={styles.overlayDate}>{new Date(selectedDrawing.created_at).toLocaleDateString()}</Text>
+                         </View>
+                    </View>
+                )}
+            </Modal>
+
         </View>
     </Modal>
   );
@@ -216,10 +262,9 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFF' },
-  header: { padding: 15, alignItems: 'flex-end', borderBottomWidth: 0, borderColor: '#eee' }, // Header minimaliste
+  header: { padding: 15, alignItems: 'flex-end', borderBottomWidth: 0, borderColor: '#eee' }, 
   closeBtn: { padding: 5, backgroundColor: '#F0F0F0', borderRadius: 20 },
   
-  // BLOC PROFIL (Repris de profile.tsx)
   profileBlock: { 
       paddingBottom: 20, 
       paddingHorizontal: 20, 
@@ -228,12 +273,12 @@ const styles = StyleSheet.create({
   profileInfoContainer: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginBottom: 20,
+      marginBottom: 10,
   },
   profileAvatar: { 
-      width: 80, 
-      height: 80, 
-      borderRadius: 40,
+      width: 70, 
+      height: 70, 
+      borderRadius: 35,
       marginRight: 15 
   },
   placeholderAvatar: { 
@@ -246,57 +291,58 @@ const styles = StyleSheet.create({
       justifyContent: 'center'
   },
   displayName: { 
-      fontSize: 22, 
+      fontSize: 20, 
       fontWeight: '900', 
       color: '#000',
       marginBottom: 4
   },
   bio: { 
-      fontSize: 14, 
+      fontSize: 13, 
       color: '#666',
-      lineHeight: 20
+      lineHeight: 18
   },
 
-  // ACTIONS
-  profileActions: {
-      flexDirection: 'row',
-      gap: 10,
-  },
-  actionButton: {
-      flexDirection: 'row',
+  // Bouton carré simple
+  iconOnlyBtn: {
+      width: 44, 
+      height: 44, 
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: '#000', // Noir par défaut (Suivre)
-      paddingVertical: 10,
-      borderRadius: 10,
-      gap: 6
-  },
-  primaryBtn: {
-      flex: 1, 
+      backgroundColor: '#EEE', // Gris clair par défaut (Non suivi)
+      borderRadius: 12,
   },
   followingBtn: {
-      backgroundColor: '#F0F0F0', // Gris si déjà suivi
-      borderWidth: 1,
-      borderColor: '#DDD'
-  },
-  actionButtonText: {
-      fontSize: 14,
-      fontWeight: '700',
-      color: '#FFF'
-  },
-  followingText: {
-      color: '#000'
-  },
-  iconOnlyBtn: {
-      width: 45, 
-      height: 45, 
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: '#F5F5F5',
-      borderRadius: 10,
+      backgroundColor: '#FFF', // Fond blanc si suivi
+      borderWidth: 2,
+      borderColor: '#000'
   },
 
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   emptyState: { alignItems: 'center', marginTop: 50, gap: 10 },
-  emptyText: { color: '#999', fontSize: 16 }
+  emptyText: { color: '#999', fontSize: 16 },
+
+  // Styles Overlay Agrandissement
+  fullScreenOverlay: { 
+      flex: 1, 
+      backgroundColor: 'rgba(255,255,255,0.98)', 
+      justifyContent: 'center', 
+      alignItems: 'center' 
+  },
+  closeOverlayBtn: {
+      position: 'absolute',
+      top: 50,
+      right: 20,
+      zIndex: 10,
+      padding: 10,
+      backgroundColor: '#FFF',
+      borderRadius: 25,
+      shadowColor: "#000", shadowOffset: {width:0, height:2}, shadowOpacity:0.1, shadowRadius:4
+  },
+  hintText: { position: 'absolute', bottom: 10, alignSelf: 'center', color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width:1, height:1}, textShadowRadius: 1 },
+  overlayFooter: {
+      marginTop: 20,
+      alignItems: 'center'
+  },
+  overlayLabel: { fontSize: 22, fontWeight: '800', color: '#000' },
+  overlayDate: { fontSize: 14, color: '#999', marginTop: 5 }
 });
