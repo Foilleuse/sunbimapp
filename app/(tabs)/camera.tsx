@@ -1,24 +1,25 @@
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Alert, ActivityIndicator, Image } from 'react-native';
 import { useState, useRef, useEffect } from 'react';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
-import { Cloud } from 'lucide-react-native';
+import { Cloud, Check, X } from 'lucide-react-native'; // Ajout d'icônes pour valider/annuler
 import { SunbimHeader } from '../../src/components/SunbimHeader';
-// Imports Supabase & Auth
 import { supabase } from '../../src/lib/supabaseClient';
 import { useAuth } from '../../src/contexts/AuthContext';
-// Import pour convertir l'image en format compatible Supabase
 import { decode } from 'base64-arraybuffer';
 
 export default function CameraPage() {
   const { user } = useAuth();
+  const router = useRouter();
+  const cameraRef = useRef<CameraView>(null);
+
   const [permission, requestPermission] = useCameraPermissions();
   const [zoom, setZoom] = useState(0);
   const [isTakingPhoto, setIsTakingPhoto] = useState(false); 
   const [isUploading, setIsUploading] = useState(false);
 
-  const cameraRef = useRef<CameraView>(null);
-  const router = useRouter();
+  // NOUVEL ÉTAT : Image capturée en attente de validation
+  const [capturedImage, setCapturedImage] = useState<{ uri: string; base64?: string } | null>(null);
 
   const { width: screenWidth } = Dimensions.get('window');
   const CAMERA_HEIGHT = screenWidth * (4 / 3);
@@ -36,9 +37,9 @@ export default function CameraPage() {
   if (!permission.granted) {
     return (
       <View style={styles.container}>
-        <Text style={styles.message}>Permission caméra requise pour capturer les nuages.</Text>
+        <Text style={styles.message}>Permission caméra requise.</Text>
         <TouchableOpacity style={styles.permissionBtn} onPress={requestPermission}>
-          <Text style={styles.permissionText}>Accorder la permission</Text>
+          <Text style={styles.permissionText}>Accorder</Text>
         </TouchableOpacity>
       </View>
     );
@@ -53,23 +54,56 @@ export default function CameraPage() {
       }
   };
 
-  // --- FONCTION D'ENVOI ---
+  // 1. PRENDRE LA PHOTO (Et l'afficher en preview)
+  const takePicture = async () => {
+    if (cameraRef.current && !isTakingPhoto && !isUploading) {
+        setIsTakingPhoto(true);
+        try {
+            const photo = await cameraRef.current.takePictureAsync({
+                quality: 0.7,
+                base64: true, // On a besoin du base64 pour l'upload final
+                skipProcessing: false, 
+                shutterSound: true,
+            });
+            
+            if (photo && photo.uri) {
+                // Au lieu d'upload direct, on stocke pour prévisualisation
+                setCapturedImage({ uri: photo.uri, base64: photo.base64 });
+            } else {
+                throw new Error("Aucune image retournée par la caméra.");
+            }
+
+        } catch (e: any) {
+            console.error("Erreur capture:", e);
+            Alert.alert("Erreur", e.message || "Impossible de prendre la photo.");
+        } finally {
+            setIsTakingPhoto(false);
+        }
+    }
+  };
+
+  // 2. ANNULER LA PHOTO (Retour caméra)
+  const retakePicture = () => {
+      setCapturedImage(null);
+  };
+
+  // 3. CONFIRMER ET UPLOAD
+  const confirmUpload = async () => {
+      if (!capturedImage?.base64) return;
+      await uploadToSupabase(capturedImage.base64);
+  };
+
   const uploadToSupabase = async (base64Image: string) => {
       if (!user) {
-          Alert.alert("Connexion requise", "Connectez-vous pour envoyer vos photos.");
+          Alert.alert("Oups", "Connecte-toi pour envoyer tes nuages !");
           return;
       }
 
       setIsUploading(true);
       try {
-          // 1. Conversion Base64 -> ArrayBuffer (Format binaire pour Supabase)
           const arrayBuffer = decode(base64Image);
-          
-          // 2. Génération d'un nom de fichier unique
-          // ex: user_id/167890123.jpg
           const fileName = `${user.id}/${Date.now()}.jpg`;
 
-          // 3. Upload dans le Bucket 'cloud-submissions'
           const { error: uploadError } = await supabase.storage
               .from('cloud-submissions')
               .upload(fileName, arrayBuffer, {
@@ -79,63 +113,70 @@ export default function CameraPage() {
 
           if (uploadError) throw uploadError;
 
-          // 4. Récupération de l'URL publique de l'image
           const { data: { publicUrl } } = supabase.storage
               .from('cloud-submissions')
               .getPublicUrl(fileName);
 
-          // 5. Enregistrement dans la Table 'cloud_submissions'
-          // Note: 'cloud_submissions' avec underscore pour la table SQL
           const { error: dbError } = await supabase
-              .from('cloud_submissions') 
+              .from('cloud_submissions')
               .insert({
                   user_id: user.id,
                   image_url: publicUrl,
-                  status: 'pending' // En attente de validation
+                  status: 'pending'
               });
 
           if (dbError) throw dbError;
 
-          Alert.alert("Envoyé !", "Votre nuage a bien été reçu.", [
-              { text: "Super", onPress: () => router.back() }
+          Alert.alert("Succès !", "Ton nuage a été envoyé.", [
+              { text: "Super", onPress: () => {
+                  setCapturedImage(null); // Reset
+                  router.back(); 
+              }}
           ]);
 
       } catch (e: any) {
           console.error("Erreur upload:", e);
-          Alert.alert("Erreur d'envoi", e.message || "Vérifiez votre connexion internet.");
+          Alert.alert("Erreur d'envoi", e.message || "Impossible d'envoyer le nuage.");
       } finally {
           setIsUploading(false);
       }
   };
 
-  const takePicture = async () => {
-    if (cameraRef.current && !isTakingPhoto && !isUploading) {
-        setIsTakingPhoto(true);
-        try {
-            // On demande l'image en Base64 pour faciliter l'upload
-            const photo = await cameraRef.current.takePictureAsync({
-                quality: 0.7,
-                base64: true, 
-                skipProcessing: false, 
-                shutterSound: true,
-            });
+  // --- MODE PREVIEW (Si une image est capturée) ---
+  if (capturedImage) {
+      return (
+        <View style={styles.container}>
+            <SunbimHeader showCloseButton={true} onClose={retakePicture} />
             
-            if (photo && photo.base64) {
-                // Si la photo est prise, on lance l'upload immédiatement
-                await uploadToSupabase(photo.base64);
-            } else {
-                Alert.alert("Erreur", "Aucune image reçue de la caméra.");
-            }
+            <View style={[styles.cameraContainer, { width: screenWidth, height: CAMERA_HEIGHT }]}>
+                <Image source={{ uri: capturedImage.uri }} style={{ flex: 1 }} resizeMode="cover" />
+                
+                {/* Overlay de chargement si en cours d'envoi */}
+                {isUploading && (
+                    <View style={styles.loadingOverlay}>
+                        <ActivityIndicator size="large" color="#FFF" />
+                        <Text style={styles.loadingText}>Envoi du nuage...</Text>
+                    </View>
+                )}
+            </View>
 
-        } catch (e) {
-            console.error("Erreur capture:", e);
-            Alert.alert("Erreur", "Impossible de prendre la photo.");
-        } finally {
-            setIsTakingPhoto(false);
-        }
-    }
-  };
+            {/* BARRE DE VALIDATION */}
+            <View style={styles.previewControls}>
+                {/* Bouton Annuler */}
+                <TouchableOpacity style={[styles.actionBtn, styles.retakeBtn]} onPress={retakePicture} disabled={isUploading}>
+                    <X color="#FFF" size={32} />
+                </TouchableOpacity>
 
+                {/* Bouton Valider */}
+                <TouchableOpacity style={[styles.actionBtn, styles.confirmBtn]} onPress={confirmUpload} disabled={isUploading}>
+                    <Check color="#000" size={32} />
+                </TouchableOpacity>
+            </View>
+        </View>
+      );
+  }
+
+  // --- MODE CAMÉRA (Par défaut) ---
   return (
     <View style={styles.container}>
         <SunbimHeader showCloseButton={true} onClose={() => router.back()} />
@@ -150,7 +191,6 @@ export default function CameraPage() {
                 flash="off" 
             />
             
-            {/* Barre de Zoom */}
             <View style={styles.zoomContainer}>
                 {['1x', '1.5x', '2x'].map((z) => {
                     let isActive = false;
@@ -172,24 +212,16 @@ export default function CameraPage() {
                     );
                 })}
             </View>
-
-            {/* Overlay de chargement */}
-            {isUploading && (
-                <View style={styles.loadingOverlay}>
-                    <ActivityIndicator size="large" color="#FFF" />
-                    <Text style={styles.loadingText}>Envoi du nuage...</Text>
-                </View>
-            )}
         </View>
 
         <View style={styles.controlsContainer}>
             <TouchableOpacity 
-                style={[styles.captureBtn, (isTakingPhoto || isUploading) && { opacity: 0.5 }]} 
+                style={[styles.captureBtn, isTakingPhoto && { opacity: 0.5 }]} 
                 onPress={takePicture} 
                 activeOpacity={0.7}
-                disabled={isTakingPhoto || isUploading}
+                disabled={isTakingPhoto}
             >
-                {isTakingPhoto || isUploading ? (
+                {isTakingPhoto ? (
                     <ActivityIndicator color="#FFF" />
                 ) : (
                     <Cloud color="#FFF" size={72} fill="#FFF" />
@@ -209,6 +241,18 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: '#111',
     position: 'relative',
+  },
+  loadingOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: 'rgba(0,0,0,0.7)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      zIndex: 50
+  },
+  loadingText: {
+      color: '#FFF',
+      marginTop: 10,
+      fontWeight: '600'
   },
   message: { textAlign: 'center', color: '#FFF', marginTop: 100 },
   permissionBtn: {
@@ -254,16 +298,30 @@ const styles = StyleSheet.create({
       alignItems: 'center',
       padding: 10,
   },
-  loadingOverlay: {
-      ...StyleSheet.absoluteFillObject,
-      backgroundColor: 'rgba(0,0,0,0.7)',
+  
+  // --- STYLES PREVIEW ---
+  previewControls: {
+      flex: 1,
+      backgroundColor: '#000',
+      flexDirection: 'row',
+      justifyContent: 'space-around', // Espacement équilibré
+      alignItems: 'center',
+      paddingBottom: 20
+  },
+  actionBtn: {
+      width: 70,
+      height: 70,
+      borderRadius: 35,
       justifyContent: 'center',
       alignItems: 'center',
-      zIndex: 50
+      borderWidth: 2,
   },
-  loadingText: {
-      color: '#FFF',
-      marginTop: 10,
-      fontWeight: '600'
+  retakeBtn: {
+      backgroundColor: 'transparent',
+      borderColor: '#FFF',
+  },
+  confirmBtn: {
+      backgroundColor: '#FFF',
+      borderColor: '#FFF',
   }
 });
