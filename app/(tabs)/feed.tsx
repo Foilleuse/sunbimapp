@@ -24,8 +24,17 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
     return (
         <View style={styles.cardContainer}>
             
-            {/* ZONE DESSIN (Transparent car l'image nette est en fond fixe) */}
-            <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent' }}>
+            {/* IMAGE DU JOUR NETTE (3:4) + DESSIN */}
+            <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: '#000', overflow: 'hidden' }}>
+                
+                {/* 1. Image de fond NETTE pour le dessin */}
+                <Image 
+                    source={{ uri: drawing.cloud_image_url }} 
+                    style={StyleSheet.absoluteFill} 
+                    resizeMode="cover" 
+                />
+
+                {/* 2. Dessin par dessus (Opacité contrôlée par le bouton Œil) */}
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
                         <DrawingViewer
@@ -33,6 +42,8 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
                             imageUri={drawing.cloud_image_url}
                             canvasData={drawing.canvas_data}
                             viewerSize={canvasSize}
+                            // IMPORTANT : transparentMode={true} pour ne pas redessiner l'image Skia, 
+                            // on utilise l'image native <Image> juste au-dessus pour la netteté parfaite
                             transparentMode={true} 
                             animated={isActive} 
                             startVisible={false} 
@@ -127,35 +138,23 @@ export default function FeedPage() {
 
     if (loading) return <View style={styles.loadingContainer}><ActivityIndicator color="#000" size="large" /></View>;
     
+    // Image de fond globale (pour l'ambiance floue autour des cartes)
     const backgroundUrl = drawings.length > 0 ? drawings[0].cloud_image_url : null;
 
     return (
         <View style={styles.container}>
             
-            {/* 1. IMAGE DE FOND FLOU (Ambiance Plein Écran) */}
+            {/* 1. FOND D'ÉCRAN GLOBAL FLOUTÉ (Ambiance) */}
             {backgroundUrl && (
                 <Image 
                     source={{uri: backgroundUrl}} 
                     style={[
-                        StyleSheet.absoluteFill, 
+                        StyleSheet.absoluteFill, // Remplit tout l'écran
                         { width: screenWidth, height: screenHeight }
                     ]} 
                     resizeMode="cover"
-                    blurRadius={40} // Le flou est ici
+                    blurRadius={40} // Flou fort
                 />
-            )}
-
-            {/* 2. IMAGE DU JOUR NETTE (Support du dessin 3:4) */}
-            {/* Elle est positionnée exactement là où le dessin va se superposer */}
-            {backgroundUrl && (
-                <View style={{ position: 'absolute', top: 0, width: screenWidth, aspectRatio: 3/4, zIndex: -1 }}>
-                   <Image 
-                        source={{uri: backgroundUrl}} 
-                        style={{width: '100%', height: '100%'}} 
-                        resizeMode="cover" 
-                        // Pas de blurRadius ici -> Nette
-                    />
-                </View>
             )}
 
             <SunbimHeader showCloseButton={false} />
@@ -188,7 +187,7 @@ export default function FeedPage() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#000' }, // Fond noir en fallback
+    container: { flex: 1, backgroundColor: '#000' },
     
     loadingContainer: { flex: 1, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
     
