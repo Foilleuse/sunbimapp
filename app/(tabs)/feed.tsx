@@ -1,6 +1,6 @@
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform, Image, Pressable, ImageBackground } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform, Image, ImageBackground } from 'react-native';
 import { useEffect, useState, memo } from 'react';
-import { Heart, MessageCircle, User, Share2, Eye } from 'lucide-react-native';
+import { Heart, MessageCircle, Eye, Share2 } from 'lucide-react-native';
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
@@ -92,26 +92,16 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
     return (
         <View style={styles.cardContainer}>
             
-            {/* ZONE DE DESSIN */}
-            <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent', position: 'relative' }}>
-                
-                {/* 1. Image de fond statique (Nuage) */}
-                <Image 
-                    source={{ uri: drawing.cloud_image_url }}
-                    style={[StyleSheet.absoluteFill, { zIndex: 0 }]}
-                    resizeMode="cover" // IMPORTANT: Doit matcher le resizeMode du canvas si possible
-                />
-
-                {/* 2. Dessin par dessus (DrawingViewer) */}
-                <View style={{ flex: 1, opacity: isHolding ? 0 : 1, zIndex: 1 }}>
+            {/* ZONE DE DESSIN TRANSPARENTE */}
+            <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent' }}>
+                <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
                         <DrawingViewer
                             key={`${drawing.id}-${isActive}`} 
                             imageUri={drawing.cloud_image_url} 
                             canvasData={drawing.canvas_data}
                             viewerSize={canvasSize}
-                            // On passe transparentMode=true car on a déjà mis l'image de fond juste au-dessus
-                            // Cela évite d'avoir deux images superposées qui pourraient avoir des ratios différents
+                            // IMPORTANT : Transparent pour voir le nuage statique derrière
                             transparentMode={true} 
                             animated={isActive} 
                             startVisible={false} 
@@ -214,6 +204,7 @@ export default function FeedPage() {
             const { data: cloudData } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();
             
             if (cloudData) {
+                // On récupère l'image du nuage pour le fond statique
                 const optimizedBg = getOptimizedImageUrl(cloudData.image_url, screenWidth);
                 setBackgroundCloud(optimizedBg || cloudData.image_url);
 
@@ -252,6 +243,7 @@ export default function FeedPage() {
                 <SunbimHeader showCloseButton={false} />
                 
                 <View style={{ flex: 1, position: 'relative' }}>
+                    
                     {drawings.length > 0 ? (
                         <PagerView 
                             style={{ flex: 1 }} 
