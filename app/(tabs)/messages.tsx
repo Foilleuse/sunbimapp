@@ -6,7 +6,7 @@ import { SunbimHeader } from '../../src/components/SunbimHeader';
 import { User, UserMinus, UserCheck } from 'lucide-react-native';
 import { useFocusEffect } from 'expo-router';
 import { UserProfileModal } from '../../src/components/UserProfileModal'; 
-import { DrawingViewer } from '../../src/components/DrawingViewer'; // Import nécessaire
+import { DrawingViewer } from '../../src/components/DrawingViewer'; 
 
 export default function FriendsPage() {
   const { user } = useAuth();
@@ -30,7 +30,7 @@ export default function FriendsPage() {
       setLoading(true);
       const today = new Date().toISOString().split('T')[0];
 
-      // 1. Récupérer le nuage du jour (pour trouver le dessin correspondant)
+      // 1. Récupérer le nuage du jour
       const { data: cloudData } = await supabase.from('clouds').select('id, image_url').eq('published_for', today).maybeSingle();
       const todayCloudId = cloudData?.id;
       const todayCloudUrl = cloudData?.image_url;
@@ -75,7 +75,6 @@ export default function FriendsPage() {
           const userProfile = usersData?.find(u => u.id === follow.following_id);
           if (!userProfile) return null;
           
-          // Trouver le dessin du jour pour cet utilisateur
           const userDrawing = todaysDrawings.find(d => d.user_id === follow.following_id);
 
           return {
@@ -83,7 +82,7 @@ export default function FriendsPage() {
               ...userProfile,
               todaysDrawing: userDrawing ? {
                   canvasData: userDrawing.canvas_data,
-                  cloudImageUrl: userDrawing.cloud_image_url || todayCloudUrl // Fallback si manquant dans drawing
+                  cloudImageUrl: userDrawing.cloud_image_url || todayCloudUrl
               } : null
           };
       }).filter(item => item !== null);
@@ -125,7 +124,6 @@ export default function FriendsPage() {
         activeOpacity={0.7}
     >
         <View style={styles.friendInfoContainer}>
-            {/* AVATAR */}
             <View style={styles.avatarContainer}>
                 {item.avatar_url ? (
                     <Image source={{ uri: item.avatar_url }} style={styles.avatar} />
@@ -136,7 +134,6 @@ export default function FriendsPage() {
                 )}
             </View>
 
-            {/* TEXTE */}
             <View style={styles.textContainer}>
                 <Text style={styles.friendName} numberOfLines={1}>
                     {item.display_name || "Utilisateur Anonyme"}
@@ -147,7 +144,6 @@ export default function FriendsPage() {
             </View>
         </View>
         
-        {/* DESSIN DU JOUR (à droite) ou BOUTON ACTION */}
         <View style={styles.rightContainer}>
             {item.todaysDrawing ? (
                 <View style={styles.miniDrawingContainer}>
@@ -155,14 +151,12 @@ export default function FriendsPage() {
                         imageUri={item.todaysDrawing.cloudImageUrl}
                         canvasData={item.todaysDrawing.canvasData}
                         viewerSize={MINI_DRAWING_SIZE}
-                        transparentMode={false} // On veut voir le nuage en fond
+                        transparentMode={true} // MODIFIÉ : true pour cacher la photo (nuage)
                         animated={false}
                         startVisible={true}
                     />
                 </View>
             ) : (
-                // Si pas de dessin, on affiche le bouton unfollow (ou rien, selon préférence)
-                // Ici je garde le bouton pour pouvoir gérer les amis
                 <TouchableOpacity 
                     style={styles.unfollowBtn} 
                     onPress={() => handleUnfollow(item.followId, item.id)}
@@ -221,7 +215,7 @@ const styles = StyleSheet.create({
       paddingVertical: 15, 
       borderBottomWidth: 1, 
       borderBottomColor: '#F5F5F5',
-      height: 80 // Hauteur fixe pour alignement
+      height: 105 // MODIFIÉ : Hauteur augmentée de ~30% (80 -> 105)
   },
   friendInfoContainer: { 
       flexDirection: 'row', 
@@ -244,7 +238,7 @@ const styles = StyleSheet.create({
   },
   miniDrawingContainer: {
       width: 60,
-      height: 80, // Ratio 3:4 approximatif pour le viewer
+      height: 80, 
       borderRadius: 8,
       overflow: 'hidden',
       backgroundColor: '#EEE',
