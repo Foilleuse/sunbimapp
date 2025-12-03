@@ -138,8 +138,7 @@ export default function FriendsPage() {
       <SunbimHeader showCloseButton={false} />
       
       <View style={styles.content}>
-        <Text style={styles.title}>Mes Amis</Text>
-        <Text style={styles.subtitle}>Les comptes que vous suivez ({following.length})</Text>
+        {/* Suppression du Titre et du Sous-titre ici */}
 
         {loading ? (
             <ActivityIndicator style={{marginTop: 20}} color="#000" />
@@ -175,8 +174,6 @@ export default function FriendsPage() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFF' },
   content: { flex: 1, paddingHorizontal: 20, paddingTop: 10 },
-  title: { fontSize: 28, fontWeight: '900', color: '#000', marginBottom: 5 },
-  subtitle: { fontSize: 14, color: '#666', marginBottom: 20 },
   
   friendItem: { 
       flexDirection: 'row', 
