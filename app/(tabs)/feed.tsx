@@ -12,20 +12,18 @@ if (Platform.OS !== 'web') {
 
 const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: any, canvasSize: number, index: number, currentIndex: number }) => {
     const [isLiked, setIsLiked] = useState(false);
-    const [isHolding, setIsHolding] = useState(false); // Piloté par le bouton Œil
+    const [isHolding, setIsHolding] = useState(false);
     
     const likesCount = drawing.likes_count || 0;
     const commentsCount = drawing.comments_count || 0;
     const author = drawing.users;
 
     const isActive = index === currentIndex; 
-    
     const shouldRenderDrawing = isActive;
 
     return (
         <View style={styles.cardContainer}>
             
-            {/* IMAGE + DESSIN (Non interactif au toucher) */}
             <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent' }}>
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
@@ -43,16 +41,11 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
             </View>
             
             <View style={styles.cardInfo}>
-                {/* HEADER INFO : Titre + Bouton Œil sur la même ligne */}
                 <View style={styles.headerInfo}>
-                    
-                    {/* LIGNE TITRE ET ŒIL */}
                     <View style={styles.titleRow}>
                         <Text style={styles.drawingTitle} numberOfLines={1}>
                             {drawing.label || "Sans titre"}
                         </Text>
-
-                        {/* BOUTON ŒIL DÉPLACÉ ICI (Aligné à droite) */}
                         <TouchableOpacity 
                             style={[styles.eyeBtn, isHolding && styles.iconBtnActive]}
                             activeOpacity={1}
@@ -77,7 +70,6 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
                     </View>
                 </View>
 
-                {/* BARRE D'ACTIONS (Bas) */}
                 <View style={styles.actionBar}>
                     <View style={styles.leftActions}>
                         <TouchableOpacity style={styles.actionBtn} onPress={() => setIsLiked(!isLiked)}>
@@ -109,7 +101,7 @@ export default function FeedPage() {
     const [drawings, setDrawings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [currentIndex, setCurrentIndex] = useState(0);
-    const { width: screenWidth } = Dimensions.get('window');
+    const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
     useEffect(() => { fetchTodaysFeed(); }, []);
 
@@ -138,14 +130,22 @@ export default function FeedPage() {
 
     return (
         <View style={styles.container}>
+            {/* FOND D'ÉCRAN FLOU (Plein écran) */}
+            {backgroundUrl && (
+                <Image 
+                    source={{uri: backgroundUrl}} 
+                    style={[
+                        StyleSheet.absoluteFill, // Prend tout l'espace derrière
+                        { width: screenWidth, height: screenHeight }
+                    ]} 
+                    resizeMode="cover"
+                    blurRadius={40} // Flou Gaussien fort pour faire ressortir le contenu
+                />
+            )}
+
             <SunbimHeader showCloseButton={false} />
+            
             <View style={{ flex: 1, position: 'relative' }}>
-                {backgroundUrl && (
-                    <View style={{ position: 'absolute', top: 0, width: screenWidth, aspectRatio: 3/4, zIndex: -1 }}>
-                       <Image source={{uri: backgroundUrl}} style={{width: '100%', height: '100%'}} resizeMode="cover" />
-                    </View>
-                )}
-                
                 {drawings.length > 0 ? (
                     <PagerView 
                         style={{ flex: 1 }} 
@@ -173,19 +173,23 @@ export default function FeedPage() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#FFFFFF' },
+    // Fond noir par défaut (visible avant chargement de l'image)
+    container: { flex: 1, backgroundColor: '#000' },
+    
+    // Fond semi-transparent pour le chargement
     loadingContainer: { flex: 1, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
+    
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    text: { color: '#666', fontSize: 16 },
+    text: { color: '#FFF', fontSize: 16 }, // Texte blanc sur fond sombre
+    
     cardContainer: { flex: 1 },
     cardInfo: {
         flex: 1, 
         backgroundColor: '#FFFFFF', 
-        marginTop: -40, // Chevauchement léger pour le style
+        marginTop: -40, 
         paddingHorizontal: 20, 
         paddingTop: 25,
-        shadowColor: "#000", shadowOffset: {width: 0, height: -4}, shadowOpacity: 0.05, shadowRadius: 4, elevation: 5,
-        // ANGLES RECTANGULAIRES (Suppression des borderRadius)
+        shadowColor: "#000", shadowOffset: {width: 0, height: -4}, shadowOpacity: 0.1, shadowRadius: 10, elevation: 5,
     },
     headerInfo: { marginBottom: 15 },
     
