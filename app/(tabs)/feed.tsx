@@ -5,21 +5,23 @@ import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
 import { useAuth } from '../../src/contexts/AuthContext';
-import { CommentsModal } from '../../src/components/CommentsModal'; // Import de la modale
+import { CommentsModal } from '../../src/components/CommentsModal';
+import { UserProfileModal } from '../../src/components/UserProfileModal'; // Import de la nouvelle modale
 
 let PagerView: any;
 if (Platform.OS !== 'web') {
     try { PagerView = require('react-native-pager-view').default; } catch (e) { PagerView = View; }
 } else { PagerView = View; }
 
-const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: any, canvasSize: number, index: number, currentIndex: number }) => {
+// Ajout de la prop onUserPress
+const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }: { drawing: any, canvasSize: number, index: number, currentIndex: number, onUserPress: (user: any) => void }) => {
     const { user } = useAuth();
     
     const initialLikesCount = drawing.likes?.[0]?.count || 0;
 
     const [isLiked, setIsLiked] = useState(false);
     const [likesCount, setLikesCount] = useState(initialLikesCount);
-    const [showComments, setShowComments] = useState(false); // État pour la modale commentaires
+    const [showComments, setShowComments] = useState(false);
     
     const [isHolding, setIsHolding] = useState(false); 
     
@@ -87,11 +89,8 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
     return (
         <View style={styles.cardContainer}>
             
-            {/* ZONE DE DESSIN TRANSPARENTE */}
-            {/* L'image de fond est maintenant gérée par le parent (FeedPage) */}
+            {/* ZONE DE DESSIN */}
             <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent' }}>
-                
-                {/* Le calque de dessin par-dessus */}
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
                         <DrawingViewer
@@ -124,7 +123,12 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
                         </TouchableOpacity>
                     </View>
 
-                    <View style={styles.userInfo}>
+                    {/* MODIFICATION ICI : TouchableOpacity pour le profil */}
+                    <TouchableOpacity 
+                        style={styles.userInfo} 
+                        onPress={() => onUserPress(author)}
+                        activeOpacity={0.7}
+                    >
                          <View style={styles.avatar}>
                             {author?.avatar_url ? (
                                 <Image source={{uri: author.avatar_url}} style={{width:24, height:24, borderRadius:12}} />
@@ -134,12 +138,11 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
                          </View>
                          <Text style={styles.userName}>{author?.display_name || "Anonyme"}</Text>
                          <Text style={styles.dateText}>• {new Date(drawing.created_at).toLocaleDateString()}</Text>
-                    </View>
+                    </TouchableOpacity>
                 </View>
 
                 <View style={styles.actionBar}>
                     <View style={styles.leftActions}>
-                        
                         <TouchableOpacity style={styles.actionBtn} onPress={handleLike}>
                             <Heart 
                                 color={isLiked ? "#FF3B30" : "#000"} 
@@ -149,7 +152,6 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
                             <Text style={styles.actionText}>{likesCount}</Text>
                         </TouchableOpacity>
 
-                        {/* BOUTON COMMENTAIRES ACTIVÉ */}
                         <TouchableOpacity style={styles.actionBtn} onPress={() => setShowComments(true)}>
                             <MessageCircle color="#000" size={28} />
                             <Text style={styles.actionText}>{commentsCount}</Text>
@@ -164,7 +166,6 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
                 </View>
             </View>
 
-            {/* MODALE COMMENTAIRES */}
             <CommentsModal 
                 visible={showComments} 
                 onClose={() => setShowComments(false)} 
@@ -182,8 +183,12 @@ export default function FeedPage() {
     const [drawings, setDrawings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [currentIndex, setCurrentIndex] = useState(0);
-    const [backgroundCloud, setBackgroundCloud] = useState<string | null>(null); // Nouvel état pour l'image de fond
+    const [backgroundCloud, setBackgroundCloud] = useState<string | null>(null);
     const { width: screenWidth } = Dimensions.get('window');
+
+    // États pour la modale profil
+    const [selectedUser, setSelectedUser] = useState<any>(null);
+    const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
 
     useEffect(() => { fetchTodaysFeed(); }, []);
 
@@ -193,12 +198,11 @@ export default function FeedPage() {
             const { data: cloudData } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();
             
             if (cloudData) {
-                // On stocke l'image du nuage pour le fond statique
                 setBackgroundCloud(cloudData.image_url);
 
                 const { data: drawingsData, error: drawingsError } = await supabase
                     .from('drawings')
-                    .select('*, users(display_name, avatar_url), likes(count), comments(count)') 
+                    .select('*, users(id, display_name, avatar_url), likes(count), comments(count)') 
                     .eq('cloud_id', cloudData.id)
                     .order('created_at', { ascending: false })
                     .limit(20);
@@ -209,6 +213,14 @@ export default function FeedPage() {
         } catch (e) { console.error(e); } finally { setLoading(false); }
     };
 
+    // Handler pour ouvrir le profil
+    const handleOpenProfile = (user: any) => {
+        if (user) {
+            setSelectedUser(user);
+            setIsProfileModalVisible(true);
+        }
+    };
+
     if (loading) return <View style={styles.loadingContainer}><ActivityIndicator color="#000" size="large" /></View>;
 
     return (
@@ -217,7 +229,6 @@ export default function FeedPage() {
             
             <View style={{ flex: 1, position: 'relative' }}>
                 
-                {/* IMAGE DE FOND STATIQUE */}
                 {backgroundCloud && (
                     <Image 
                         source={{ uri: backgroundCloud }}
@@ -227,7 +238,7 @@ export default function FeedPage() {
                             left: 0,
                             width: screenWidth, 
                             aspectRatio: 3/4,
-                            zIndex: 0 // Derrière le PagerView
+                            zIndex: 0 
                         }}
                         resizeMode="cover"
                     />
@@ -235,7 +246,7 @@ export default function FeedPage() {
 
                 {drawings.length > 0 ? (
                     <PagerView 
-                        style={{ flex: 1, zIndex: 1 }} // Au-dessus de l'image
+                        style={{ flex: 1, zIndex: 1 }} 
                         initialPage={0} 
                         onPageSelected={(e: any) => setCurrentIndex(e.nativeEvent.position)}
                         offscreenPageLimit={1} 
@@ -247,6 +258,7 @@ export default function FeedPage() {
                                     canvasSize={screenWidth} 
                                     index={index}
                                     currentIndex={currentIndex}
+                                    onUserPress={handleOpenProfile} // Passage du handler
                                 />
                             </View>
                         ))}
@@ -255,6 +267,16 @@ export default function FeedPage() {
                     <View style={styles.centerBox}><Text style={styles.text}>La galerie est vide.</Text></View>
                 )}
             </View>
+
+            {/* Modale Profil Utilisateur */}
+            {selectedUser && (
+                <UserProfileModal
+                    visible={isProfileModalVisible}
+                    onClose={() => setIsProfileModalVisible(false)}
+                    userId={selectedUser.id}
+                    initialUser={selectedUser}
+                />
+            )}
         </View>
     );
 }
