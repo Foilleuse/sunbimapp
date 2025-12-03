@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Modal, TextInput, TouchableOpacity, ActivityInd
 import { X, Save, LogOut, Trash2, Camera, Lock, User } from 'lucide-react-native';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
-import { useRouter } from 'expo-router'; // Import du router pour la redirection
+import { useRouter } from 'expo-router'; 
 
 interface SettingsModalProps {
   visible: boolean;
@@ -12,7 +12,7 @@ interface SettingsModalProps {
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }) => {
   const { user, profile, signOut } = useAuth();
-  const router = useRouter(); // Initialisation du router
+  const router = useRouter(); 
   
   const [displayName, setDisplayName] = useState('');
   const [bio, setBio] = useState('');
@@ -20,7 +20,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
   
   const [loading, setLoading] = useState(false);
 
-  // Initialisation des champs avec les données actuelles
   useEffect(() => {
     if (visible && profile) {
         setDisplayName(profile.display_name || '');
@@ -33,8 +32,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
     if (!user) return;
     setLoading(true);
     try {
+        // CORRECTION : On inclut l'email dans l'update pour éviter l'erreur "not-null constraint"
+        // si la ligne est créée pour la première fois ou si la DB l'exige.
         const updates = {
             id: user.id,
+            email: user.email, // Ajout de l'email
             display_name: displayName,
             bio: bio,
             updated_at: new Date(),
@@ -72,8 +74,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
   const handleSignOut = async () => {
       try {
           await signOut();
-          onClose(); // Ferme la modale
-          router.replace('/'); // Redirection vers l'index (Page d'accueil/Dessin)
+          onClose(); 
+          router.replace('/'); 
       } catch (error) {
           console.error(error);
       }
@@ -90,8 +92,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
                   style: "destructive", 
                   onPress: async () => {
                       try {
-                          // Note: Nécessite une fonction RPC 'delete_user' configurée côté Supabase
-                          // ou une logique backend pour supprimer l'user auth.
                           const { error } = await supabase.rpc('delete_user'); 
                           if (error) throw error;
                           
