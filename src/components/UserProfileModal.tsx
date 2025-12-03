@@ -19,6 +19,9 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
   const [drawings, setDrawings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
+  // État pour savoir si l'utilisateur courant a le droit de voir (a dessiné aujourd'hui)
+  const [canViewContent, setCanViewContent] = useState(false);
+
   // Liste des ID de nuages que l'utilisateur courant a "débloqués"
   const [unlockedCloudIds, setUnlockedCloudIds] = useState<string[]>([]);
 
@@ -42,8 +45,10 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
 
     const initModal = async () => {
         if (visible && userId) {
+            // Reset state first
             if (isMounted) {
                 setLoading(true);
+                setCanViewContent(false); 
                 setDrawings([]);
                 setUnlockedCloudIds([]);
             }
@@ -53,11 +58,13 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
             }
             await fetchData(isMounted);
         } else {
+            // Reset complet à la fermeture
             if (isMounted) {
                 setLoading(true);
                 setDrawings([]);
                 setIsFollowing(false);
                 setSelectedDrawing(null); 
+                setCanViewContent(false);
                 setUnlockedCloudIds([]);
             }
         }
@@ -185,6 +192,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
         if (drawingsError) throw drawingsError;
         if (isMounted) setDrawings(drawingsData || []);
 
+        // Récupérer les participations de l'utilisateur COURANT
         if (currentUser) {
             const { data: myDrawings } = await supabase
                 .from('drawings')
@@ -217,6 +225,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
     return (
         <TouchableOpacity 
             onPress={() => openDrawing(item)}
+            disabled={!isUnlocked} // DÉSACTIVE LE CLIC SI NON DÉBLOQUÉ
             style={{ width: ITEM_SIZE, aspectRatio: 3/4, marginBottom: SPACING, backgroundColor: '#F9F9F9', overflow: 'hidden', position: 'relative' }}
         >
             <DrawingViewer 
@@ -324,7 +333,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                         <View style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}> 
                             <Pressable 
                                 onPressIn={() => {
-                                    // On permet le "hold to see original" SEULEMENT si c'est débloqué
                                     if (isSelectedUnlocked) setIsHolding(true);
                                 }} 
                                 onPressOut={() => setIsHolding(false)}
@@ -345,15 +353,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                                         animated={true}
                                     />
                                 </View>
-                                {/* Overlay "!" si masqué en grand aussi */}
-                                {!isSelectedUnlocked && (
-                                    <View style={styles.missedOverlay}>
-                                        <AlertCircle color="#000" size={48} style={{ marginBottom: 10 }} />
-                                        <Text style={[styles.missedDate, { fontSize: 20 }]}>
-                                            {new Date(selectedDrawing.created_at).toLocaleDateString(undefined, {day: '2-digit', month: '2-digit'})}
-                                        </Text>
-                                    </View>
-                                )}
                                 {isSelectedUnlocked && <Text style={styles.hintText}>Maintenir pour voir l'original</Text>}
                             </Pressable>
                         </View>
