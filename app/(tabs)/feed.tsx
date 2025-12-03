@@ -4,7 +4,7 @@ import { Heart, MessageCircle, User, Share2, Eye } from 'lucide-react-native';
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
-// AJOUT : Import du contexte d'authentification
+// AJOUT : Import du contexte Auth pour savoir qui like
 import { useAuth } from '../../src/contexts/AuthContext';
 
 let PagerView: any;
@@ -13,11 +13,11 @@ if (Platform.OS !== 'web') {
 } else { PagerView = View; }
 
 const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: any, canvasSize: number, index: number, currentIndex: number }) => {
-    const { user } = useAuth(); // Récupération de l'user
+    const { user } = useAuth(); // On récupère l'utilisateur connecté
     
-    // ETATS DU LIKE
+    // --- ETATS DU LIKE ---
     const [isLiked, setIsLiked] = useState(false);
-    const [likesCount, setLikesCount] = useState(drawing.likes_count || 0);
+    const [likesCount, setLikesCount] = useState(drawing.likes_count || 0); // On initialise avec la valeur de la DB
     
     const [isHolding, setIsHolding] = useState(false);
     
@@ -27,54 +27,62 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
     const isActive = index === currentIndex; 
     const shouldRenderDrawing = isActive;
 
-    // 1. Vérifier si déjà liké au montage
+    // 1. VÉRIFICATION INITIALE : Est-ce que j'ai déjà liké ce dessin ?
     useEffect(() => {
         if (!user) return;
-        const checkLike = async () => {
-            // On compte si une ligne existe dans 'likes' pour ce user et ce drawing
-            const { count } = await supabase
+        
+        const checkUserLike = async () => {
+            // On cherche s'il existe une ligne dans la table 'likes' pour ce user et ce dessin
+            const { data, error } = await supabase
                 .from('likes')
-                .select('id', { count: 'exact', head: true })
+                .select('id')
                 .eq('user_id', user.id)
-                .eq('drawing_id', drawing.id);
-            
-            if (count && count > 0) {
+                .eq('drawing_id', drawing.id)
+                .maybeSingle();
+
+            if (data) {
                 setIsLiked(true);
             }
         };
-        checkLike();
+        
+        checkUserLike();
     }, [user, drawing.id]);
 
-    // 2. Gestion du clic Like
-    const handleLikePress = async () => {
-        if (!user) return; // Ou afficher une alerte de connexion
+    // 2. GESTION DU CLIC (Logique optimiste)
+    const handleLike = async () => {
+        if (!user) return; // Sécurité
 
-        // Optimistic Update : On change l'UI tout de suite
         const previousLiked = isLiked;
         const previousCount = likesCount;
-        
+
+        // Mise à jour immédiate de l'interface (plus réactif)
         setIsLiked(!previousLiked);
         setLikesCount(previousLiked ? previousCount - 1 : previousCount + 1);
 
         try {
             if (previousLiked) {
-                // Si c'était liké -> on supprime
+                // Si c'était déjà liké -> On supprime le like (DELETE)
                 const { error } = await supabase
                     .from('likes')
                     .delete()
                     .eq('user_id', user.id)
                     .eq('drawing_id', drawing.id);
+                
                 if (error) throw error;
             } else {
-                // Si pas liké -> on ajoute
+                // Si ce n'était pas liké -> On ajoute le like (INSERT)
                 const { error } = await supabase
                     .from('likes')
-                    .insert({ user_id: user.id, drawing_id: drawing.id });
+                    .insert({
+                        user_id: user.id,
+                        drawing_id: drawing.id
+                    });
+                
                 if (error) throw error;
             }
         } catch (error) {
             console.error("Erreur like:", error);
-            // Rollback en cas d'erreur
+            // En cas d'erreur, on annule le changement visuel
             setIsLiked(previousLiked);
             setLikesCount(previousCount);
         }
@@ -101,7 +109,6 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
             </View>
             
             <View style={styles.cardInfo}>
-                {/* HEADER INFO (INCHANGÉ) */}
                 <View style={styles.headerInfo}>
                     <View style={styles.titleRow}>
                         <Text style={styles.drawingTitle} numberOfLines={1}>
@@ -132,17 +139,16 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
                     </View>
                 </View>
 
-                {/* BARRE D'ACTIONS */}
                 <View style={styles.actionBar}>
                     <View style={styles.leftActions}>
-                        
                         {/* BOUTON LIKE CONNECTÉ */}
-                        <TouchableOpacity style={styles.actionBtn} onPress={handleLikePress}>
+                        <TouchableOpacity style={styles.actionBtn} onPress={handleLike}>
                             <Heart 
                                 color={isLiked ? "#FF3B30" : "#000"} 
                                 fill={isLiked ? "#FF3B30" : "transparent"} 
                                 size={28} 
                             />
+                            {/* AFFICHE LE COMPTEUR DYNAMIQUE */}
                             <Text style={styles.actionText}>{likesCount}</Text>
                         </TouchableOpacity>
 
@@ -195,19 +201,12 @@ export default function FeedPage() {
     };
 
     if (loading) return <View style={styles.loadingContainer}><ActivityIndicator color="#000" size="large" /></View>;
-    
-    const backgroundUrl = drawings.length > 0 ? drawings[0].cloud_image_url : null;
 
     return (
         <View style={styles.container}>
             <SunbimHeader showCloseButton={false} />
-            <View style={{ flex: 1, position: 'relative' }}>
-                {backgroundUrl && (
-                    <View style={{ position: 'absolute', top: 0, width: screenWidth, aspectRatio: 3/4, zIndex: -1 }}>
-                       <Image source={{uri: backgroundUrl}} style={{width: '100%', height: '100%'}} resizeMode="cover" />
-                    </View>
-                )}
-                
+            
+            <View style={{ flex: 1 }}>
                 {drawings.length > 0 ? (
                     <PagerView 
                         style={{ flex: 1 }} 
@@ -236,9 +235,10 @@ export default function FeedPage() {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#FFFFFF' },
-    loadingContainer: { flex: 1, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
+    loadingContainer: { flex: 1, backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center' },
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     text: { color: '#666', fontSize: 16 },
+    
     cardContainer: { flex: 1 },
     cardInfo: {
         flex: 1, 
@@ -249,16 +249,40 @@ const styles = StyleSheet.create({
         shadowColor: "#000", shadowOffset: {width: 0, height: -4}, shadowOpacity: 0.05, shadowRadius: 4, elevation: 5,
     },
     headerInfo: { marginBottom: 15 },
-    titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-    drawingTitle: { fontSize: 28, fontWeight: '900', color: '#000', letterSpacing: -0.5, flex: 1, marginRight: 10 },
-    eyeBtn: { padding: 5, marginRight: -5 },
+    
+    titleRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center', 
+        marginBottom: 8
+    },
+    drawingTitle: { 
+        fontSize: 28, 
+        fontWeight: '900', 
+        color: '#000', 
+        letterSpacing: -0.5, 
+        flex: 1, 
+        marginRight: 10 
+    },
+    eyeBtn: {
+        padding: 5,
+        marginRight: -5 
+    },
+
     userInfo: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     avatar: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#F0F0F0', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
     userName: { fontSize: 14, fontWeight: '600', color: '#333' },
     dateText: { fontSize: 14, color: '#999' },
-    actionBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 5 },
+    
+    actionBar: { 
+        flexDirection: 'row', 
+        alignItems: 'center', 
+        justifyContent: 'space-between', 
+        marginTop: 5 
+    },
     leftActions: { flexDirection: 'row', alignItems: 'center', gap: 20 },
     rightActions: { flexDirection: 'row', alignItems: 'center', gap: 15 },
+    
     actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     iconBtn: { padding: 5 },
     iconBtnActive: { opacity: 0.3 },
