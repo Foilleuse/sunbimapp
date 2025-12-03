@@ -2,6 +2,7 @@ import React, { useMemo, useEffect, useState } from 'react';
 import { View, StyleSheet, ActivityIndicator, Dimensions } from 'react-native';
 import { Canvas, Path, Image as SkiaImage, useImage, Group, Skia, SkPath } from '@shopify/react-native-skia';
 import { useSharedValue, withTiming, Easing } from 'react-native-reanimated';
+import { getOptimizedImageUrl } from '../utils/imageOptimizer'; // Import de l'utilitaire
 
 interface DrawingViewerProps {
   imageUri: string;
@@ -33,7 +34,13 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
   autoCenter = false
 }) => {
   
-  const image = useImage(imageUri); 
+  // OPTIMISATION : On charge une version redimensionnée de l'image
+  // La taille demandée correspond à la taille d'affichage (viewerSize)
+  const optimizedUri = useMemo(() => {
+      return getOptimizedImageUrl(imageUri, viewerSize) || imageUri;
+  }, [imageUri, viewerSize]);
+
+  const image = useImage(optimizedUri); 
   const [isReady, setIsReady] = useState(false); 
   
   const progress = useSharedValue(animated ? 0 : (startVisible ? 1 : 0));
@@ -117,7 +124,8 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
 
   if (!image) {
     if (transparentMode) return <View style={{width: TARGET_W, height: TARGET_H}} />;
-    return <View style={styles.loading}><ActivityIndicator color="#000" /></View>;
+    // On peut afficher un petit loader discret ou rien
+    return <View style={[styles.container, {width: TARGET_W, height: TARGET_H}]} />;
   }
 
   return (

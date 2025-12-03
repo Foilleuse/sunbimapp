@@ -5,9 +5,10 @@ import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
 import { useAuth } from '../../src/contexts/AuthContext';
-import { CommentsModal } from '../../src/components/CommentsModal'; // Import de la modale
-import { UserProfileModal } from '../../src/components/UserProfileModal'; // Import de la modale profil
-import { useRouter } from 'expo-router'; // Import du router
+import { CommentsModal } from '../../src/components/CommentsModal';
+import { UserProfileModal } from '../../src/components/UserProfileModal'; 
+import { useRouter } from 'expo-router';
+import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer'; // Import
 
 let PagerView: any;
 if (Platform.OS !== 'web') {
@@ -30,6 +31,9 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
     const author = drawing.users;
     const isActive = index === currentIndex; 
     const shouldRenderDrawing = isActive;
+
+    // Optimisation de l'avatar
+    const optimizedAvatarUrl = getOptimizedImageUrl(author?.avatar_url, 50);
 
     useEffect(() => {
         setLikesCount(drawing.likes?.[0]?.count || 0);
@@ -90,12 +94,11 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
         <View style={styles.cardContainer}>
             
             <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent' }}>
-                
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
                         <DrawingViewer
                             key={`${drawing.id}-${isActive}`} 
-                            imageUri={drawing.cloud_image_url}
+                            imageUri={drawing.cloud_image_url} // Le viewer optimise lui-même
                             canvasData={drawing.canvas_data}
                             viewerSize={canvasSize}
                             transparentMode={true} 
@@ -125,12 +128,12 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
 
                     <TouchableOpacity 
                         style={styles.userInfo} 
-                        onPress={() => onUserPress(author)} // Clic sur le profil
+                        onPress={() => onUserPress(author)} 
                         activeOpacity={0.7}
                     >
                          <View style={styles.avatar}>
-                            {author?.avatar_url ? (
-                                <Image source={{uri: author.avatar_url}} style={{width:24, height:24, borderRadius:12}} />
+                            {optimizedAvatarUrl ? (
+                                <Image source={{uri: optimizedAvatarUrl}} style={{width:24, height:24, borderRadius:12}} />
                             ) : (
                                 <User size={14} color="#666"/>
                             )}
@@ -142,7 +145,6 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
 
                 <View style={styles.actionBar}>
                     <View style={styles.leftActions}>
-                        
                         <TouchableOpacity style={styles.actionBtn} onPress={handleLike}>
                             <Heart 
                                 color={isLiked ? "#FF3B30" : "#000"} 
@@ -180,15 +182,14 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
 });
 
 export default function FeedPage() {
-    const { user } = useAuth(); // Récupération de l'utilisateur connecté
-    const router = useRouter(); // Hook de navigation
+    const { user } = useAuth(); 
+    const router = useRouter(); 
     const [drawings, setDrawings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [backgroundCloud, setBackgroundCloud] = useState<string | null>(null);
     const { width: screenWidth } = Dimensions.get('window');
 
-    // États pour la modale profil
     const [selectedUser, setSelectedUser] = useState<any>(null);
     const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
 
@@ -200,7 +201,9 @@ export default function FeedPage() {
             const { data: cloudData } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();
             
             if (cloudData) {
-                setBackgroundCloud(cloudData.image_url);
+                // Optimisation de l'image de fond (grande taille)
+                const optimizedBg = getOptimizedImageUrl(cloudData.image_url, screenWidth, 90);
+                setBackgroundCloud(optimizedBg || cloudData.image_url);
 
                 const { data: drawingsData, error: drawingsError } = await supabase
                     .from('drawings')
@@ -215,15 +218,11 @@ export default function FeedPage() {
         } catch (e) { console.error(e); } finally { setLoading(false); }
     };
 
-    // Logique de clic sur un utilisateur
     const handleUserPress = (targetUser: any) => {
         if (!targetUser) return;
-
-        // Si c'est l'utilisateur connecté -> Redirection vers l'onglet Profil
         if (user && targetUser.id === user.id) {
             router.push('/(tabs)/profile');
         } else {
-            // Sinon -> Ouverture de la modale profil
             setSelectedUser(targetUser);
             setIsProfileModalVisible(true);
         }
@@ -266,7 +265,7 @@ export default function FeedPage() {
                                     canvasSize={screenWidth} 
                                     index={index}
                                     currentIndex={currentIndex}
-                                    onUserPress={handleUserPress} // Passage de la nouvelle fonction
+                                    onUserPress={handleUserPress}
                                 />
                             </View>
                         ))}
@@ -276,7 +275,6 @@ export default function FeedPage() {
                 )}
             </View>
 
-            {/* Modale Profil Utilisateur (pour les autres) */}
             {selectedUser && (
                 <UserProfileModal
                     visible={isProfileModalVisible}

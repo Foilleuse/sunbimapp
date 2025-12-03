@@ -7,6 +7,7 @@ import { User, UserMinus, UserCheck } from 'lucide-react-native';
 import { useFocusEffect } from 'expo-router';
 import { UserProfileModal } from '../../src/components/UserProfileModal'; 
 import { DrawingViewer } from '../../src/components/DrawingViewer'; 
+import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer'; // Import
 
 export default function FriendsPage() {
   const { user } = useAuth();
@@ -119,58 +120,62 @@ export default function FriendsPage() {
       setIsProfileModalVisible(true);
   };
 
-  const renderFriend = ({ item }: { item: any }) => (
-    <TouchableOpacity 
-        style={styles.friendItem} 
-        onPress={() => handleOpenProfile(item)}
-        activeOpacity={0.7}
-    >
-        <View style={styles.friendInfoContainer}>
-            <View style={styles.avatarContainer}>
-                {item.avatar_url ? (
-                    <Image source={{ uri: item.avatar_url }} style={styles.avatar} />
-                ) : (
-                    <View style={[styles.avatar, styles.placeholderAvatar]}>
-                        <User size={24} color="#666" />
+  const renderFriend = ({ item }: { item: any }) => {
+    const optimizedAvatar = getOptimizedImageUrl(item.avatar_url, 50);
+
+    return (
+        <TouchableOpacity 
+            style={styles.friendItem} 
+            onPress={() => handleOpenProfile(item)}
+            activeOpacity={0.7}
+        >
+            <View style={styles.friendInfoContainer}>
+                <View style={styles.avatarContainer}>
+                    {item.avatar_url ? (
+                        <Image source={{ uri: optimizedAvatar || item.avatar_url }} style={styles.avatar} />
+                    ) : (
+                        <View style={[styles.avatar, styles.placeholderAvatar]}>
+                            <User size={24} color="#666" />
+                        </View>
+                    )}
+                </View>
+
+                <View style={styles.textContainer}>
+                    <Text style={styles.friendName} numberOfLines={1}>
+                        {item.display_name || "Utilisateur Anonyme"}
+                    </Text>
+                    {item.bio ? (
+                        <Text style={styles.friendBio} numberOfLines={1}>{item.bio}</Text>
+                    ) : null}
+                </View>
+            </View>
+            
+            <View style={styles.rightContainer}>
+                {item.todaysDrawing ? (
+                    <View style={[styles.miniDrawingContainer, { width: DRAWING_WIDTH, height: DRAWING_HEIGHT }]}>
+                        <DrawingViewer 
+                            imageUri={item.todaysDrawing.cloudImageUrl} // Le viewer optimise
+                            canvasData={item.todaysDrawing.canvasData}
+                            viewerSize={DRAWING_WIDTH}
+                            viewerHeight={DRAWING_HEIGHT}
+                            transparentMode={true} 
+                            animated={false}
+                            startVisible={true}
+                        />
                     </View>
+                ) : (
+                    <TouchableOpacity 
+                        style={styles.unfollowBtn} 
+                        onPress={() => handleUnfollow(item.followId, item.id)}
+                        hitSlop={10}
+                    >
+                        <UserCheck size={20} color="#000" />
+                    </TouchableOpacity>
                 )}
             </View>
-
-            <View style={styles.textContainer}>
-                <Text style={styles.friendName} numberOfLines={1}>
-                    {item.display_name || "Utilisateur Anonyme"}
-                </Text>
-                {item.bio ? (
-                    <Text style={styles.friendBio} numberOfLines={1}>{item.bio}</Text>
-                ) : null}
-            </View>
-        </View>
-        
-        <View style={styles.rightContainer}>
-            {item.todaysDrawing ? (
-                <View style={[styles.miniDrawingContainer, { width: DRAWING_WIDTH, height: DRAWING_HEIGHT }]}>
-                    <DrawingViewer 
-                        imageUri={item.todaysDrawing.cloudImageUrl}
-                        canvasData={item.todaysDrawing.canvasData}
-                        viewerSize={DRAWING_WIDTH}
-                        viewerHeight={DRAWING_HEIGHT}
-                        transparentMode={true} // Fond transparent (pas de nuage)
-                        animated={false}
-                        startVisible={true}
-                    />
-                </View>
-            ) : (
-                <TouchableOpacity 
-                    style={styles.unfollowBtn} 
-                    onPress={() => handleUnfollow(item.followId, item.id)}
-                    hitSlop={10}
-                >
-                    <UserCheck size={20} color="#000" />
-                </TouchableOpacity>
-            )}
-        </View>
-    </TouchableOpacity>
-  );
+        </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -215,7 +220,7 @@ const styles = StyleSheet.create({
       flexDirection: 'row', 
       alignItems: 'center', 
       justifyContent: 'space-between', 
-      paddingVertical: 10, // Réduit le padding vertical car la hauteur est fixée
+      paddingVertical: 10, 
       borderBottomWidth: 1, 
       borderBottomColor: '#F5F5F5',
       height: 105 
@@ -240,11 +245,8 @@ const styles = StyleSheet.create({
       minWidth: 60
   },
   miniDrawingContainer: {
-      // Dimensions gérées dynamiquement
       borderRadius: 4,
       overflow: 'hidden',
-      // backgroundColor: 'transparent', // Par défaut
-      // Pas de bordure
   },
   unfollowBtn: { 
       padding: 10,
