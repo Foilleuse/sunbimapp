@@ -366,7 +366,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFF' },
-  header: { padding: 15, alignItems: 'flex-end', borderBottomWidth: 0, borderColor: '#eee' }, 
+  // Modification ici : réduction du padding vertical pour remonter le bouton
+  header: { paddingHorizontal: 15, paddingVertical: 10, alignItems: 'flex-end', borderBottomWidth: 0, borderColor: '#eee' }, 
   closeBtn: { padding: 5, backgroundColor: '#F0F0F0', borderRadius: 20 },
   
   profileBlock: { 
