@@ -1,8 +1,8 @@
 import React, { useMemo, useEffect, useState } from 'react';
-import { View, StyleSheet, ActivityIndicator, Dimensions } from 'react-native';
-import { Canvas, Path, Image as SkiaImage, useImage, Group, Skia, SkPath } from '@shopify/react-native-skia';
+import { View, StyleSheet, Dimensions, Image } from 'react-native';
+import { Canvas, Path, Group, Skia, SkPath } from '@shopify/react-native-skia';
 import { useSharedValue, withTiming, Easing } from 'react-native-reanimated';
-import { getOptimizedImageUrl } from '../utils/imageOptimizer'; // Import corrigé
+import { getOptimizedImageUrl } from '../utils/imageOptimizer';
 
 interface DrawingViewerProps {
   imageUri: string;
@@ -35,10 +35,11 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
 }) => {
   
   const optimizedUri = useMemo(() => {
-      return getOptimizedImageUrl(imageUri, viewerSize) || imageUri;
+      // On demande une taille légèrement supérieure pour la netteté sur écrans haute densité
+      return getOptimizedImageUrl(imageUri, viewerSize * 2) || imageUri;
   }, [imageUri, viewerSize]);
 
-  const image = useImage(optimizedUri); 
+  // Plus besoin de useImage ici, on utilise <Image> natif
   const [isReady, setIsReady] = useState(false); 
   
   const progress = useSharedValue(animated ? 0 : (startVisible ? 1 : 0));
@@ -46,8 +47,9 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
 
   const SCREEN_WIDTH = Dimensions.get('window').width;
   
+  // Dimensions de référence du papier (sur lequel le dessin a été fait)
   const REF_PAPER_W = SCREEN_WIDTH;
-  const REF_PAPER_H = SCREEN_WIDTH * (4/3);
+  //const REF_PAPER_H = SCREEN_WIDTH * (4/3); // Non utilisé directement pour le scale
 
   const TARGET_W = viewerSize;
   const TARGET_H = viewerHeight || (viewerSize * (4/3));
@@ -56,18 +58,14 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
     if (animated) {
         progress.value = 0;
         opacity.value = 0;
-
         opacity.value = withTiming(1, { duration: 1000 });
-
-        progress.value = withTiming(1, { 
-            duration: 2200, 
-            easing: Easing.linear 
-        });
+        progress.value = withTiming(1, { duration: 2200, easing: Easing.linear });
     } else {
         progress.value = startVisible ? 1 : 0;
         opacity.value = 1;
     }
-    const timer = setTimeout(() => setIsReady(true), 50);
+    // Petit délai pour laisser le temps au layout de se stabiliser
+    const timer = setTimeout(() => setIsReady(true), 10);
     return () => clearTimeout(timer);
   }, [animated, startVisible]);
 
@@ -85,17 +83,20 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
   }, [canvasData]);
 
   const transforms = useMemo(() => {
-      if (!image) return [];
-      
+      // 1. Zoom Auto sur le dessin (si demandé)
       if (autoCenter && skiaPaths.length > 0) {
           const combinedPath = Skia.Path.Make();
           skiaPaths.forEach((p: any) => combinedPath.addPath(p.skPath));
           const bounds = combinedPath.getBounds();
           
           if (bounds.width > 10 && bounds.height > 10) {
-              const padding = 40;
-              const focusScale = Math.min((TARGET_W - padding) / Math.max(bounds.width, bounds.height), 5);
+              const padding = 20;
+              // On calcule le scale pour faire tenir le dessin dans le viewer
+              const scaleX = (TARGET_W - padding) / bounds.width;
+              const scaleY = (TARGET_H - padding) / bounds.height;
+              const focusScale = Math.min(scaleX, scaleY, 5); // Max zoom x5
               
+              // Centrage
               const tx = (TARGET_W - bounds.width * focusScale) / 2 - bounds.x * focusScale;
               const ty = (TARGET_H - bounds.height * focusScale) / 2 - bounds.y * focusScale;
 
@@ -103,38 +104,34 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
           }
       }
 
+      // 2. Mode STANDARD : On adapte l'échelle du papier d'origine à la taille du viewer
       const scale = TARGET_W / REF_PAPER_W;
-
-      const scaledW = REF_PAPER_W * scale;
-      const scaledH = REF_PAPER_H * scale;
-      
-      const translateX = (TARGET_W - scaledW) / 2;
+      // On centre verticalement si le ratio est différent
+      const scaledH = (REF_PAPER_W * (4/3)) * scale;
       const translateY = (TARGET_H - scaledH) / 2;
 
-      return [{ translateX }, { translateY }, { scale }];
+      return [{ translateX: 0 }, { translateY }, { scale }];
 
-  }, [image, TARGET_W, TARGET_H, REF_PAPER_W, REF_PAPER_H, autoCenter, skiaPaths]);
-
-  if (!image) {
-    if (transparentMode) return <View style={{width: TARGET_W, height: TARGET_H}} />;
-    return <View style={[styles.container, {width: TARGET_W, height: TARGET_H}]} />;
-  }
+  }, [TARGET_W, TARGET_H, REF_PAPER_W, autoCenter, skiaPaths]);
 
   return (
     <View style={[styles.container, {width: TARGET_W, height: TARGET_H, overflow: 'hidden'}]}>
+      
+      {/* COUCHE 1 : IMAGE NATIVE (Optimisée pour le chargement) */}
+      {!transparentMode && (
+          <Image
+            source={{ uri: optimizedUri }}
+            style={[
+                StyleSheet.absoluteFill, 
+                { width: TARGET_W, height: TARGET_H, resizeMode: 'cover' }
+            ]}
+            fadeDuration={0} // Apparition immédiate si en cache
+          />
+      )}
+
+      {/* COUCHE 2 : DESSIN VECTORIEL (Skia) */}
       <Canvas style={{ flex: 1 }}>
         <Group transform={transforms}>
-          
-          {!transparentMode && (
-              <SkiaImage
-                image={image}
-                x={0} y={0}
-                width={REF_PAPER_W} 
-                height={REF_PAPER_H} 
-                fit="cover" 
-              />
-          )}
-          
           {isReady && (
             <Group layer={true} opacity={opacity}> 
             {skiaPaths.map((p: any, index: number) => (
@@ -146,6 +143,9 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
                 strokeWidth={p.width || 15}
                 strokeCap="round"
                 strokeJoin="round"
+                // En mode gomme, on "efface" en utilisant 'clear' (si le canvas avait un fond)
+                // Mais ici comme le fond est une Image native séparée, 'clear' rendrait le trait transparent
+                // ce qui révélerait l'image native dessous, donc ça fonctionne comme une gomme !
                 blendMode={p.isEraser ? "clear" : "srcOver"}
                 start={0}
                 end={progress} 
@@ -169,6 +169,5 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = (props) => {
 };
 
 const styles = StyleSheet.create({
-  container: { backgroundColor: 'transparent' },
-  loading: { flex: 1, justifyContent: 'center', alignItems: 'center' }
+  container: { backgroundColor: 'transparent' }, // Transparent pour laisser voir l'image native ou le fond parent
 });
