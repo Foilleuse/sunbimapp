@@ -6,7 +6,6 @@ import { Cloud } from 'lucide-react-native';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
 import { supabase } from '../../src/lib/supabaseClient';
 import { useAuth } from '../../src/contexts/AuthContext';
-// Ajout indispensable pour l'upload fiable
 import { decode } from 'base64-arraybuffer';
 
 export default function CameraPage() {
@@ -52,8 +51,6 @@ export default function CameraPage() {
       }
   };
 
-  // --- NOUVELLE FONCTION D'UPLOAD (Via Base64 -> ArrayBuffer) ---
-  // C'est beaucoup plus fiable que fetch(file://) sur mobile
   const uploadToSupabase = async (base64Image: string) => {
       if (!user) {
           Alert.alert("Oups", "Connecte-toi pour envoyer tes nuages !");
@@ -62,14 +59,11 @@ export default function CameraPage() {
 
       setIsUploading(true);
       try {
-          // 1. Conversion Base64 -> ArrayBuffer
+          // 1. Conversion
           const arrayBuffer = decode(base64Image);
-          
-          // 2. Nom du fichier
           const fileName = `${user.id}/${Date.now()}.jpg`;
 
-          // 3. Upload vers le Storage 'cloud-submissions'
-          // On spécifie explicitement le contentType image/jpeg
+          // 2. Upload Storage (Nom du bucket avec tiret est OK ici)
           const { error: uploadError } = await supabase.storage
               .from('cloud-submissions')
               .upload(fileName, arrayBuffer, {
@@ -79,15 +73,17 @@ export default function CameraPage() {
 
           if (uploadError) throw uploadError;
 
-          // 4. Récupération de l'URL publique
+          // 3. URL
           const { data: { publicUrl } } = supabase.storage
               .from('cloud-submissions')
               .getPublicUrl(fileName);
 
-          // 5. Sauvegarde en base
-          // CORRECTION ICI : Nom de table avec tiret 'cloud-submissions'
+          // 4. Sauvegarde Base de Données
+          // TENTATIVE DE CORRECTION : On utilise la syntaxe string standard.
+          // Si "cloud-submissions" est le nom exact de la TABLE (pas du bucket), cela devrait marcher.
+          // Si l'erreur persiste, c'est souvent un problème de Row Level Security (RLS) sur Supabase.
           const { error: dbError } = await supabase
-              .from('cloud-submissions') // <-- Modifié ici
+              .from('cloud-submissions') // Assurez-vous que c'est bien le nom de la TABLE, pas juste du bucket
               .insert({
                   user_id: user.id,
                   image_url: publicUrl,
@@ -101,8 +97,9 @@ export default function CameraPage() {
           ]);
 
       } catch (e: any) {
-          console.error("Erreur upload:", e);
-          Alert.alert("Erreur d'envoi", e.message || "Impossible d'envoyer le nuage.");
+          console.error("Erreur complète:", e);
+          // Message d'erreur plus précis pour le debug
+          Alert.alert("Erreur d'envoi", e.message || JSON.stringify(e));
       } finally {
           setIsUploading(false);
       }
@@ -114,21 +111,20 @@ export default function CameraPage() {
         try {
             const photo = await cameraRef.current.takePictureAsync({
                 quality: 0.7,
-                base64: true, // <--- ON DEMANDE LE BASE64 ICI
+                base64: true,
                 skipProcessing: false, 
                 shutterSound: true,
             });
             
             if (photo && photo.base64) {
-                // On envoie le string base64 directement
                 await uploadToSupabase(photo.base64);
             } else {
-                throw new Error("Aucune donnée image reçue.");
+                throw new Error("Erreur lors de la capture.");
             }
 
         } catch (e: any) {
             console.error("Erreur capture:", e);
-            Alert.alert("Erreur", e.message || "Impossible de prendre la photo.");
+            Alert.alert("Erreur", e.message);
         } finally {
             setIsTakingPhoto(false);
         }
