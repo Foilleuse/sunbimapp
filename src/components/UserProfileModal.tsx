@@ -19,7 +19,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
   const [drawings, setDrawings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // NOUVEAU : État pour savoir si l'utilisateur courant a le droit de voir (a dessiné aujourd'hui)
+  // État pour savoir si l'utilisateur courant a le droit de voir (a dessiné aujourd'hui)
   const [canViewContent, setCanViewContent] = useState(false);
 
   const [isFollowing, setIsFollowing] = useState(false);
@@ -44,6 +44,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
             checkFollowStatus();
         }
     } else {
+        // Reset à la fermeture
         setLoading(true);
         setDrawings([]);
         setIsFollowing(false);
@@ -163,16 +164,18 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
         
         if (profileData) setUserProfile(profileData);
 
-        // 2. Vérifier si l'utilisateur courant a dessiné AUJOURD'HUI (Condition d'accès)
-        // Note : Si userId == currentUser.id, on a toujours accès (c'est mon profil)
+        // 2. Vérifier si l'utilisateur courant a le droit de voir
         let accessGranted = false;
 
+        // Cas 1 : C'est mon propre profil -> Accès autorisé
         if (currentUser && currentUser.id === userId) {
             accessGranted = true;
-        } else if (currentUser) {
+        } 
+        // Cas 2 : Je visite un autre profil -> Vérification de participation au nuage du jour
+        else if (currentUser) {
             const today = new Date().toISOString().split('T')[0];
             
-            // On cherche le nuage du jour
+            // Récupérer le nuage du jour
             const { data: cloudData } = await supabase
                 .from('clouds')
                 .select('id')
@@ -180,26 +183,30 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                 .maybeSingle();
             
             if (cloudData) {
-                // On vérifie si j'ai dessiné sur ce nuage
+                // Vérifier si currentUser a publié un dessin pour CE nuage
                 const { count } = await supabase
                     .from('drawings')
                     .select('*', { count: 'exact', head: true })
                     .eq('user_id', currentUser.id)
                     .eq('cloud_id', cloudData.id);
                 
-                if (count && count > 0) {
+                // Si count > 0, j'ai participé -> Accès autorisé
+                if (count !== null && count > 0) {
                     accessGranted = true;
+                } else {
+                    console.log("Accès refusé : Pas de dessin pour le nuage du jour");
                 }
             } else {
-                // S'il n'y a pas de nuage aujourd'hui, on laisse peut-être voir l'historique ?
-                // Par défaut, on bloque si la logique est stricte "Play to see"
+                // S'il n'y a pas de nuage aujourd'hui, on bloque par défaut ou on autorise l'historique
+                // Ici on bloque pour être strict (comme le Feed)
+                console.log("Accès refusé : Pas de nuage aujourd'hui");
                 accessGranted = false; 
             }
         }
 
         setCanViewContent(accessGranted);
 
-        // 3. Si accès accordé, on charge les dessins
+        // 3. Charger les dessins UNIQUEMENT si l'accès est accordé
         if (accessGranted) {
             const { data: drawingsData, error: drawingsError } = await supabase
                 .from('drawings')
@@ -210,11 +217,12 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
             if (drawingsError) throw drawingsError;
             setDrawings(drawingsData || []);
         } else {
-            setDrawings([]); // Pas de données si pas d'accès
+            setDrawings([]); // Vide si pas d'accès
         }
 
     } catch (e) {
         console.error("Erreur chargement:", e);
+        setCanViewContent(false); // Sécurité en cas d'erreur
     } finally {
         setLoading(false);
     }
