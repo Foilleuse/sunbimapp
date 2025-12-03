@@ -89,7 +89,8 @@ export const CommentsModal: React.FC<CommentsModalProps> = ({ visible, onClose, 
       <KeyboardAvoidingView 
         style={{ flex: 1 }} 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        // Augmentation de l'offset pour compenser le décalage de la modale pageSheet sur iOS
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
       >
         <View style={styles.container}>
             <View style={styles.header}>
