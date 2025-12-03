@@ -1,10 +1,9 @@
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform, Image, Pressable, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform, Image, Pressable } from 'react-native';
 import { useEffect, useState, memo } from 'react';
 import { Heart, MessageCircle, User, Share2, Eye } from 'lucide-react-native';
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
-import { useAuth } from '../../src/contexts/AuthContext'; // Import Auth
 
 let PagerView: any;
 if (Platform.OS !== 'web') {
@@ -12,82 +11,32 @@ if (Platform.OS !== 'web') {
 } else { PagerView = View; }
 
 const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: any, canvasSize: number, index: number, currentIndex: number }) => {
-    const { user } = useAuth(); // Récupération de l'utilisateur connecté
-    
     const [isLiked, setIsLiked] = useState(false);
-    const [likesCount, setLikesCount] = useState(drawing.likes_count || 0);
-    const [isHolding, setIsHolding] = useState(false);
+    const [isHolding, setIsHolding] = useState(false); // Piloté par le bouton Œil
     
+    const likesCount = drawing.likes_count || 0;
     const commentsCount = drawing.comments_count || 0;
     const author = drawing.users;
 
     const isActive = index === currentIndex; 
+    
     const shouldRenderDrawing = isActive;
-
-    // 1. Vérifier si l'utilisateur a déjà liké ce dessin au chargement
-    useEffect(() => {
-        if (!user) return;
-        const checkLikeStatus = async () => {
-            const { data } = await supabase
-                .from('likes')
-                .select('id')
-                .eq('user_id', user.id)
-                .eq('drawing_id', drawing.id)
-                .maybeSingle();
-            
-            if (data) setIsLiked(true);
-        };
-        checkLikeStatus();
-    }, [user, drawing.id]);
-
-    // 2. Gestion du clic sur le coeur
-    const handleLike = async () => {
-        if (!user) {
-            // Si pas connecté, on prévient (ou on pourrait ouvrir la modale de connexion)
-            return; 
-        }
-
-        const previousState = isLiked;
-        const previousCount = likesCount;
-
-        // MISE À JOUR OPTIMISTE (Immédiat pour l'utilisateur)
-        setIsLiked(!previousState);
-        setLikesCount(previousState ? previousCount - 1 : previousCount + 1);
-
-        try {
-            if (previousState) {
-                // Si c'était liké -> On supprime (Unlike)
-                const { error } = await supabase
-                    .from('likes')
-                    .delete()
-                    .eq('user_id', user.id)
-                    .eq('drawing_id', drawing.id);
-                
-                if (error) throw error;
-            } else {
-                // Si pas liké -> On ajoute (Like)
-                const { error } = await supabase
-                    .from('likes')
-                    .insert({
-                        user_id: user.id,
-                        drawing_id: drawing.id
-                    });
-                
-                if (error) throw error;
-            }
-        } catch (error) {
-            console.error("Erreur like:", error);
-            // En cas d'erreur, on revient à l'état précédent
-            setIsLiked(previousState);
-            setLikesCount(previousCount);
-        }
-    };
 
     return (
         <View style={styles.cardContainer}>
             
-            {/* IMAGE + DESSIN */}
-            <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent' }}>
+            {/* ZONE IMAGE NETTE (3:4) + DESSIN */}
+            {/* C'est ici qu'on voit le nuage net */}
+            <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: '#000', overflow: 'hidden' }}>
+                
+                {/* 1. IMAGE NETTE DE FOND DE CARTE */}
+                <Image 
+                    source={{ uri: drawing.cloud_image_url }} 
+                    style={StyleSheet.absoluteFill} 
+                    resizeMode="cover" 
+                />
+
+                {/* 2. DESSIN PAR DESSUS (Fond transparent) */}
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
                         <DrawingViewer
@@ -95,7 +44,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
                             imageUri={drawing.cloud_image_url}
                             canvasData={drawing.canvas_data}
                             viewerSize={canvasSize}
-                            transparentMode={true} 
+                            transparentMode={true} // Transparent pour voir l'image nette <Image> dessous
                             animated={isActive} 
                             startVisible={false} 
                         />
@@ -104,12 +53,16 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
             </View>
             
             <View style={styles.cardInfo}>
+                {/* HEADER INFO : Titre + Bouton Œil sur la même ligne */}
                 <View style={styles.headerInfo}>
+                    
+                    {/* LIGNE TITRE ET ŒIL */}
                     <View style={styles.titleRow}>
                         <Text style={styles.drawingTitle} numberOfLines={1}>
                             {drawing.label || "Sans titre"}
                         </Text>
 
+                        {/* BOUTON ŒIL DÉPLACÉ ICI (Aligné à droite) */}
                         <TouchableOpacity 
                             style={[styles.eyeBtn, isHolding && styles.iconBtnActive]}
                             activeOpacity={1}
@@ -134,18 +87,13 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
                     </View>
                 </View>
 
+                {/* BARRE D'ACTIONS (Bas) */}
                 <View style={styles.actionBar}>
                     <View style={styles.leftActions}>
-                        {/* BOUTON LIKE ACTIF */}
-                        <TouchableOpacity style={styles.actionBtn} onPress={handleLike}>
-                            <Heart 
-                                color={isLiked ? "#FF3B30" : "#000"} 
-                                fill={isLiked ? "#FF3B30" : "transparent"} 
-                                size={28} 
-                            />
-                            <Text style={styles.actionText}>{likesCount}</Text>
+                        <TouchableOpacity style={styles.actionBtn} onPress={() => setIsLiked(!isLiked)}>
+                            <Heart color={isLiked ? "#FF3B30" : "#000"} fill={isLiked ? "#FF3B30" : "transparent"} size={28} />
+                            <Text style={styles.actionText}>{likesCount + (isLiked ? 1 : 0)}</Text>
                         </TouchableOpacity>
-
                         <TouchableOpacity style={styles.actionBtn}>
                             <MessageCircle color="#000" size={28} />
                             <Text style={styles.actionText}>{commentsCount}</Text>
@@ -171,7 +119,7 @@ export default function FeedPage() {
     const [drawings, setDrawings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [currentIndex, setCurrentIndex] = useState(0);
-    const { width: screenWidth } = Dimensions.get('window');
+    const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
     useEffect(() => { fetchTodaysFeed(); }, []);
 
@@ -194,21 +142,25 @@ export default function FeedPage() {
         } catch (e) { console.error(e); } finally { setLoading(false); }
     };
 
-    const backgroundUrl = drawings.length > 0 ? drawings[0].cloud_image_url : null;
-
     if (loading) return <View style={styles.loadingContainer}><ActivityIndicator color="#000" size="large" /></View>;
+    
+    // Image de fond (La première dispo) pour l'ambiance
+    const backgroundUrl = drawings.length > 0 ? drawings[0].cloud_image_url : null;
 
     return (
         <View style={styles.container}>
+            
+            {/* --- FOND D'ÉCRAN GLOBAL (AMBIANCE FLOUE) --- */}
+            {/* Placé tout au fond, couvre tout l'écran */}
             {backgroundUrl && (
                 <Image 
                     source={{uri: backgroundUrl}} 
                     style={[
                         StyleSheet.absoluteFill, 
-                        { width: screenWidth, height: '100%', zIndex: -1 }
+                        { width: screenWidth, height: screenHeight, zIndex: -1 }
                     ]} 
                     resizeMode="cover"
-                    blurRadius={50} 
+                    blurRadius={50} // Flou fort
                 />
             )}
 
@@ -242,8 +194,11 @@ export default function FeedPage() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#000' },
+    // Fond noir par défaut (visible si l'image de fond ne charge pas)
+    container: { flex: 1, backgroundColor: '#000' }, 
+    
     loadingContainer: { flex: 1, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
+    
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     text: { color: '#FFF', fontSize: 16 },
     
@@ -272,7 +227,10 @@ const styles = StyleSheet.create({
         flex: 1, 
         marginRight: 10 
     },
-    eyeBtn: { padding: 5, marginRight: -5 },
+    eyeBtn: {
+        padding: 5,
+        marginRight: -5 
+    },
 
     userInfo: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     avatar: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#F0F0F0', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
