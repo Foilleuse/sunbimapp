@@ -4,19 +4,20 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import { Cloud } from 'lucide-react-native';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
-// Ajout des imports nécessaires pour Supabase
 import { supabase } from '../../src/lib/supabaseClient';
 import { useAuth } from '../../src/contexts/AuthContext';
+// Ajout indispensable pour l'upload fiable
+import { decode } from 'base64-arraybuffer';
 
 export default function CameraPage() {
   const { user } = useAuth();
+  const router = useRouter();
+  const cameraRef = useRef<CameraView>(null);
+
   const [permission, requestPermission] = useCameraPermissions();
   const [zoom, setZoom] = useState(0);
-  const [isTakingPhoto, setIsTakingPhoto] = useState(false);
-  const [isUploading, setIsUploading] = useState(false); // État pour le chargement de l'upload
-  
-  const cameraRef = useRef<CameraView>(null);
-  const router = useRouter();
+  const [isTakingPhoto, setIsTakingPhoto] = useState(false); 
+  const [isUploading, setIsUploading] = useState(false);
 
   const { width: screenWidth } = Dimensions.get('window');
   const CAMERA_HEIGHT = screenWidth * (4 / 3);
@@ -34,9 +35,9 @@ export default function CameraPage() {
   if (!permission.granted) {
     return (
       <View style={styles.container}>
-        <Text style={styles.message}>Permission caméra requise pour capturer les nuages.</Text>
+        <Text style={styles.message}>Permission caméra requise.</Text>
         <TouchableOpacity style={styles.permissionBtn} onPress={requestPermission}>
-          <Text style={styles.permissionText}>Accorder la permission</Text>
+          <Text style={styles.permissionText}>Accorder</Text>
         </TouchableOpacity>
       </View>
     );
@@ -51,8 +52,9 @@ export default function CameraPage() {
       }
   };
 
-  // --- FONCTION D'UPLOAD ---
-  const uploadToSupabase = async (uri: string) => {
+  // --- NOUVELLE FONCTION D'UPLOAD (Via Base64 -> ArrayBuffer) ---
+  // C'est beaucoup plus fiable que fetch(file://) sur mobile
+  const uploadToSupabase = async (base64Image: string) => {
       if (!user) {
           Alert.alert("Oups", "Connecte-toi pour envoyer tes nuages !");
           return;
@@ -60,43 +62,46 @@ export default function CameraPage() {
 
       setIsUploading(true);
       try {
-          // 1. Préparation du fichier
-          const response = await fetch(uri);
-          const blob = await response.blob();
-          const fileExt = uri.split('.').pop();
-          const fileName = `${user.id}/${Date.now()}.${fileExt}`;
-          const filePath = `${fileName}`;
+          // 1. Conversion Base64 -> ArrayBuffer
+          const arrayBuffer = decode(base64Image);
+          
+          // 2. Nom du fichier
+          const fileName = `${user.id}/${Date.now()}.jpg`;
 
-          // 2. Upload vers le Storage 'cloud-submissions'
+          // 3. Upload vers le Storage 'cloud-submissions'
+          // On spécifie explicitement le contentType image/jpeg
           const { error: uploadError } = await supabase.storage
               .from('cloud-submissions')
-              .upload(filePath, blob);
+              .upload(fileName, arrayBuffer, {
+                  contentType: 'image/jpeg',
+                  upsert: false
+              });
 
           if (uploadError) throw uploadError;
 
-          // 3. Récupération de l'URL publique
+          // 4. Récupération de l'URL publique
           const { data: { publicUrl } } = supabase.storage
               .from('cloud-submissions')
-              .getPublicUrl(filePath);
+              .getPublicUrl(fileName);
 
-          // 4. Sauvegarde dans la table SQL 'cloud_submissions'
+          // 5. Sauvegarde en base
           const { error: dbError } = await supabase
               .from('cloud_submissions')
               .insert({
                   user_id: user.id,
                   image_url: publicUrl,
-                  status: 'pending' // En attente de validation
+                  status: 'pending'
               });
 
           if (dbError) throw dbError;
 
-          Alert.alert("Envoyé !", "Ton nuage a bien été reçu.", [
+          Alert.alert("Succès !", "Ton nuage a été envoyé.", [
               { text: "Super", onPress: () => router.back() }
           ]);
 
       } catch (e: any) {
           console.error("Erreur upload:", e);
-          Alert.alert("Erreur", "Impossible d'envoyer le nuage. Vérifie ta connexion.");
+          Alert.alert("Erreur d'envoi", e.message || "Impossible d'envoyer le nuage.");
       } finally {
           setIsUploading(false);
       }
@@ -108,18 +113,21 @@ export default function CameraPage() {
         try {
             const photo = await cameraRef.current.takePictureAsync({
                 quality: 0.7,
-                base64: false,
-                skipProcessing: true, 
+                base64: true, // <--- ON DEMANDE LE BASE64 ICI
+                skipProcessing: false, 
                 shutterSound: true,
             });
             
-            if (photo && photo.uri) {
-                // Au lieu d'alerter le chemin local, on lance l'upload
-                await uploadToSupabase(photo.uri);
+            if (photo && photo.base64) {
+                // On envoie le string base64 directement
+                await uploadToSupabase(photo.base64);
+            } else {
+                throw new Error("Aucune donnée image reçue.");
             }
-        } catch (e) {
+
+        } catch (e: any) {
             console.error("Erreur capture:", e);
-            Alert.alert("Erreur", "Impossible de prendre la photo.");
+            Alert.alert("Erreur", e.message || "Impossible de prendre la photo.");
         } finally {
             setIsTakingPhoto(false);
         }
@@ -162,7 +170,6 @@ export default function CameraPage() {
                 })}
             </View>
 
-            {/* Overlay de chargement pendant l'upload */}
             {isUploading && (
                 <View style={styles.loadingOverlay}>
                     <ActivityIndicator size="large" color="#FFF" />
@@ -198,6 +205,18 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: '#111',
     position: 'relative',
+  },
+  loadingOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: 'rgba(0,0,0,0.7)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      zIndex: 50
+  },
+  loadingText: {
+      color: '#FFF',
+      marginTop: 10,
+      fontWeight: '600'
   },
   message: { textAlign: 'center', color: '#FFF', marginTop: 100 },
   permissionBtn: {
@@ -242,19 +261,5 @@ const styles = StyleSheet.create({
       justifyContent: 'center',
       alignItems: 'center',
       padding: 10,
-  },
-  
-  // Nouveau style pour l'overlay de chargement
-  loadingOverlay: {
-      ...StyleSheet.absoluteFillObject,
-      backgroundColor: 'rgba(0,0,0,0.7)',
-      justifyContent: 'center',
-      alignItems: 'center',
-      zIndex: 10
-  },
-  loadingText: {
-      color: '#FFF',
-      marginTop: 10,
-      fontWeight: '600'
   }
 });
