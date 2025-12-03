@@ -58,8 +58,8 @@ export const CommentsModal: React.FC<CommentsModalProps> = ({ visible, onClose, 
       if (error) throw error;
 
       setNewComment('');
-      Keyboard.dismiss(); // Fermer le clavier après envoi
-      fetchComments(); // Rafraîchir pour voir le nouveau message
+      Keyboard.dismiss();
+      fetchComments(); 
       
     } catch (e: any) {
       Alert.alert("Erreur Envoi", e.message);
@@ -86,16 +86,10 @@ export const CommentsModal: React.FC<CommentsModalProps> = ({ visible, onClose, 
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      {/* CORRECTION ICI : 
-          Le KeyboardAvoidingView doit envelopper tout le contenu de la modale (sauf le header si on veut qu'il reste fixe, mais ici tout est dans le conteneur principal).
-          Sur iOS, 'padding' est souvent le meilleur behavior pour une modale pageSheet.
-      */}
       <KeyboardAvoidingView 
         style={{ flex: 1 }} 
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        // Sur Android, le clavier redimensionne déjà la vue, donc pas besoin d'ajustement
-        // Sur iOS dans une modale, on n'a parfois pas besoin d'offset supplémentaire si c'est une pageSheet native, 
-        // mais 'padding' assure que l'input remonte.
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
         <View style={styles.container}>
             <View style={styles.header}>
@@ -112,7 +106,6 @@ export const CommentsModal: React.FC<CommentsModalProps> = ({ visible, onClose, 
                     keyExtractor={item => item.id}
                     contentContainerStyle={{ padding: 20, paddingBottom: 20 }}
                     ListEmptyComponent={<Text style={styles.empty}>Soyez le premier à commenter !</Text>}
-                    // Permet de scroller automatiquement vers le bas quand le clavier s'ouvre
                     inverted={false} 
                 />
             )}
@@ -158,16 +151,16 @@ const styles = StyleSheet.create({
       padding: 10, 
       borderTopWidth: 1, 
       borderColor: '#F0F0F0', 
-      alignItems: 'flex-end', // Aligner en bas pour gérer le multiline
+      alignItems: 'flex-end', 
       backgroundColor: '#FFF',
-      paddingBottom: Platform.OS === 'ios' ? 20 : 10 // Petit padding extra pour iOS (safe area/clavier)
+      paddingBottom: Platform.OS === 'ios' ? 20 : 10 
   },
   input: { 
       flex: 1, 
       backgroundColor: '#F5F5F5', 
       borderRadius: 20, 
       paddingHorizontal: 15, 
-      paddingTop: 10, // Pour centrer le texte verticalement si multiline
+      paddingTop: 10, 
       paddingBottom: 10,
       minHeight: 40, 
       maxHeight: 100,
