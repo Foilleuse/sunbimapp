@@ -1,10 +1,10 @@
-import { View, Text, StyleSheet, FlatList, Dimensions, TouchableOpacity, ActivityIndicator, RefreshControl, TextInput, Keyboard, Pressable, Image, Platform } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Dimensions, TouchableOpacity, ActivityIndicator, RefreshControl, TextInput, Keyboard, Pressable, Image, Platform, Modal } from 'react-native';
 import { useEffect, useState, useCallback, memo } from 'react';
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
 import { useFocusEffect } from 'expo-router';
-import { Search, Heart, Cloud, CloudOff, XCircle, User, MessageCircle } from 'lucide-react-native';
+import { Search, Heart, Cloud, CloudOff, XCircle, User, MessageCircle, X } from 'lucide-react-native';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { CommentsModal } from '../../src/components/CommentsModal';
 
@@ -65,14 +65,12 @@ export default function GalleryPage() {
             // --- FILTRAGE LIKES ---
             let likedIds: string[] = [];
             if (onlyLiked && user) {
-                // Si filtre activé, on récupère d'abord les IDs des dessins likés par l'user
                 const { data: userLikes } = await supabase
                     .from('likes')
                     .select('drawing_id')
                     .eq('user_id', user.id);
                 
                 if (!userLikes || userLikes.length === 0) {
-                    // Aucun like -> liste vide directe
                     setDrawings([]);
                     setLoading(false);
                     return;
@@ -80,14 +78,12 @@ export default function GalleryPage() {
                 likedIds = userLikes.map(l => l.drawing_id);
             }
 
-            // AJOUT : likes(count), comments(count) pour récupérer les stats
             let query = supabase
                 .from('drawings')
                 .select('*, users(display_name, avatar_url), likes(count), comments(count)')
                 .eq('cloud_id', cloudData.id)
                 .order('created_at', { ascending: false });
 
-            // Application du filtre Like
             if (onlyLiked && likedIds.length > 0) {
                 query = query.in('id', likedIds);
             }
@@ -100,30 +96,22 @@ export default function GalleryPage() {
         } catch (e) { console.error(e); } finally { setLoading(false); setRefreshing(false); }
     };
 
-    // Rechargement quand onlyLiked change
     useEffect(() => { fetchGallery(); }, [onlyLiked]);
     
-    // Ajout du nettoyage (return function) pour fermer le viewer au blur
     useFocusEffect(useCallback(() => { 
-        // On ne fetch ici que si on n'est pas déjà en train de charger à cause du useEffect onlyLiked
-        // Mais pour simplifier, on laisse le fetchGallery qui gère son état loading
         fetchGallery(); 
         
         return () => {
-            // Cette fonction s'exécute quand on quitte l'écran (changement d'onglet)
             setSelectedDrawing(null);
             setIsLiked(false);
-            setShowComments(false); // On ferme aussi les commentaires si ouverts
+            setShowComments(false);
         };
     }, []));
 
-    // Effet pour initialiser l'état "Liked" quand un dessin est ouvert
     useEffect(() => {
         if (selectedDrawing && user) {
-            // Init count
             setLikesCount(selectedDrawing.likes?.[0]?.count || 0);
             
-            // Vérif si l'user a liké
             const checkLikeStatus = async () => {
                 const { count } = await supabase
                     .from('likes')
@@ -173,8 +161,6 @@ export default function GalleryPage() {
                     });
                 if (error) throw error;
             }
-            // Optionnel : Rafraîchir la liste en arrière-plan pour que le compteur soit à jour au retour
-            // fetchGallery(); 
         } catch (error) {
             console.error("Erreur like:", error);
             setIsLiked(previousLiked);
@@ -196,7 +182,7 @@ export default function GalleryPage() {
 
     return (
         <View style={styles.container}>
-            <SunbimHeader showCloseButton={selectedDrawing !== null} onClose={closeViewer} showProfileButton={true} />
+            <SunbimHeader showCloseButton={false} onClose={closeViewer} showProfileButton={true} />
             <View style={{flex: 1, position: 'relative'}}>
                 <View style={{flex: 1}}>
                     <View style={styles.toolsContainer}>
@@ -228,69 +214,75 @@ export default function GalleryPage() {
                     )}
                 </View>
 
-                {selectedDrawing && (
-                    <View style={styles.fullScreenOverlay}>
-                        <Pressable onPressIn={() => setIsHolding(true)} onPressOut={() => setIsHolding(false)} style={{ width: screenWidth, aspectRatio: 3/4, backgroundColor: '#F0F0F0' }}>
-                            {/* Ajout de l'image de fond pour le mode transparent */}
-                            <Image 
-                                source={{ uri: selectedDrawing.cloud_image_url }}
-                                style={[StyleSheet.absoluteFill, { opacity: 1 }]} // Toujours visible
-                                resizeMode="cover"
-                            />
-                            <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
-                                <DrawingViewer
-                                    imageUri={selectedDrawing.cloud_image_url} canvasData={selectedDrawing.canvas_data}
-                                    viewerSize={screenWidth} 
-                                    transparentMode={true} // On force la transparence pour voir l'image native dessous
-                                    startVisible={false} 
-                                    animated={true}
+                {/* MODALE NATIVE (Type Profil) */}
+                <Modal visible={!!selectedDrawing} animationType="slide" presentationStyle="pageSheet" onRequestClose={closeViewer}>
+                    {selectedDrawing && (
+                        <View style={styles.modalContainer}>
+                             <View style={styles.modalHeader}>
+                                  <TouchableOpacity onPress={closeViewer} style={styles.closeModalBtn}>
+                                      <X color="#000" size={30} />
+                                  </TouchableOpacity>
+                              </View>
+
+                            <Pressable onPressIn={() => setIsHolding(true)} onPressOut={() => setIsHolding(false)} style={{ width: screenWidth, aspectRatio: 3/4, backgroundColor: '#F0F0F0' }}>
+                                <Image 
+                                    source={{ uri: selectedDrawing.cloud_image_url }}
+                                    style={[StyleSheet.absoluteFill, { opacity: 1 }]}
+                                    resizeMode="cover"
                                 />
-                            </View>
-                            <Text style={styles.hintText}>Maintenir pour voir l'original</Text>
-                        </Pressable>
-
-                        <View style={styles.detailsFooter}>
-                            <View style={styles.userInfoRow}>
-                                <View style={styles.profilePlaceholder}>
-                                    {author?.avatar_url ? (
-                                        <Image source={{uri: author.avatar_url}} style={{width:40, height:40, borderRadius:20}} />
-                                    ) : (
-                                        <User color="#FFF" size={20} />
-                                    )}
-                                </View>
-                                <View>
-                                    <Text style={styles.userName}>{author?.display_name || "Anonyme"}</Text>
-                                    {selectedDrawing.label && <Text style={styles.drawingLabel}>{selectedDrawing.label}</Text>}
-                                </View>
-                            </View>
-
-                            <View style={styles.statsRow}>
-                                {/* Gestion du Like */}
-                                <TouchableOpacity style={styles.statItem} onPress={handleLike}>
-                                    <Heart 
-                                        color={isLiked ? "#FF3B30" : "#000"} 
-                                        fill={isLiked ? "#FF3B30" : "transparent"} 
-                                        size={24} 
+                                <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
+                                    <DrawingViewer
+                                        imageUri={selectedDrawing.cloud_image_url} canvasData={selectedDrawing.canvas_data}
+                                        viewerSize={screenWidth} 
+                                        transparentMode={true} 
+                                        startVisible={false} 
+                                        animated={true}
                                     />
-                                    <Text style={styles.statText}>{likesCount}</Text>
-                                </TouchableOpacity>
-                                
-                                {/* Gestion du Commentaire */}
-                                <TouchableOpacity style={styles.statItem} onPress={() => setShowComments(true)}>
-                                    <MessageCircle color="#000" size={24} />
-                                    <Text style={styles.statText}>{commentsCount}</Text>
-                                </TouchableOpacity>
-                            </View>
-                        </View>
+                                </View>
+                                <Text style={styles.hintText}>Maintenir pour voir l'original</Text>
+                            </Pressable>
 
-                        {/* Modale de commentaires */}
-                        <CommentsModal 
-                            visible={showComments} 
-                            onClose={() => setShowComments(false)} 
-                            drawingId={selectedDrawing.id} 
-                        />
-                    </View>
-                )}
+                            {/* Footer conservant les infos spécifiques Galerie */}
+                            <View style={styles.modalFooter}>
+                                <View style={styles.userInfoRow}>
+                                    <View style={styles.profilePlaceholder}>
+                                        {author?.avatar_url ? (
+                                            <Image source={{uri: author.avatar_url}} style={{width:40, height:40, borderRadius:20}} />
+                                        ) : (
+                                            <User color="#FFF" size={20} />
+                                        )}
+                                    </View>
+                                    <View>
+                                        <Text style={styles.userName}>{author?.display_name || "Anonyme"}</Text>
+                                        {selectedDrawing.label && <Text style={styles.drawingLabel}>{selectedDrawing.label}</Text>}
+                                    </View>
+                                </View>
+
+                                <View style={styles.statsRow}>
+                                    <TouchableOpacity style={styles.statItem} onPress={handleLike}>
+                                        <Heart 
+                                            color={isLiked ? "#FF3B30" : "#000"} 
+                                            fill={isLiked ? "#FF3B30" : "transparent"} 
+                                            size={24} 
+                                        />
+                                        <Text style={styles.statText}>{likesCount}</Text>
+                                    </TouchableOpacity>
+                                    
+                                    <TouchableOpacity style={styles.statItem} onPress={() => setShowComments(true)}>
+                                        <MessageCircle color="#000" size={24} />
+                                        <Text style={styles.statText}>{commentsCount}</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+
+                            <CommentsModal 
+                                visible={showComments} 
+                                onClose={() => setShowComments(false)} 
+                                drawingId={selectedDrawing.id} 
+                            />
+                        </View>
+                    )}
+                </Modal>
             </View>
         </View>
     );
@@ -307,9 +299,15 @@ const styles = StyleSheet.create({
     activeBtn: { backgroundColor: '#000', borderColor: '#000' },
     emptyState: { marginTop: 100, alignItems: 'center' },
     emptyText: { color: '#999' },
-    fullScreenOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#FFFFFF', zIndex: 50 },
     hintText: { position: 'absolute', bottom: 10, alignSelf: 'center', color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width:1, height:1}, textShadowRadius: 1 },
-    detailsFooter: { padding: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#F0F0F0', marginTop: 10 },
+    
+    // NOUVEAUX STYLES MODALE (Type Profil)
+    modalContainer: { flex: 1, backgroundColor: '#FFF' },
+    modalHeader: { width: '100%', height: 60, justifyContent: 'center', alignItems: 'flex-end', paddingRight: 20, paddingTop: 10, backgroundColor: '#FFF', zIndex: 20 },
+    closeModalBtn: { padding: 5 },
+    modalFooter: { padding: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#F0F0F0', marginTop: 10 },
+    
+    // Styles conservés pour l'info utilisateur
     userInfoRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
     profilePlaceholder: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#CCC', justifyContent: 'center', alignItems: 'center', overflow:'hidden' },
     userName: { fontWeight: '700', fontSize: 14 },
