@@ -5,6 +5,7 @@ import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
 import { useAuth } from '../../src/contexts/AuthContext';
+import { CommentsModal } from '../../src/components/CommentsModal'; // Import de la modale
 
 let PagerView: any;
 if (Platform.OS !== 'web') {
@@ -18,6 +19,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
 
     const [isLiked, setIsLiked] = useState(false);
     const [likesCount, setLikesCount] = useState(initialLikesCount);
+    const [showComments, setShowComments] = useState(false); // État pour la modale commentaires
     
     const [isHolding, setIsHolding] = useState(false); 
     
@@ -146,7 +148,8 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
                             <Text style={styles.actionText}>{likesCount}</Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity style={styles.actionBtn}>
+                        {/* BOUTON COMMENTAIRES ACTIVÉ */}
+                        <TouchableOpacity style={styles.actionBtn} onPress={() => setShowComments(true)}>
                             <MessageCircle color="#000" size={28} />
                             <Text style={styles.actionText}>{commentsCount}</Text>
                         </TouchableOpacity>
@@ -159,6 +162,13 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
                     </View>
                 </View>
             </View>
+
+            {/* MODALE COMMENTAIRES */}
+            <CommentsModal 
+                visible={showComments} 
+                onClose={() => setShowComments(false)} 
+                drawingId={drawing.id} 
+            />
         </View>
     );
 }, (prev, next) => {
