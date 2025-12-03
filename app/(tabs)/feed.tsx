@@ -5,15 +5,15 @@ import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
 import { useAuth } from '../../src/contexts/AuthContext';
-import { CommentsModal } from '../../src/components/CommentsModal';
-import { UserProfileModal } from '../../src/components/UserProfileModal'; // Import de la nouvelle modale
+import { CommentsModal } from '../../src/components/CommentsModal'; // Import de la modale
+import { UserProfileModal } from '../../src/components/UserProfileModal'; // Import de la modale profil
+import { useRouter } from 'expo-router'; // Import du router
 
 let PagerView: any;
 if (Platform.OS !== 'web') {
     try { PagerView = require('react-native-pager-view').default; } catch (e) { PagerView = View; }
 } else { PagerView = View; }
 
-// Ajout de la prop onUserPress
 const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }: { drawing: any, canvasSize: number, index: number, currentIndex: number, onUserPress: (user: any) => void }) => {
     const { user } = useAuth();
     
@@ -21,7 +21,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
 
     const [isLiked, setIsLiked] = useState(false);
     const [likesCount, setLikesCount] = useState(initialLikesCount);
-    const [showComments, setShowComments] = useState(false);
+    const [showComments, setShowComments] = useState(false); 
     
     const [isHolding, setIsHolding] = useState(false); 
     
@@ -89,8 +89,8 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
     return (
         <View style={styles.cardContainer}>
             
-            {/* ZONE DE DESSIN */}
             <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent' }}>
+                
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
                         <DrawingViewer
@@ -123,10 +123,9 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
                         </TouchableOpacity>
                     </View>
 
-                    {/* MODIFICATION ICI : TouchableOpacity pour le profil */}
                     <TouchableOpacity 
                         style={styles.userInfo} 
-                        onPress={() => onUserPress(author)}
+                        onPress={() => onUserPress(author)} // Clic sur le profil
                         activeOpacity={0.7}
                     >
                          <View style={styles.avatar}>
@@ -143,6 +142,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
 
                 <View style={styles.actionBar}>
                     <View style={styles.leftActions}>
+                        
                         <TouchableOpacity style={styles.actionBtn} onPress={handleLike}>
                             <Heart 
                                 color={isLiked ? "#FF3B30" : "#000"} 
@@ -180,6 +180,8 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
 });
 
 export default function FeedPage() {
+    const { user } = useAuth(); // Récupération de l'utilisateur connecté
+    const router = useRouter(); // Hook de navigation
     const [drawings, setDrawings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [currentIndex, setCurrentIndex] = useState(0);
@@ -213,10 +215,16 @@ export default function FeedPage() {
         } catch (e) { console.error(e); } finally { setLoading(false); }
     };
 
-    // Handler pour ouvrir le profil
-    const handleOpenProfile = (user: any) => {
-        if (user) {
-            setSelectedUser(user);
+    // Logique de clic sur un utilisateur
+    const handleUserPress = (targetUser: any) => {
+        if (!targetUser) return;
+
+        // Si c'est l'utilisateur connecté -> Redirection vers l'onglet Profil
+        if (user && targetUser.id === user.id) {
+            router.push('/(tabs)/profile');
+        } else {
+            // Sinon -> Ouverture de la modale profil
+            setSelectedUser(targetUser);
             setIsProfileModalVisible(true);
         }
     };
@@ -258,7 +266,7 @@ export default function FeedPage() {
                                     canvasSize={screenWidth} 
                                     index={index}
                                     currentIndex={currentIndex}
-                                    onUserPress={handleOpenProfile} // Passage du handler
+                                    onUserPress={handleUserPress} // Passage de la nouvelle fonction
                                 />
                             </View>
                         ))}
@@ -268,7 +276,7 @@ export default function FeedPage() {
                 )}
             </View>
 
-            {/* Modale Profil Utilisateur */}
+            {/* Modale Profil Utilisateur (pour les autres) */}
             {selectedUser && (
                 <UserProfileModal
                     visible={isProfileModalVisible}
