@@ -95,6 +95,18 @@ export default function ProfilePage() {
       }
   };
 
+  // --- ACTION DE DÉCONNEXION ---
+  const handleSignOut = async () => {
+    try {
+        await signOut(); // Déconnecte de Supabase
+        // Redirection forcée vers l'Index (Page de dessin)
+        // Le replace évite de pouvoir faire "Retour" vers le profil connecté
+        router.replace('/'); 
+    } catch (error) {
+        console.error("Erreur déconnexion:", error);
+    }
+  };
+
   const openDrawing = (drawing: any) => setSelectedDrawing(drawing);
   const closeDrawing = () => setSelectedDrawing(null);
 
@@ -211,15 +223,14 @@ export default function ProfilePage() {
                   <Settings color="#000" size={20} />
               </TouchableOpacity>
 
-              {/* 3. DÉCONNEXION */}
-              <TouchableOpacity style={[styles.iconOnlyBtn, styles.logoutButton]} onPress={signOut}>
+              {/* 3. DÉCONNEXION -> handleSignOut */}
+              <TouchableOpacity style={[styles.iconOnlyBtn, styles.logoutButton]} onPress={handleSignOut}>
                   <LogOut color="#FF3B30" size={20} />
               </TouchableOpacity>
           </View>
       </View>
 
       <View style={styles.historySection}>
-          
           {loadingHistory ? (
               <ActivityIndicator style={{marginTop: 20}} />
           ) : (
@@ -297,7 +308,6 @@ export default function ProfilePage() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFF' },
   
-  // MODIF: Padding ajusté, Suppression de la bordure inférieure
   profileBlock: { 
       paddingTop: 10, 
       paddingBottom: 20, 
@@ -377,7 +387,6 @@ const styles = StyleSheet.create({
   missedOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.4)' },
   missedDate: { fontSize: 16, fontWeight: '700', color: '#000', backgroundColor: 'rgba(255,255,255,0.8)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, overflow: 'hidden' },
 
-  // Styles Auth
   authContainer: { flex: 1, justifyContent: 'center', padding: 30 },
   logoContainer: { alignItems: 'center', marginBottom: 40 },
   authTitle: { fontSize: 32, fontWeight: '900', color: '#000', marginBottom: 10 },
@@ -389,7 +398,6 @@ const styles = StyleSheet.create({
   authBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
   switchText: { textAlign: 'center', marginTop: 20, color: '#666', fontSize: 14 },
 
-  // Styles Modal
   modalContainer: { flex: 1, backgroundColor: '#FFF' },
   modalHeader: { width: '100%', height: 60, justifyContent: 'center', alignItems: 'flex-end', paddingRight: 20, paddingTop: 10, backgroundColor: '#FFF', zIndex: 20 },
   closeModalBtn: { padding: 5 },
