@@ -1,75 +1,78 @@
-import { Tabs, useRouter } from 'expo-router';
-import { View } from 'react-native';
-import { Home, Search, Camera, Send, User } from 'lucide-react-native';
+import { Tabs } from 'expo-router';
+import React from 'react';
+import { Platform } from 'react-native';
+
+import { HapticTab } from '../../components/haptic-tab';
+import { IconSymbol } from '../../components/ui/icon-symbol';
+// Suppression de l'import manquant
+// import TabBarBackground from '../../components/ui/tab-bar-background';
+import { Colors } from '../../constants/theme';
+import { useColorScheme } from '../../hooks/use-color-scheme';
+import { Home, Image as ImageIcon, Camera, Users, User } from 'lucide-react-native';
 
 export default function TabLayout() {
-  const router = useRouter();
+  const colorScheme = useColorScheme();
 
   return (
     <Tabs
       screenOptions={{
-        headerShown: false, 
-        tabBarShowLabel: false, 
-        tabBarStyle: {
-          backgroundColor: '#FFFFFF',
-          borderTopWidth: 1,
-          borderTopColor: '#F0F0F0',
-          height: 85, 
-          paddingTop: 10,
-        },
-        tabBarActiveTintColor: '#000000',
-        tabBarInactiveTintColor: '#CCCCCC',
-      }}
-    >
-      {/* 1. FEED */}
+        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
+        headerShown: false,
+        tabBarButton: HapticTab,
+        // Suppression de la propriété qui utilisait le composant manquant
+        // tabBarBackground: TabBarBackground,
+        tabBarStyle: Platform.select({
+          ios: {
+            position: 'absolute',
+            // On peut ajouter un fond semi-transparent simple ici si nécessaire
+            backgroundColor: colorScheme === 'dark' ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.8)',
+          },
+          default: {},
+        }),
+      }}>
+      
+      {/* 1. Feed (Accueil) */}
       <Tabs.Screen
         name="feed"
         options={{
-          tabBarIcon: ({ color }) => <Home color={color} size={28} />,
+          title: 'Feed',
+          tabBarIcon: ({ color }) => <Home size={24} color={color} />,
         }}
       />
 
-      {/* 2. GALERIE */}
+      {/* 2. Gallery */}
       <Tabs.Screen
         name="gallery"
         options={{
-          tabBarIcon: ({ color }) => <Search color={color} size={28} />,
+          title: 'Galerie',
+          tabBarIcon: ({ color }) => <ImageIcon size={24} color={color} />,
         }}
       />
 
-      {/* 3. CAMERA */}
+      {/* 3. Camera (Bouton central souvent) */}
       <Tabs.Screen
         name="camera"
         options={{
-          // On cache la barre de navigation pour cet écran uniquement
-          tabBarStyle: { display: 'none' },
-          tabBarIcon: () => (
-            <View style={{
-              width: 56, height: 56, borderRadius: 28,
-              backgroundColor: '#000', 
-              justifyContent: 'center', alignItems: 'center',
-              marginBottom: 20,
-              shadowColor: "#000", shadowOffset: {width:0, height:4}, shadowOpacity:0.3, shadowRadius:4
-            }}>
-              <Camera color="#FFF" size={28} />
-            </View>
-          ),
+          title: 'Camera',
+          tabBarIcon: ({ color }) => <Camera size={28} color={color} />, 
         }}
       />
 
-      {/* 4. MESSAGES */}
+      {/* 4. Amis (Anciennement Messages) */}
       <Tabs.Screen
         name="messages"
         options={{
-          tabBarIcon: ({ color }) => <Users color={color} size={28} />,
+          title: 'Amis', // Titre changé
+          tabBarIcon: ({ color }) => <Users size={24} color={color} />, // Icône changée pour "Users"
         }}
       />
 
-      {/* 5. PROFIL */}
+      {/* 5. Profil */}
       <Tabs.Screen
         name="profile"
         options={{
-          tabBarIcon: ({ color }) => <User color={color} size={28} />,
+          title: 'Profil',
+          tabBarIcon: ({ color }) => <User size={24} color={color} />,
         }}
       />
     </Tabs>
