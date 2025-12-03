@@ -24,10 +24,11 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
     return (
         <View style={styles.cardContainer}>
             
-            {/* IMAGE DU JOUR NETTE (3:4) + DESSIN */}
-            <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: '#000', overflow: 'hidden' }}>
+            {/* ZONE DESSIN (Transparente pour voir le fond fixe, sauf si on hold) */}
+            {/* Mais attention : pour voir le dessin CORRECTEMENT aligné, il faut l'image NETTE dessous qui bouge avec la carte */}
+            <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent', overflow: 'hidden' }}>
                 
-                {/* 1. Image de fond NETTE pour le dessin */}
+                {/* 1. Image NETTE qui bouge avec la carte (Support du dessin) */}
                 <Image 
                     source={{ uri: drawing.cloud_image_url }} 
                     style={StyleSheet.absoluteFill} 
@@ -134,65 +135,61 @@ export default function FeedPage() {
         } catch (e) { console.error(e); } finally { setLoading(false); }
     };
 
-    // Image de fond globale : On prend la première image de la liste ou null
+    // Image de fond (La première dispo)
     const backgroundUrl = drawings.length > 0 ? drawings[0].cloud_image_url : null;
+
+    if (loading) return <View style={styles.loadingContainer}><ActivityIndicator color="#000" size="large" /></View>;
 
     return (
         <View style={styles.container}>
             
-            {/* 1. FOND D'ÉCRAN GLOBAL FLOUTÉ */}
-            {/* On l'affiche même si loading est true (si on a l'info) ou on met un fond noir */}
+            {/* --- 1. FOND FIXE FLOU --- */}
+            {/* Placé ici en absolute, il ne bougera PAS avec le PagerView */}
             {backgroundUrl && (
                 <Image 
                     source={{uri: backgroundUrl}} 
                     style={[
-                        StyleSheet.absoluteFill, 
+                        StyleSheet.absoluteFill, // Couvre tout l'écran
                         { width: screenWidth, height: screenHeight, zIndex: -1 }
                     ]} 
                     resizeMode="cover"
-                    blurRadius={50} // Flou très fort
+                    blurRadius={30} // Flou visible
                 />
             )}
 
             <SunbimHeader showCloseButton={false} />
             
-            {loading ? (
-                <View style={styles.loadingContainer}>
-                    <ActivityIndicator color="#FFF" size="large" />
-                </View>
-            ) : (
-                <View style={{ flex: 1 }}>
-                    {drawings.length > 0 ? (
-                        <PagerView 
-                            style={{ flex: 1 }} 
-                            initialPage={0} 
-                            onPageSelected={(e: any) => setCurrentIndex(e.nativeEvent.position)}
-                            offscreenPageLimit={1} 
-                        >
-                            {drawings.map((drawing, index) => (
-                                <View key={drawing.id} style={{ flex: 1 }}>
-                                    <FeedCard 
-                                        drawing={drawing} 
-                                        canvasSize={screenWidth} 
-                                        index={index}
-                                        currentIndex={currentIndex}
-                                    />
-                                </View>
-                            ))}
-                        </PagerView>
-                    ) : (
-                        <View style={styles.centerBox}><Text style={styles.text}>La galerie est vide.</Text></View>
-                    )}
-                </View>
-            )}
+            <View style={{ flex: 1 }}>
+                {drawings.length > 0 ? (
+                    <PagerView 
+                        style={{ flex: 1 }} 
+                        initialPage={0} 
+                        onPageSelected={(e: any) => setCurrentIndex(e.nativeEvent.position)}
+                        offscreenPageLimit={1} 
+                    >
+                        {drawings.map((drawing, index) => (
+                            <View key={drawing.id} style={{ flex: 1 }}>
+                                <FeedCard 
+                                    drawing={drawing} 
+                                    canvasSize={screenWidth} 
+                                    index={index}
+                                    currentIndex={currentIndex}
+                                />
+                            </View>
+                        ))}
+                    </PagerView>
+                ) : (
+                    <View style={styles.centerBox}><Text style={styles.text}>La galerie est vide.</Text></View>
+                )}
+            </View>
         </View>
     );
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#000' }, // Noir par défaut si pas d'image
+    container: { flex: 1, backgroundColor: '#000' }, // Noir si pas d'image
     
-    loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    loadingContainer: { flex: 1, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
     
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     text: { color: '#FFF', fontSize: 16 },
