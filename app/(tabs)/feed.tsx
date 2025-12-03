@@ -26,12 +26,10 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
     const isActive = index === currentIndex; 
     const shouldRenderDrawing = isActive;
 
-    // 1. SYNCHRONISATION
     useEffect(() => {
         setLikesCount(drawing.likes?.[0]?.count || 0);
     }, [drawing]);
 
-    // 2. VÉRIFICATION INITIALE DU LIKE
     useEffect(() => {
         if (!user) return;
         const checkLikeStatus = async () => {
@@ -47,7 +45,6 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
         checkLikeStatus();
     }, [user, drawing.id]);
 
-    // 3. GESTION DU CLICK
     const handleLike = async () => {
         if (!user) return;
 
@@ -87,17 +84,10 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
     return (
         <View style={styles.cardContainer}>
             
-            {/* IMAGE + DESSIN */}
-            {/* Correction : On ajoute un fond gris et l'image native en background */}
-            <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: '#EEE' }}>
+            {/* ZONE DE DESSIN TRANSPARENTE */}
+            {/* L'image de fond est maintenant gérée par le parent (FeedPage) */}
+            <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent' }}>
                 
-                {/* L'image originale (Nuage) */}
-                <Image 
-                    source={{ uri: drawing.cloud_image_url }}
-                    style={StyleSheet.absoluteFill} // Prend toute la place du conteneur
-                    resizeMode="cover"
-                />
-
                 {/* Le calque de dessin par-dessus */}
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
@@ -106,7 +96,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
                             imageUri={drawing.cloud_image_url}
                             canvasData={drawing.canvas_data}
                             viewerSize={canvasSize}
-                            transparentMode={true} // Le viewer est transparent pour laisser voir l'Image native dessous
+                            transparentMode={true} 
                             animated={isActive} 
                             startVisible={false} 
                         />
@@ -181,6 +171,7 @@ export default function FeedPage() {
     const [drawings, setDrawings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [currentIndex, setCurrentIndex] = useState(0);
+    const [backgroundCloud, setBackgroundCloud] = useState<string | null>(null); // Nouvel état pour l'image de fond
     const { width: screenWidth } = Dimensions.get('window');
 
     useEffect(() => { fetchTodaysFeed(); }, []);
@@ -191,6 +182,9 @@ export default function FeedPage() {
             const { data: cloudData } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();
             
             if (cloudData) {
+                // On stocke l'image du nuage pour le fond statique
+                setBackgroundCloud(cloudData.image_url);
+
                 const { data: drawingsData, error: drawingsError } = await supabase
                     .from('drawings')
                     .select('*, users(display_name, avatar_url), likes(count), comments(count)') 
@@ -210,10 +204,27 @@ export default function FeedPage() {
         <View style={styles.container}>
             <SunbimHeader showCloseButton={false} />
             
-            <View style={{ flex: 1 }}>
+            <View style={{ flex: 1, position: 'relative' }}>
+                
+                {/* IMAGE DE FOND STATIQUE */}
+                {backgroundCloud && (
+                    <Image 
+                        source={{ uri: backgroundCloud }}
+                        style={{ 
+                            position: 'absolute', 
+                            top: 0, 
+                            left: 0,
+                            width: screenWidth, 
+                            aspectRatio: 3/4,
+                            zIndex: 0 // Derrière le PagerView
+                        }}
+                        resizeMode="cover"
+                    />
+                )}
+
                 {drawings.length > 0 ? (
                     <PagerView 
-                        style={{ flex: 1 }} 
+                        style={{ flex: 1, zIndex: 1 }} // Au-dessus de l'image
                         initialPage={0} 
                         onPageSelected={(e: any) => setCurrentIndex(e.nativeEvent.position)}
                         offscreenPageLimit={1} 
