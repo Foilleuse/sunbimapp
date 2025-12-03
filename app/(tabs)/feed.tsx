@@ -92,7 +92,6 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
     return (
         <View style={styles.cardContainer}>
             
-            {/* ZONE DE DESSIN (Transparente pour laisser voir le fond flou) */}
             <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent' }}>
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
@@ -101,7 +100,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
                             imageUri={drawing.cloud_image_url} 
                             canvasData={drawing.canvas_data}
                             viewerSize={canvasSize}
-                            transparentMode={true} // IMPORTANT: Le viewer ne dessine pas l'image, on voit le fond flou
+                            transparentMode={true} 
                             animated={isActive} 
                             startVisible={false} 
                         />
@@ -188,7 +187,7 @@ export default function FeedPage() {
     const [loading, setLoading] = useState(true);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [backgroundCloud, setBackgroundCloud] = useState<string | null>(null);
-    const { width: screenWidth, height: screenHeight } = Dimensions.get('window'); // Besoin de la hauteur aussi
+    const { width: screenWidth } = Dimensions.get('window');
 
     const [selectedUser, setSelectedUser] = useState<any>(null);
     const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
@@ -233,24 +232,26 @@ export default function FeedPage() {
         <View style={styles.container}>
             <SunbimHeader showCloseButton={false} />
             
-            {/* BACKGROUND IMAGE FLOU PLEIN ÉCRAN */}
-            {backgroundCloud && (
-                <View style={StyleSheet.absoluteFill}>
+            <View style={{ flex: 1, position: 'relative' }}>
+                
+                {backgroundCloud && (
                     <Image 
                         source={{ uri: backgroundCloud }}
-                        style={{ width: '100%', height: '100%' }}
+                        style={{ 
+                            position: 'absolute', 
+                            top: 0, 
+                            left: 0,
+                            width: screenWidth, 
+                            aspectRatio: 3/4,
+                            zIndex: 0 
+                        }}
                         resizeMode="cover"
-                        blurRadius={30} // Effet de flou gaussien natif (iOS/Android)
                     />
-                    {/* Overlay semi-transparent pour améliorer la lisibilité si besoin */}
-                    <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,255,255,0.3)' }} />
-                </View>
-            )}
-            
-            <View style={{ flex: 1, position: 'relative', zIndex: 1 }}>
+                )}
+
                 {drawings.length > 0 ? (
                     <PagerView 
-                        style={{ flex: 1 }} 
+                        style={{ flex: 1, zIndex: 1 }} 
                         initialPage={0} 
                         onPageSelected={(e: any) => setCurrentIndex(e.nativeEvent.position)}
                         offscreenPageLimit={1} 
@@ -285,7 +286,7 @@ export default function FeedPage() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#FFFFFF' }, // Le background blanc est couvert par l'image absolue
+    container: { flex: 1, backgroundColor: '#FFFFFF' },
     loadingContainer: { flex: 1, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     text: { color: '#666', fontSize: 16 },
@@ -297,8 +298,6 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20, 
         paddingTop: 25,
         shadowColor: "#000", shadowOffset: {width: 0, height: -4}, shadowOpacity: 0.05, shadowRadius: 4, elevation: 5,
-        borderTopLeftRadius: 20, // Ajout d'arrondi pour le style "carte" par dessus le fond
-        borderTopRightRadius: 20
     },
     headerInfo: { marginBottom: 15 },
     titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
