@@ -34,7 +34,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
                     resizeMode="cover" 
                 />
 
-                {/* 2. Dessin par dessus (Opacité contrôlée par le bouton Œil) */}
+                {/* 2. Dessin par dessus */}
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
                         <DrawingViewer
@@ -42,8 +42,6 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
                             imageUri={drawing.cloud_image_url}
                             canvasData={drawing.canvas_data}
                             viewerSize={canvasSize}
-                            // IMPORTANT : transparentMode={true} pour ne pas redessiner l'image Skia, 
-                            // on utilise l'image native <Image> juste au-dessus pour la netteté parfaite
                             transparentMode={true} 
                             animated={isActive} 
                             startVisible={false} 
@@ -136,60 +134,65 @@ export default function FeedPage() {
         } catch (e) { console.error(e); } finally { setLoading(false); }
     };
 
-    if (loading) return <View style={styles.loadingContainer}><ActivityIndicator color="#000" size="large" /></View>;
-    
-    // Image de fond globale (pour l'ambiance floue autour des cartes)
+    // Image de fond globale : On prend la première image de la liste ou null
     const backgroundUrl = drawings.length > 0 ? drawings[0].cloud_image_url : null;
 
     return (
         <View style={styles.container}>
             
-            {/* 1. FOND D'ÉCRAN GLOBAL FLOUTÉ (Ambiance) */}
+            {/* 1. FOND D'ÉCRAN GLOBAL FLOUTÉ */}
+            {/* On l'affiche même si loading est true (si on a l'info) ou on met un fond noir */}
             {backgroundUrl && (
                 <Image 
                     source={{uri: backgroundUrl}} 
                     style={[
-                        StyleSheet.absoluteFill, // Remplit tout l'écran
-                        { width: screenWidth, height: screenHeight }
+                        StyleSheet.absoluteFill, 
+                        { width: screenWidth, height: screenHeight, zIndex: -1 }
                     ]} 
                     resizeMode="cover"
-                    blurRadius={40} // Flou fort
+                    blurRadius={50} // Flou très fort
                 />
             )}
 
             <SunbimHeader showCloseButton={false} />
             
-            <View style={{ flex: 1, position: 'relative' }}>
-                {drawings.length > 0 ? (
-                    <PagerView 
-                        style={{ flex: 1 }} 
-                        initialPage={0} 
-                        onPageSelected={(e: any) => setCurrentIndex(e.nativeEvent.position)}
-                        offscreenPageLimit={1} 
-                    >
-                        {drawings.map((drawing, index) => (
-                            <View key={drawing.id} style={{ flex: 1 }}>
-                                <FeedCard 
-                                    drawing={drawing} 
-                                    canvasSize={screenWidth} 
-                                    index={index}
-                                    currentIndex={currentIndex}
-                                />
-                            </View>
-                        ))}
-                    </PagerView>
-                ) : (
-                    <View style={styles.centerBox}><Text style={styles.text}>La galerie est vide.</Text></View>
-                )}
-            </View>
+            {loading ? (
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator color="#FFF" size="large" />
+                </View>
+            ) : (
+                <View style={{ flex: 1 }}>
+                    {drawings.length > 0 ? (
+                        <PagerView 
+                            style={{ flex: 1 }} 
+                            initialPage={0} 
+                            onPageSelected={(e: any) => setCurrentIndex(e.nativeEvent.position)}
+                            offscreenPageLimit={1} 
+                        >
+                            {drawings.map((drawing, index) => (
+                                <View key={drawing.id} style={{ flex: 1 }}>
+                                    <FeedCard 
+                                        drawing={drawing} 
+                                        canvasSize={screenWidth} 
+                                        index={index}
+                                        currentIndex={currentIndex}
+                                    />
+                                </View>
+                            ))}
+                        </PagerView>
+                    ) : (
+                        <View style={styles.centerBox}><Text style={styles.text}>La galerie est vide.</Text></View>
+                    )}
+                </View>
+            )}
         </View>
     );
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#000' },
+    container: { flex: 1, backgroundColor: '#000' }, // Noir par défaut si pas d'image
     
-    loadingContainer: { flex: 1, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
+    loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     text: { color: '#FFF', fontSize: 16 },
