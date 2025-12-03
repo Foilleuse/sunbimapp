@@ -92,24 +92,32 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
     return (
         <View style={styles.cardContainer}>
             
-            {/* ZONE DE DESSIN TRANSPARENTE */}
-            <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent' }}>
-                <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
+            {/* ZONE DE DESSIN */}
+            <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent', position: 'relative' }}>
+                
+                {/* 1. Image de fond statique (Nuage) */}
+                <Image 
+                    source={{ uri: drawing.cloud_image_url }}
+                    style={[StyleSheet.absoluteFill, { zIndex: 0 }]}
+                    resizeMode="cover" // IMPORTANT: Doit matcher le resizeMode du canvas si possible
+                />
+
+                {/* 2. Dessin par dessus (DrawingViewer) */}
+                <View style={{ flex: 1, opacity: isHolding ? 0 : 1, zIndex: 1 }}>
                     {shouldRenderDrawing && (
                         <DrawingViewer
                             key={`${drawing.id}-${isActive}`} 
                             imageUri={drawing.cloud_image_url} 
                             canvasData={drawing.canvas_data}
                             viewerSize={canvasSize}
-                            // MODIFICATION : transparentMode={true} pour que seul le trait s'affiche
-                            // L'image de fond (nuage) est fixe derrière via le parent ImageBackground
+                            // On passe transparentMode=true car on a déjà mis l'image de fond juste au-dessus
+                            // Cela évite d'avoir deux images superposées qui pourraient avoir des ratios différents
                             transparentMode={true} 
                             animated={isActive} 
                             startVisible={false} 
                         />
                     )}
                 </View>
-                {/* On enlève l'Image fallback ici car le fond est géré globalement */}
             </View>
             
             <View style={styles.cardInfo}>
@@ -190,14 +198,12 @@ export default function FeedPage() {
     const [drawings, setDrawings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [currentIndex, setCurrentIndex] = useState(0);
-    // On garde l'état pour l'image de fond
     const [backgroundCloud, setBackgroundCloud] = useState<string | null>(null);
     const { width: screenWidth } = Dimensions.get('window');
 
     const [selectedUser, setSelectedUser] = useState<any>(null);
     const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
 
-    // Image placeholder locale par défaut
     const placeholderImage = require('../../assets/cloud-placeholder.jpg'); 
 
     useEffect(() => { fetchTodaysFeed(); }, []);
@@ -208,7 +214,6 @@ export default function FeedPage() {
             const { data: cloudData } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();
             
             if (cloudData) {
-                // On récupère l'image du nuage pour le fond statique
                 const optimizedBg = getOptimizedImageUrl(cloudData.image_url, screenWidth);
                 setBackgroundCloud(optimizedBg || cloudData.image_url);
 
@@ -238,7 +243,6 @@ export default function FeedPage() {
     if (loading) return <View style={styles.loadingContainer}><ActivityIndicator color="#000" size="large" /></View>;
 
     return (
-        // IMAGE DE FOND STATIQUE GLOBALE
         <ImageBackground 
             source={backgroundCloud ? { uri: backgroundCloud } : placeholderImage}
             style={styles.background}
@@ -289,14 +293,14 @@ const styles = StyleSheet.create({
     background: {
         flex: 1,
     },
-    container: { flex: 1, backgroundColor: 'transparent' }, // Fond transparent
+    container: { flex: 1, backgroundColor: 'transparent' }, 
     loadingContainer: { flex: 1, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     text: { color: '#666', fontSize: 16 },
     cardContainer: { flex: 1 },
     cardInfo: {
         flex: 1, 
-        backgroundColor: '#FFFFFF', // Les infos restent sur fond blanc
+        backgroundColor: '#FFFFFF', 
         marginTop: -40, 
         paddingHorizontal: 20, 
         paddingTop: 25,
