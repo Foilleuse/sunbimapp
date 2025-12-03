@@ -42,6 +42,13 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
 
     const initModal = async () => {
         if (visible && userId) {
+            // Reset state first to avoid flashing content
+            if (isMounted) {
+                setLoading(true);
+                setCanViewContent(false); 
+                setDrawings([]);
+            }
+
             // On lance les vérifications
             if (currentUser && currentUser.id !== userId) {
                 checkFollowStatus();
@@ -49,11 +56,13 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
             await checkPermissionAndFetch(isMounted);
         } else {
             // Reset complet à la fermeture
-            setLoading(true);
-            setDrawings([]);
-            setIsFollowing(false);
-            setSelectedDrawing(null); 
-            setCanViewContent(false);
+            if (isMounted) {
+                setLoading(true);
+                setDrawings([]);
+                setIsFollowing(false);
+                setSelectedDrawing(null); 
+                setCanViewContent(false);
+            }
         }
     };
 
@@ -162,8 +171,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
 
   const checkPermissionAndFetch = async (isMounted: boolean) => {
     try {
-        if (isMounted) setLoading(true);
-
         // 1. Récupérer le profil public (toujours visible)
         const { data: profileData } = await supabase
             .from('users') 
@@ -200,9 +207,12 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                 // Si count > 0, j'ai participé -> Accès autorisé
                 if (count !== null && count > 0) {
                     accessGranted = true;
+                } else {
+                    console.log("Accès refusé : Pas de dessin pour le nuage du jour");
                 }
             } else {
                 // Pas de nuage aujourd'hui -> On bloque l'accès par sécurité (Play to see)
+                console.log("Accès refusé : Pas de nuage aujourd'hui");
                 accessGranted = false;
             }
         }
@@ -210,6 +220,11 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
         if (isMounted) setCanViewContent(accessGranted);
 
         // 3. Charger les dessins UNIQUEMENT si l'accès est accordé
+        // NOTE: On charge quand même les dessins si l'accès est refusé MAIS on ne les affiche pas ? 
+        // Non, c'est mieux de ne pas charger du tout pour économiser la bande passante et sécuriser.
+        // Mais si tu veux afficher les miniatures floutées, il faudrait charger.
+        // Ici on suit la logique "Masqué avec cadenas", donc on ne charge pas.
+        
         if (accessGranted) {
             const { data: drawingsData, error: drawingsError } = await supabase
                 .from('drawings')
