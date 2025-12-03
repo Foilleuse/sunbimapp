@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Modal, Image, TouchableOpacity, FlatList, ActivityIndicator, Dimensions, Alert, Pressable, Platform, SafeAreaView } from 'react-native';
-import { X, User, UserPlus, UserCheck, Heart, MessageCircle, Lock, AlertCircle } from 'lucide-react-native'; // Ajout AlertCircle
+import { X, User, UserPlus, UserCheck, Heart, MessageCircle, Lock, AlertCircle } from 'lucide-react-native';
 import { supabase } from '../lib/supabaseClient';
 import { DrawingViewer } from './DrawingViewer';
 import { useAuth } from '../contexts/AuthContext';

@@ -1,27 +1,30 @@
 import { View, Text, StyleSheet, FlatList, Image, ActivityIndicator, TouchableOpacity } from 'react-native';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../../src/lib/supabaseClient';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
 import { User, UserMinus } from 'lucide-react-native';
+import { useFocusEffect } from 'expo-router';
+import { UserProfileModal } from '../../src/components/UserProfileModal'; // Import de la modale profil
 
 export default function FriendsPage() {
   const { user } = useAuth();
   const [following, setFollowing] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // États pour la modale profil
+  const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
 
-  useEffect(() => {
-    if (user) fetchFollowing();
-  }, [user]);
+  useFocusEffect(
+    useCallback(() => {
+        if (user) fetchFollowing();
+    }, [user])
+  );
 
   const fetchFollowing = async () => {
     try {
-      // On suppose une table 'follows' qui lie l'utilisateur courant (follower_id) aux utilisateurs suivis (following_id)
-      // Et on fait une jointure pour récupérer les infos de l'utilisateur suivi (users)
-      
-      // Note: Si la table 'follows' n'existe pas encore, cette requête échouera.
-      // Assurez-vous d'avoir une table 'follows' : id, follower_id (uuid), following_id (uuid), created_at
-      
+      setLoading(true);
       const { data, error } = await supabase
         .from('follows')
         .select(`
@@ -29,14 +32,14 @@ export default function FriendsPage() {
           following:users!following_id (
             id,
             display_name,
-            avatar_url
+            avatar_url,
+            bio
           )
         `)
         .eq('follower_id', user?.id);
 
       if (error) throw error;
       
-      // Aplatir la structure pour avoir une liste d'utilisateurs simple
       const formattedData = data?.map((item: any) => ({
         followId: item.id,
         ...item.following
@@ -45,26 +48,39 @@ export default function FriendsPage() {
       setFollowing(formattedData);
     } catch (e) {
       console.error("Erreur chargement amis:", e);
-      // Fallback pour la démo si pas de données/table
       setFollowing([]); 
     } finally {
       setLoading(false);
     }
   };
 
-  const handleUnfollow = async (followId: string) => {
-      // Logique pour ne plus suivre (suppression de la ligne dans 'follows')
+  const handleUnfollow = async (followId: string, userIdToUnfollow: string) => {
       try {
-          const { error } = await supabase.from('follows').delete().eq('id', followId);
+          const { error } = await supabase
+            .from('follows')
+            .delete()
+            .eq('follower_id', user?.id)
+            .eq('following_id', userIdToUnfollow); // Suppression par IDs user plus sûr
+            
           if (error) throw error;
-          setFollowing(prev => prev.filter(item => item.followId !== followId));
+          
+          setFollowing(prev => prev.filter(item => item.id !== userIdToUnfollow));
       } catch (e) {
           console.error("Erreur unfollow:", e);
       }
   };
 
+  const handleOpenProfile = (friend: any) => {
+      setSelectedUser(friend);
+      setIsProfileModalVisible(true);
+  };
+
   const renderFriend = ({ item }: { item: any }) => (
-    <View style={styles.friendItem}>
+    <TouchableOpacity 
+        style={styles.friendItem} 
+        onPress={() => handleOpenProfile(item)}
+        activeOpacity={0.7}
+    >
         <View style={styles.friendInfo}>
             {item.avatar_url ? (
                 <Image source={{ uri: item.avatar_url }} style={styles.avatar} />
@@ -76,10 +92,14 @@ export default function FriendsPage() {
             <Text style={styles.friendName}>{item.display_name || "Utilisateur"}</Text>
         </View>
         
-        <TouchableOpacity style={styles.unfollowBtn} onPress={() => handleUnfollow(item.followId)}>
+        <TouchableOpacity 
+            style={styles.unfollowBtn} 
+            onPress={() => handleUnfollow(item.followId, item.id)}
+            hitSlop={10}
+        >
             <UserMinus size={20} color="#999" />
         </TouchableOpacity>
-    </View>
+    </TouchableOpacity>
   );
 
   return (
@@ -107,6 +127,16 @@ export default function FriendsPage() {
             />
         )}
       </View>
+
+      {/* Modale Profil Utilisateur */}
+      {selectedUser && (
+        <UserProfileModal
+            visible={isProfileModalVisible}
+            onClose={() => setIsProfileModalVisible(false)}
+            userId={selectedUser.id}
+            initialUser={selectedUser}
+        />
+      )}
     </View>
   );
 }
