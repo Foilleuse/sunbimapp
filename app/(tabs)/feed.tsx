@@ -4,6 +4,7 @@ import { Heart, MessageCircle, User, Share2, Eye } from 'lucide-react-native';
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
+import { useAuth } from '../../src/contexts/AuthContext';
 
 let PagerView: any;
 if (Platform.OS !== 'web') {
@@ -11,30 +12,92 @@ if (Platform.OS !== 'web') {
 } else { PagerView = View; }
 
 const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: any, canvasSize: number, index: number, currentIndex: number }) => {
-    const [isLiked, setIsLiked] = useState(false);
-    const [isHolding, setIsHolding] = useState(false); // Piloté par le bouton Œil
+    const { user } = useAuth();
     
-    const likesCount = drawing.likes_count || 0;
+    // --- ETATS DU LIKE ---
+    const [isLiked, setIsLiked] = useState(false);
+    const [likesCount, setLikesCount] = useState(drawing.likes_count || 0);
+    
+    const [isHolding, setIsHolding] = useState(false);
     const commentsCount = drawing.comments_count || 0;
     const author = drawing.users;
-
     const isActive = index === currentIndex; 
-    
     const shouldRenderDrawing = isActive;
+
+    // 0. Synchroniser le compteur si la donnée parente change (ex: refresh du feed)
+    useEffect(() => {
+        setLikesCount(drawing.likes_count || 0);
+    }, [drawing.likes_count]);
+
+    // 1. VÉRIFICATION AU CHARGEMENT (PERSISTANCE)
+    useEffect(() => {
+        if (!user) return;
+        
+        const checkLikeStatus = async () => {
+            // On demande juste le nombre de lignes correspondantes (0 ou 1)
+            // C'est plus robuste que de récupérer l'objet entier
+            const { count } = await supabase
+                .from('likes')
+                .select('*', { count: 'exact', head: true })
+                .eq('user_id', user.id)
+                .eq('drawing_id', drawing.id);
+            
+            // Si on trouve une ligne, c'est liké
+            if (count && count > 0) {
+                setIsLiked(true);
+            }
+        };
+        
+        checkLikeStatus();
+    }, [user, drawing.id]);
+
+    // 2. ACTION LIKE
+    const handleLike = async () => {
+        if (!user) return;
+
+        const previousLiked = isLiked;
+        const previousCount = likesCount;
+
+        // UI Optimiste
+        setIsLiked(!previousLiked);
+        setLikesCount(previousLiked ? previousCount - 1 : previousCount + 1);
+
+        try {
+            if (previousLiked) {
+                // Suppression
+                const { error } = await supabase
+                    .from('likes')
+                    .delete()
+                    .eq('user_id', user.id)
+                    .eq('drawing_id', drawing.id);
+                if (error) throw error;
+            } else {
+                // Ajout
+                const { error } = await supabase
+                    .from('likes')
+                    .insert({
+                        user_id: user.id,
+                        drawing_id: drawing.id
+                    });
+                if (error) throw error;
+            }
+        } catch (error) {
+            console.error("Erreur like:", error);
+            // Rollback si erreur
+            setIsLiked(previousLiked);
+            setLikesCount(previousCount);
+        }
+    };
 
     return (
         <View style={styles.cardContainer}>
             
-            {/* IMAGE + DESSIN (Non interactif au toucher) */}
-            <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent', overflow: 'hidden' }}>
-                
-                {/* RESTAURATION : L'image est DANS la carte, donc elle bouge avec le dessin */}
+            <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: '#000', overflow: 'hidden' }}>
                 <Image 
                     source={{ uri: drawing.cloud_image_url }} 
                     style={StyleSheet.absoluteFill} 
                     resizeMode="cover" 
                 />
-
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
                         <DrawingViewer
@@ -51,16 +114,11 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
             </View>
             
             <View style={styles.cardInfo}>
-                {/* HEADER INFO : Titre + Bouton Œil sur la même ligne */}
                 <View style={styles.headerInfo}>
-                    
-                    {/* LIGNE TITRE ET ŒIL */}
                     <View style={styles.titleRow}>
                         <Text style={styles.drawingTitle} numberOfLines={1}>
                             {drawing.label || "Sans titre"}
                         </Text>
-
-                        {/* BOUTON ŒIL DÉPLACÉ ICI (Aligné à droite) */}
                         <TouchableOpacity 
                             style={[styles.eyeBtn, isHolding && styles.iconBtnActive]}
                             activeOpacity={1}
@@ -85,13 +143,19 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
                     </View>
                 </View>
 
-                {/* BARRE D'ACTIONS (Bas) */}
                 <View style={styles.actionBar}>
                     <View style={styles.leftActions}>
-                        <TouchableOpacity style={styles.actionBtn} onPress={() => setIsLiked(!isLiked)}>
-                            <Heart color={isLiked ? "#FF3B30" : "#000"} fill={isLiked ? "#FF3B30" : "transparent"} size={28} />
-                            <Text style={styles.actionText}>{likesCount + (isLiked ? 1 : 0)}</Text>
+                        
+                        {/* BOUTON LIKE CONNECTÉ */}
+                        <TouchableOpacity style={styles.actionBtn} onPress={handleLike}>
+                            <Heart 
+                                color={isLiked ? "#FF3B30" : "#000"} 
+                                fill={isLiked ? "#FF3B30" : "transparent"} 
+                                size={28} 
+                            />
+                            <Text style={styles.actionText}>{likesCount}</Text>
                         </TouchableOpacity>
+
                         <TouchableOpacity style={styles.actionBtn}>
                             <MessageCircle color="#000" size={28} />
                             <Text style={styles.actionText}>{commentsCount}</Text>
@@ -117,7 +181,7 @@ export default function FeedPage() {
     const [drawings, setDrawings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [currentIndex, setCurrentIndex] = useState(0);
-    const { width: screenWidth } = Dimensions.get('window');
+    const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
     useEffect(() => { fetchTodaysFeed(); }, []);
 
@@ -139,13 +203,25 @@ export default function FeedPage() {
             }
         } catch (e) { console.error(e); } finally { setLoading(false); }
     };
-    
-    // J'ai retiré le backgroundUrl global ici pour revenir au comportement d'avant
+
+    const backgroundUrl = drawings.length > 0 ? drawings[0].cloud_image_url : null;
 
     if (loading) return <View style={styles.loadingContainer}><ActivityIndicator color="#000" size="large" /></View>;
 
     return (
         <View style={styles.container}>
+            {backgroundUrl && (
+                <Image 
+                    source={{uri: backgroundUrl}} 
+                    style={[
+                        StyleSheet.absoluteFill, 
+                        { width: screenWidth, height: screenHeight, zIndex: -1 }
+                    ]} 
+                    resizeMode="cover"
+                    blurRadius={50} 
+                />
+            )}
+
             <SunbimHeader showCloseButton={false} />
             
             <View style={{ flex: 1 }}>
@@ -176,10 +252,11 @@ export default function FeedPage() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#FFFFFF' },
+    container: { flex: 1, backgroundColor: '#000' },
     loadingContainer: { flex: 1, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    text: { color: '#666', fontSize: 16 },
+    text: { color: '#FFF', fontSize: 16 },
+    
     cardContainer: { flex: 1 },
     cardInfo: {
         flex: 1, 
