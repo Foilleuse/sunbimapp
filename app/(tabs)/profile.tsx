@@ -45,7 +45,7 @@ export default function ProfilePage() {
   useEffect(() => {
     if (selectedDrawing && user) {
         // Init du compteur (si disponible via la jointure, sinon 0)
-        setLikesCount(selectedDrawing.likes?.[0]?.count || 0);
+        setLikesCount(selectedDrawing.likes?.[0]?.count || selectedDrawing.likes_count || 0);
         
         // Vérifier si l'utilisateur a liké ce dessin
         const checkLikeStatus = async () => {
@@ -173,8 +173,8 @@ export default function ProfilePage() {
     }
   };
 
-  // Récupération du nombre de commentaires
-  const commentsCount = selectedDrawing?.comments?.[0]?.count || 0;
+  // Récupération du nombre de commentaires (avec fallback robuste)
+  const commentsCount = selectedDrawing?.comments?.[0]?.count || selectedDrawing?.comments_count || 0;
 
   // --- RENDER ITEM ---
   const renderItem = ({ item }: { item: any }) => {
@@ -361,13 +361,13 @@ export default function ProfilePage() {
                           {/* Gestion du Like */}
                           <TouchableOpacity style={{flexDirection: 'row', alignItems: 'center', gap: 4}} onPress={handleLike}>
                               <Heart color={isLiked ? "#FF3B30" : "#000"} fill={isLiked ? "#FF3B30" : "transparent"} size={28} />
-                              <Text style={{fontWeight: '600', fontSize: 16}}>{likesCount}</Text>
+                              <Text style={{fontWeight: '600', fontSize: 16, color: '#000'}}>{likesCount}</Text>
                           </TouchableOpacity>
 
                           {/* Gestion du Commentaire */}
                           <TouchableOpacity style={{flexDirection: 'row', alignItems: 'center', gap: 4}} onPress={() => setShowComments(true)}>
                               <MessageCircle color="#000" size={28} />
-                              <Text style={{fontWeight: '600', fontSize: 16}}>{commentsCount}</Text>
+                              <Text style={{fontWeight: '600', fontSize: 16, color: '#000'}}>{commentsCount}</Text>
                           </TouchableOpacity>
                       </View>
                   </View>
