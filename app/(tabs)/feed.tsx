@@ -133,12 +133,19 @@ export default function FeedPage() {
     };
 
     if (loading) return <View style={styles.loadingContainer}><ActivityIndicator color="#000" size="large" /></View>;
+    
+    const backgroundUrl = drawings.length > 0 ? drawings[0].cloud_image_url : null;
 
     return (
         <View style={styles.container}>
             <SunbimHeader showCloseButton={false} />
-            
-            <View style={{ flex: 1 }}>
+            <View style={{ flex: 1, position: 'relative' }}>
+                {backgroundUrl && (
+                    <View style={{ position: 'absolute', top: 0, width: screenWidth, aspectRatio: 3/4, zIndex: -1 }}>
+                       <Image source={{uri: backgroundUrl}} style={{width: '100%', height: '100%'}} resizeMode="cover" />
+                    </View>
+                )}
+                
                 {drawings.length > 0 ? (
                     <PagerView 
                         style={{ flex: 1 }} 
@@ -166,22 +173,19 @@ export default function FeedPage() {
 }
 
 const styles = StyleSheet.create({
-    // Fond blanc simple
-    container: { flex: 1, backgroundColor: '#FFFFFF' }, 
-    
-    loadingContainer: { flex: 1, backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center' },
-    
+    container: { flex: 1, backgroundColor: '#FFFFFF' },
+    loadingContainer: { flex: 1, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     text: { color: '#666', fontSize: 16 },
-    
     cardContainer: { flex: 1 },
     cardInfo: {
         flex: 1, 
         backgroundColor: '#FFFFFF', 
-        marginTop: -40, 
+        marginTop: -40, // Chevauchement léger pour le style
         paddingHorizontal: 20, 
         paddingTop: 25,
         shadowColor: "#000", shadowOffset: {width: 0, height: -4}, shadowOpacity: 0.05, shadowRadius: 4, elevation: 5,
+        // ANGLES RECTANGULAIRES (Suppression des borderRadius)
     },
     headerInfo: { marginBottom: 15 },
     
