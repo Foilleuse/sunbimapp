@@ -25,8 +25,17 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
     return (
         <View style={styles.cardContainer}>
             
-            {/* IMAGE + DESSIN (Non interactif au toucher) */}
-            <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent' }}>
+            {/* ZONE DESSIN + IMAGE NETTE 3:4 */}
+            <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: '#000', overflow: 'hidden' }}>
+                
+                {/* IMAGE DU JOUR NETTE (Support du dessin) */}
+                <Image 
+                    source={{ uri: drawing.cloud_image_url }} 
+                    style={StyleSheet.absoluteFill} 
+                    resizeMode="cover" 
+                />
+
+                {/* DESSIN (Superposé) */}
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
                         <DrawingViewer
@@ -43,16 +52,12 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
             </View>
             
             <View style={styles.cardInfo}>
-                {/* HEADER INFO : Titre + Bouton Œil sur la même ligne */}
+                {/* HEADER INFO */}
                 <View style={styles.headerInfo}>
-                    
-                    {/* LIGNE TITRE ET ŒIL */}
                     <View style={styles.titleRow}>
                         <Text style={styles.drawingTitle} numberOfLines={1}>
                             {drawing.label || "Sans titre"}
                         </Text>
-
-                        {/* BOUTON ŒIL DÉPLACÉ ICI (Aligné à droite) */}
                         <TouchableOpacity 
                             style={[styles.eyeBtn, isHolding && styles.iconBtnActive]}
                             activeOpacity={1}
@@ -77,7 +82,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
                     </View>
                 </View>
 
-                {/* BARRE D'ACTIONS (Bas) */}
+                {/* BARRE D'ACTIONS */}
                 <View style={styles.actionBar}>
                     <View style={styles.leftActions}>
                         <TouchableOpacity style={styles.actionBtn} onPress={() => setIsLiked(!isLiked)}>
@@ -131,33 +136,36 @@ export default function FeedPage() {
             }
         } catch (e) { console.error(e); } finally { setLoading(false); }
     };
-    
-    // --- AJOUT : Récupération de l'image de fond ---
-    const backgroundUrl = drawings.length > 0 ? drawings[0].cloud_image_url : null;
 
     if (loading) return <View style={styles.loadingContainer}><ActivityIndicator color="#000" size="large" /></View>;
+    
+    // On prend l'image du premier dessin pour le fond d'ambiance
+    const backgroundUrl = drawings.length > 0 ? drawings[0].cloud_image_url : null;
 
     return (
         <View style={styles.container}>
             
-            {/* --- MODIFICATION ICI : FOND D'ÉCRAN GLOBAL --- */}
-            {/* Image Plein écran + Flou Gaussien */}
-            {/* Position Absolute ZIndex -1 pour être derrière tout le reste */}
+            {/* --- 1. FOND D'ÉCRAN GLOBAL (FIXE) --- */}
+            {/* Il est en absoluteFill, donc derrière tout le reste */}
             {backgroundUrl && (
                 <Image 
                     source={{uri: backgroundUrl}} 
                     style={[
-                        StyleSheet.absoluteFill, // Prend tout l'écran
+                        StyleSheet.absoluteFill, 
                         { width: screenWidth, height: screenHeight, zIndex: -1 }
                     ]} 
                     resizeMode="cover"
-                    blurRadius={50} // Flou fort pour l'ambiance
+                    blurRadius={50} // Flou fort
                 />
             )}
 
-            <SunbimHeader showCloseButton={false} />
+            {/* Header transparent pour laisser voir le fond */}
+            <View style={{ zIndex: 10 }}>
+                 <SunbimHeader showCloseButton={false} />
+            </View>
             
-            <View style={{ flex: 1, position: 'relative' }}>
+            {/* --- 2. CONTENU DÉFILANT --- */}
+            <View style={{ flex: 1 }}>
                 {drawings.length > 0 ? (
                     <PagerView 
                         style={{ flex: 1 }} 
@@ -185,62 +193,31 @@ export default function FeedPage() {
 }
 
 const styles = StyleSheet.create({
-    // Fond noir par défaut (avant chargement image)
-    container: { flex: 1, backgroundColor: '#000' },
-    
-    // Fond blanc pour le loading initial
+    container: { flex: 1, backgroundColor: '#000' }, // Noir si pas d'image
     loadingContainer: { flex: 1, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
-    
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    
-    // Texte blanc pour être visible sur fond sombre/image
     text: { color: '#FFF', fontSize: 16 },
     
     cardContainer: { flex: 1 },
     cardInfo: {
         flex: 1, 
         backgroundColor: '#FFFFFF', 
-        marginTop: -40, // Chevauchement léger pour le style
+        marginTop: -40, 
         paddingHorizontal: 20, 
         paddingTop: 25,
-        shadowColor: "#000", shadowOffset: {width: 0, height: -4}, shadowOpacity: 0.05, shadowRadius: 4, elevation: 5,
-        // ANGLES RECTANGULAIRES (Suppression des borderRadius)
+        shadowColor: "#000", shadowOffset: {width: 0, height: -4}, shadowOpacity: 0.1, shadowRadius: 10, elevation: 5,
     },
     headerInfo: { marginBottom: 15 },
-    
-    titleRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center', 
-        marginBottom: 8
-    },
-    drawingTitle: { 
-        fontSize: 28, 
-        fontWeight: '900', 
-        color: '#000', 
-        letterSpacing: -0.5, 
-        flex: 1, 
-        marginRight: 10 
-    },
-    eyeBtn: {
-        padding: 5,
-        marginRight: -5 
-    },
-
+    titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+    drawingTitle: { fontSize: 28, fontWeight: '900', color: '#000', letterSpacing: -0.5, flex: 1, marginRight: 10 },
+    eyeBtn: { padding: 5, marginRight: -5 },
     userInfo: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     avatar: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#F0F0F0', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
     userName: { fontSize: 14, fontWeight: '600', color: '#333' },
     dateText: { fontSize: 14, color: '#999' },
-    
-    actionBar: { 
-        flexDirection: 'row', 
-        alignItems: 'center', 
-        justifyContent: 'space-between', 
-        marginTop: 5 
-    },
+    actionBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 5 },
     leftActions: { flexDirection: 'row', alignItems: 'center', gap: 20 },
     rightActions: { flexDirection: 'row', alignItems: 'center', gap: 15 },
-    
     actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     iconBtn: { padding: 5 },
     iconBtnActive: { opacity: 0.3 },
