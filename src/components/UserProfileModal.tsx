@@ -282,9 +282,10 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
             <Modal visible={!!selectedDrawing} animationType="slide" presentationStyle="pageSheet" onRequestClose={closeDrawing}>
                 {selectedDrawing && (
                     <SafeAreaView style={styles.safeAreaContainer}>
-                        {/* Header plus compact pour l'agrandissement, positionné pour ne pas gaspiller d'espace */}
-                        <View style={[styles.header, { paddingVertical: 5, paddingHorizontal: 15 }]}> 
-                            <TouchableOpacity onPress={closeDrawing} style={styles.closeBtn} hitSlop={15}>
+                        {/* Header plus compact et transparent pour l'agrandissement */}
+                        {/* Réduction de paddingVertical et suppression du style.closeBtn (gris) pour un transparent */}
+                        <View style={[styles.header, { paddingVertical: 0, paddingTop: 10, paddingHorizontal: 15 }]}> 
+                            <TouchableOpacity onPress={closeDrawing} style={styles.closeBtnTransparent} hitSlop={15}>
                                 <X color="#000" size={28} />
                             </TouchableOpacity>
                         </View>
@@ -370,6 +371,8 @@ const styles = StyleSheet.create({
   // Modification ici : réduction du padding vertical pour remonter le bouton
   header: { paddingHorizontal: 15, paddingVertical: 10, alignItems: 'flex-end', borderBottomWidth: 0, borderColor: '#eee' }, 
   closeBtn: { padding: 5, backgroundColor: '#F0F0F0', borderRadius: 20 },
+  // Nouveau style sans fond gris
+  closeBtnTransparent: { padding: 5, backgroundColor: 'transparent' },
   
   profileBlock: { 
       paddingBottom: 20, 
