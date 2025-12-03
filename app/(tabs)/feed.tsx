@@ -149,12 +149,12 @@ export default function FeedPage() {
                         { width: screenWidth, height: screenHeight }
                     ]} 
                     resizeMode="cover"
-                    blurRadius={40} // Flou Gaussien fort
+                    blurRadius={50} // Flou Gaussien fort
                 />
             )}
 
             {/* Header transparent */}
-            <View style={{ zIndex: 1 }}>
+            <View style={{ zIndex: 1, backgroundColor: 'transparent' }}>
                 <SunbimHeader showCloseButton={false} />
             </View>
             
@@ -186,18 +186,18 @@ export default function FeedPage() {
 }
 
 const styles = StyleSheet.create({
-    // Fond par défaut transparent pour laisser voir l'image de fond absolue
+    // Fond noir par défaut (avant chargement image)
     container: { flex: 1, backgroundColor: '#000' }, 
     
     loadingContainer: { flex: 1, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
     
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    text: { color: '#FFF', fontSize: 16 }, // Blanc sur fond sombre
+    text: { color: '#FFF', fontSize: 16 },
     
     cardContainer: { flex: 1 },
     cardInfo: {
         flex: 1, 
-        backgroundColor: '#FFFFFF', // La carte reste blanche et opaque
+        backgroundColor: '#FFFFFF', 
         marginTop: -40, 
         paddingHorizontal: 20, 
         paddingTop: 25,
