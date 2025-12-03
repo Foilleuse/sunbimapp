@@ -92,6 +92,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
     return (
         <View style={styles.cardContainer}>
             
+            {/* ZONE DE DESSIN TRANSPARENTE */}
             <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent' }}>
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
@@ -100,19 +101,15 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
                             imageUri={drawing.cloud_image_url} 
                             canvasData={drawing.canvas_data}
                             viewerSize={canvasSize}
-                            // CORRECTION : Remis à false pour afficher l'image du nuage
-                            transparentMode={false} 
+                            // MODIFICATION : transparentMode={true} pour que seul le trait s'affiche
+                            // L'image de fond (nuage) est fixe derrière via le parent ImageBackground
+                            transparentMode={true} 
                             animated={isActive} 
                             startVisible={false} 
                         />
                     )}
                 </View>
-                {/* Fallback image en arrière plan au cas où, ou pour le mode "holding" */}
-                 <Image 
-                    source={{ uri: drawing.cloud_image_url }}
-                    style={[StyleSheet.absoluteFill, { zIndex: -1 }]}
-                    resizeMode="cover"
-                />
+                {/* On enlève l'Image fallback ici car le fond est géré globalement */}
             </View>
             
             <View style={styles.cardInfo}>
@@ -193,7 +190,7 @@ export default function FeedPage() {
     const [drawings, setDrawings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [currentIndex, setCurrentIndex] = useState(0);
-    // On conserve un état pour l'image de fond globale si on veut, mais ici on l'utilise surtout pour le chargement initial
+    // On garde l'état pour l'image de fond
     const [backgroundCloud, setBackgroundCloud] = useState<string | null>(null);
     const { width: screenWidth } = Dimensions.get('window');
 
@@ -241,6 +238,7 @@ export default function FeedPage() {
     if (loading) return <View style={styles.loadingContainer}><ActivityIndicator color="#000" size="large" /></View>;
 
     return (
+        // IMAGE DE FOND STATIQUE GLOBALE
         <ImageBackground 
             source={backgroundCloud ? { uri: backgroundCloud } : placeholderImage}
             style={styles.background}
@@ -291,14 +289,14 @@ const styles = StyleSheet.create({
     background: {
         flex: 1,
     },
-    container: { flex: 1, backgroundColor: 'transparent' },
+    container: { flex: 1, backgroundColor: 'transparent' }, // Fond transparent
     loadingContainer: { flex: 1, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     text: { color: '#666', fontSize: 16 },
     cardContainer: { flex: 1 },
     cardInfo: {
         flex: 1, 
-        backgroundColor: '#FFFFFF', // Remis à blanc pour la carte d'info (comme demandé : "Remet la version précédente Feed")
+        backgroundColor: '#FFFFFF', // Les infos restent sur fond blanc
         marginTop: -40, 
         paddingHorizontal: 20, 
         paddingTop: 25,
