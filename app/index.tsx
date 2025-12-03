@@ -1,5 +1,5 @@
-import { View, Text, StyleSheet, ActivityIndicator, Alert, Modal, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Animated, Dimensions } from 'react-native';
-import { useEffect, useState, useRef } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator, Alert, Modal, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Animated, Dimensions, AppState } from 'react-native';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '../src/lib/supabaseClient';
 import { DrawingCanvas, DrawingCanvasRef } from '../src/components/DrawingCanvas';
 import { DrawingViewer } from '../src/components/DrawingViewer'; 
@@ -22,7 +22,6 @@ const FALLBACK_CLOUD = {
 export default function DrawPage() {
   const router = useRouter(); 
   const { user } = useAuth(); 
-  // ON RECUPERE LA HAUTEUR EGALEMENT
   const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
   
   const [cloud, setCloud] = useState<Cloud | null>(null);
@@ -51,49 +50,73 @@ export default function DrawPage() {
   const canvasRef = useRef<DrawingCanvasRef>(null);
   const updateLabel = (Updates && Updates.updateId) ? `v.${Updates.updateId.substring(0, 6)}` : '';
 
+  // --- MODIFICATION ICI : VÉRIFICATION AU FOCUS ---
+  // À chaque fois que l'écran devient visible (y compris retour depuis background ou autre onglet)
   useFocusEffect(
-    React.useCallback(() => {
+    useCallback(() => {
+        // On relance la vérification complète
         checkStatusAndLoad();
-    }, [user])
+    }, [user]) // Dépendance user : si l'user change, on revérifie
   );
 
+  // On garde aussi un écouteur sur l'état de l'app (background -> active) pour le changement de jour à minuit
+  useEffect(() => {
+      const subscription = AppState.addEventListener('change', nextAppState => {
+          if (nextAppState === 'active') {
+              checkStatusAndLoad();
+          }
+      });
+      return () => subscription.remove();
+  }, []);
+
+  // Si l'utilisateur se connecte via la modale, on vérifie aussi
   useEffect(() => {
     if (user) {
         setAuthModalVisible(false); 
-        checkIfPlayedToday();       
+        // On ne lance pas checkStatusAndLoad ici car useFocusEffect le fera ou l'a déjà fait
     }
   }, [user]);
 
   const checkStatusAndLoad = async () => {
+    setLoading(true); // On affiche le chargement pendant la vérification
     try {
         if (!supabase) throw new Error("No Supabase");
         const today = new Date().toISOString().split('T')[0];
         
-        const { data: cloudData, error: cloudError } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();   
+        // 1. Récupérer le nuage DU JOUR
+        const { data: cloudData, error: cloudError } = await supabase
+            .from('clouds')
+            .select('*')
+            .eq('published_for', today)
+            .maybeSingle();   
+        
         if (cloudError) throw cloudError;
         const currentCloud = cloudData || FALLBACK_CLOUD;
-        
-        if (user && cloudData) {
-            await checkIfPlayedToday(user.id, cloudData.id);
-        }
         setCloud(currentCloud);
+        
+        // 2. Si connecté, a-t-il DÉJÀ JOUÉ CE JOUR-LÀ ?
+        if (user && cloudData) {
+            const { data: existingDrawing } = await supabase
+                .from('drawings')
+                .select('id')
+                .eq('user_id', user.id)
+                .eq('cloud_id', cloudData.id) // Vérifie spécifiquement pour CE nuage
+                .maybeSingle();
+
+            if (existingDrawing) {
+                console.log("🚫 Déjà joué aujourd'hui -> Redirection Feed");
+                router.replace('/(tabs)/feed'); 
+                return; 
+            }
+        }
+        // Si pas joué ou pas connecté, on reste ici (setCloud a déjà mis à jour l'image)
+
     } catch (err) {
         console.error(err);
         setCloud(FALLBACK_CLOUD);
     } finally {
         setLoading(false);
     }
-  };
-
-  const checkIfPlayedToday = async (userId = user?.id, cloudId = cloud?.id) => {
-      if (!userId || !cloudId) return;
-      const { data: existingDrawing } = await supabase
-        .from('drawings').select('id')
-        .eq('user_id', userId).eq('cloud_id', cloudId).maybeSingle();
-
-      if (existingDrawing) {
-          router.replace('/(tabs)/feed'); 
-      }
   };
 
   const handleClear = () => canvasRef.current?.clearCanvas();
@@ -115,7 +138,7 @@ export default function DrawPage() {
 
   const handleAuthAction = async () => {
     if (!email || !password) return Alert.alert("Erreur", "Remplissez tous les champs");
-    setAuthLoading(true);
+    setAuthActionLoading(true);
     try {
         const { error } = isSignUp 
             ? await supabase.auth.signUp({ email, password })
@@ -124,7 +147,7 @@ export default function DrawPage() {
     } catch (e: any) {
         Alert.alert("Erreur", e.message);
     } finally {
-        setAuthLoading(false);
+        setAuthActionLoading(false);
     }
   };
 
@@ -182,7 +205,6 @@ export default function DrawPage() {
                 imageUri={cloud.image_url}
                 canvasData={replayPaths}
                 viewerSize={screenWidth}
-                // MODIF ICI : On passe la hauteur plein écran pour le replay
                 viewerHeight={screenHeight}
                 transparentMode={false} 
                 animated={true}
@@ -249,7 +271,6 @@ export default function DrawPage() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* ANIMATION DE FIN PLEIN ECRAN */}
       <Animated.View 
         pointerEvents="none"
         style={[
@@ -259,20 +280,18 @@ export default function DrawPage() {
       >
           {replayPaths && (
               <Animated.View style={{ opacity: drawingOpacityAnim, width: screenWidth, height: screenHeight, alignItems: 'center', justifyContent: 'center' }}>
-                  {/* Conteneur plein écran pour le Replay final */}
                   <View style={{ width: screenWidth, height: screenHeight }}>
                     <DrawingViewer 
                         imageUri={cloud.image_url}
                         canvasData={replayPaths}
                         viewerSize={screenWidth}
-                        viewerHeight={screenHeight} // <--- Important pour l'alignement
+                        viewerHeight={screenHeight} 
                         transparentMode={true} 
                         animated={true}
                         startVisible={false}
                         autoCenter={true} 
                     />
                   </View>
-                  {/* Titre centré par dessus ou ajusté */}
                   <Animated.View style={{ opacity: textOpacityAnim, position: 'absolute', bottom: 150, alignSelf: 'center' }}>
                       <Text style={styles.finalTitle}>{tagText}</Text>
                   </Animated.View>
