@@ -1,5 +1,5 @@
-import { View, Text, StyleSheet, ActivityIndicator, Alert, Modal, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Animated, Dimensions, AppState } from 'react-native';
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator, Alert, Modal, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Animated, Dimensions } from 'react-native';
+import { useEffect, useState, useRef } from 'react';
 import { supabase } from '../src/lib/supabaseClient';
 import { DrawingCanvas, DrawingCanvasRef } from '../src/components/DrawingCanvas';
 import { DrawingViewer } from '../src/components/DrawingViewer'; 
@@ -35,6 +35,7 @@ export default function DrawPage() {
   const [tagText, setTagText] = useState('');
   const [isUploading, setIsUploading] = useState(false);
 
+  // Modale Auth (Connexion)
   const [authModalVisible, setAuthModalVisible] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -50,73 +51,52 @@ export default function DrawPage() {
   const canvasRef = useRef<DrawingCanvasRef>(null);
   const updateLabel = (Updates && Updates.updateId) ? `v.${Updates.updateId.substring(0, 6)}` : '';
 
-  // --- MODIFICATION ICI : VÉRIFICATION AU FOCUS ---
-  // À chaque fois que l'écran devient visible (y compris retour depuis background ou autre onglet)
   useFocusEffect(
-    useCallback(() => {
-        // On relance la vérification complète
+    React.useCallback(() => {
         checkStatusAndLoad();
-    }, [user]) // Dépendance user : si l'user change, on revérifie
+    }, [user])
   );
 
-  // On garde aussi un écouteur sur l'état de l'app (background -> active) pour le changement de jour à minuit
-  useEffect(() => {
-      const subscription = AppState.addEventListener('change', nextAppState => {
-          if (nextAppState === 'active') {
-              checkStatusAndLoad();
-          }
-      });
-      return () => subscription.remove();
-  }, []);
-
-  // Si l'utilisateur se connecte via la modale, on vérifie aussi
+  // Écouteur de connexion : Si l'user se connecte via la modale, on la ferme
   useEffect(() => {
     if (user) {
-        setAuthModalVisible(false); 
-        // On ne lance pas checkStatusAndLoad ici car useFocusEffect le fera ou l'a déjà fait
+        setAuthModalVisible(false); // Ferme la modale auth
+        checkIfPlayedToday();       // Vérifie s'il a déjà joué
     }
   }, [user]);
 
   const checkStatusAndLoad = async () => {
-    setLoading(true); // On affiche le chargement pendant la vérification
     try {
         if (!supabase) throw new Error("No Supabase");
         const today = new Date().toISOString().split('T')[0];
         
-        // 1. Récupérer le nuage DU JOUR
-        const { data: cloudData, error: cloudError } = await supabase
-            .from('clouds')
-            .select('*')
-            .eq('published_for', today)
-            .maybeSingle();   
-        
+        const { data: cloudData, error: cloudError } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();   
         if (cloudError) throw cloudError;
         const currentCloud = cloudData || FALLBACK_CLOUD;
-        setCloud(currentCloud);
         
-        // 2. Si connecté, a-t-il DÉJÀ JOUÉ CE JOUR-LÀ ?
+        // Si user connecté au chargement, on vérifie le déjà joué
         if (user && cloudData) {
-            const { data: existingDrawing } = await supabase
-                .from('drawings')
-                .select('id')
-                .eq('user_id', user.id)
-                .eq('cloud_id', cloudData.id) // Vérifie spécifiquement pour CE nuage
-                .maybeSingle();
-
-            if (existingDrawing) {
-                console.log("🚫 Déjà joué aujourd'hui -> Redirection Feed");
-                router.replace('/(tabs)/feed'); 
-                return; 
-            }
+            await checkIfPlayedToday(user.id, cloudData.id);
         }
-        // Si pas joué ou pas connecté, on reste ici (setCloud a déjà mis à jour l'image)
-
+        setCloud(currentCloud);
     } catch (err) {
         console.error(err);
         setCloud(FALLBACK_CLOUD);
     } finally {
         setLoading(false);
     }
+  };
+
+  const checkIfPlayedToday = async (userId = user?.id, cloudId = cloud?.id) => {
+      if (!userId || !cloudId) return;
+      const { data: existingDrawing } = await supabase
+        .from('drawings').select('id')
+        .eq('user_id', userId).eq('cloud_id', cloudId).maybeSingle();
+
+      if (existingDrawing) {
+          console.log("🚫 Déjà joué -> Redirection Feed");
+          router.replace('/(tabs)/feed'); 
+      }
   };
 
   const handleClear = () => canvasRef.current?.clearCanvas();
@@ -130,24 +110,49 @@ export default function DrawPage() {
     if (!paths || paths.length === 0) { Alert.alert("Oups", "Dessine quelque chose !"); return; }
     
     if (!user) { 
+        // Pas connecté ? On ouvre la modale Auth locale
         setAuthModalVisible(true);
         return; 
     }
-    setModalVisible(true);
+    
+    setModalVisible(true); // Connecté ? On ouvre la modale Tag
   };
 
+  // --- LOGIQUE AUTH CORRIGÉE ---
   const handleAuthAction = async () => {
     if (!email || !password) return Alert.alert("Erreur", "Remplissez tous les champs");
-    setAuthActionLoading(true);
+    setAuthLoading(true);
     try {
-        const { error } = isSignUp 
-            ? await supabase.auth.signUp({ email, password })
-            : await supabase.auth.signInWithPassword({ email, password });
+        let result;
+        if (isSignUp) {
+            result = await supabase.auth.signUp({ email, password });
+        } else {
+            result = await supabase.auth.signInWithPassword({ email, password });
+        }
+
+        const { error, data } = result;
+
         if (error) throw error;
+        
+        // Si c'est une inscription, il faut peut-être vérifier l'email
+        if (isSignUp && data?.user && !data.session) {
+             Alert.alert("Inscription réussie", "Veuillez vérifier vos emails pour confirmer votre compte.");
+             setAuthModalVisible(false); // On ferme la modale pour ne pas bloquer
+             return;
+        }
+
+        // Si connexion réussie, le useEffect([user]) détectera le changement d'état et fermera la modale
+        // Mais on peut forcer la fermeture ici pour être sûr
+        if (data?.session) {
+             console.log("Connexion réussie via Index Modal");
+             // Le useEffect s'occupera du reste
+        }
+
     } catch (e: any) {
-        Alert.alert("Erreur", e.message);
+        console.error("Auth Error:", e);
+        Alert.alert("Erreur", e.message || "Une erreur est survenue lors de la connexion.");
     } finally {
-        setAuthActionLoading(false);
+        setAuthLoading(false);
     }
   };
 
@@ -167,6 +172,7 @@ export default function DrawPage() {
 
         setModalVisible(false);
 
+        // Animation de transition blanche (Votre code original)
         Animated.timing(fadeWhiteAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start(() => {
             setReplayPaths(pathsData); 
             setTimeout(() => {
@@ -194,6 +200,7 @@ export default function DrawPage() {
   return (
     <View style={styles.container}>
       
+      {/* Header manuel (Pas de bouton profil ici) */}
       <View style={styles.header}>
         <Text style={styles.headerText}>sunbim</Text>
         {updateLabel ? <Text style={styles.versionText}>{updateLabel}</Text> : null}
@@ -236,20 +243,31 @@ export default function DrawPage() {
           </View>
       )}
 
-      {/* MODALES */}
+      {/* MODALE 1 : AUTHENTIFICATION */}
       <Modal animationType="slide" transparent={true} visible={authModalVisible} onRequestClose={() => setAuthModalVisible(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
             <View style={styles.modalContent}>
                 <Text style={styles.modalTitle}>{isSignUp ? "Créer un compte" : "Se connecter"}</Text>
                 <Text style={styles.modalSubtitle}>Sauvegardez votre dessin pour le publier</Text>
-                <TextInput style={styles.input} placeholder="Email" placeholderTextColor="#999" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
-                <TextInput style={styles.input} placeholder="Mot de passe" placeholderTextColor="#999" value={password} onChangeText={setPassword} secureTextEntry />
+                
+                <TextInput 
+                    style={styles.input} placeholder="Email" placeholderTextColor="#999"
+                    value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address"
+                />
+                <TextInput 
+                    style={styles.input} placeholder="Mot de passe" placeholderTextColor="#999"
+                    value={password} onChangeText={setPassword} secureTextEntry
+                />
+
+                {/* BOUTON VALIDATION AUTH */}
                 <TouchableOpacity style={styles.validateBtn} onPress={handleAuthAction} disabled={authLoading}>
                     {authLoading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.validateText}>{isSignUp ? "S'inscrire" : "Se connecter"}</Text>}
                 </TouchableOpacity>
+
                 <TouchableOpacity onPress={() => setIsSignUp(!isSignUp)} style={{marginTop: 15, padding: 5}}>
                     <Text style={styles.switchText}>{isSignUp ? "J'ai déjà un compte" : "Pas encore de compte ?"}</Text>
                 </TouchableOpacity>
+
                 <TouchableOpacity style={styles.cancelBtn} onPress={() => setAuthModalVisible(false)}>
                     <Text style={styles.cancelText}>Fermer</Text>
                 </TouchableOpacity>
@@ -257,12 +275,25 @@ export default function DrawPage() {
         </KeyboardAvoidingView>
       </Modal>
 
+      {/* MODALE 2 : TAG DU DESSIN */}
       <Modal animationType="fade" transparent={true} visible={modalVisible} onRequestClose={() => setModalVisible(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
             <View style={styles.modalContent}>
                 <Text style={styles.modalTitle}>Qu'as-tu vu ?</Text>
                 <Text style={styles.modalSubtitle}>Donne un titre à ton œuvre</Text>
-                <TextInput style={styles.input} placeholder="Ex: Un dragon..." placeholderTextColor="#999" value={tagText} onChangeText={setTagText} autoFocus={true} maxLength={30} returnKeyType="done" onSubmitEditing={confirmShare} />
+                
+                <TextInput 
+                    style={styles.input} 
+                    placeholder="Ex: Un dragon..." 
+                    placeholderTextColor="#999"
+                    value={tagText} 
+                    onChangeText={setTagText} 
+                    autoFocus={true} 
+                    maxLength={30} 
+                    returnKeyType="done"
+                    onSubmitEditing={confirmShare}
+                />
+
                 <TouchableOpacity style={styles.validateBtn} onPress={confirmShare} disabled={isUploading}>
                     {isUploading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.validateText}>Publier</Text>}
                 </TouchableOpacity>
@@ -271,6 +302,7 @@ export default function DrawPage() {
         </KeyboardAvoidingView>
       </Modal>
 
+      {/* ANIMATION DE FIN PLEIN ECRAN */}
       <Animated.View 
         pointerEvents="none"
         style={[
@@ -280,18 +312,20 @@ export default function DrawPage() {
       >
           {replayPaths && (
               <Animated.View style={{ opacity: drawingOpacityAnim, width: screenWidth, height: screenHeight, alignItems: 'center', justifyContent: 'center' }}>
+                  {/* Conteneur plein écran pour le Replay final */}
                   <View style={{ width: screenWidth, height: screenHeight }}>
                     <DrawingViewer 
                         imageUri={cloud.image_url}
                         canvasData={replayPaths}
                         viewerSize={screenWidth}
-                        viewerHeight={screenHeight} 
+                        viewerHeight={screenHeight} // <--- Important pour l'alignement
                         transparentMode={true} 
                         animated={true}
                         startVisible={false}
                         autoCenter={true} 
                     />
                   </View>
+                  {/* Titre centré par dessus ou ajusté */}
                   <Animated.View style={{ opacity: textOpacityAnim, position: 'absolute', bottom: 150, alignSelf: 'center' }}>
                       <Text style={styles.finalTitle}>{tagText}</Text>
                   </Animated.View>
@@ -315,10 +349,14 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 22, fontWeight: '800', color: '#000', marginBottom: 5 },
   modalSubtitle: { fontSize: 14, color: '#666', marginBottom: 20 },
   input: { width: '100%', height: 50, borderWidth: 1, borderColor: '#EEE', borderRadius: 12, paddingHorizontal: 15, fontSize: 16, marginBottom: 20, backgroundColor: '#F9F9F9' },
+  
+  // Style bouton corrigé : width 100% force la largeur
   validateBtn: { width: '100%', height: 50, backgroundColor: '#000', borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
   validateText: { color: '#FFF', fontWeight: '700', fontSize: 16 },
+  
   cancelBtn: { padding: 10, marginTop: 5 },
   cancelText: { color: '#999', fontWeight: '600' },
   switchText: { color: '#666', fontSize: 14, textDecorationLine: 'underline' },
+  
   finalTitle: { fontSize: 32, fontWeight: '900', color: '#000', textAlign: 'center', letterSpacing: -1, textShadowColor: 'rgba(255,255,255,0.8)', textShadowOffset: {width: 0, height:0}, textShadowRadius: 10 },
 });
