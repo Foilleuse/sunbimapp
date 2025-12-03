@@ -109,7 +109,7 @@ export default function FeedPage() {
     const [drawings, setDrawings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [currentIndex, setCurrentIndex] = useState(0);
-    const { width: screenWidth } = Dimensions.get('window');
+    const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
     useEffect(() => { fetchTodaysFeed(); }, []);
 
@@ -138,14 +138,23 @@ export default function FeedPage() {
 
     return (
         <View style={styles.container}>
+            
+            {/* --- FOND D'ÉCRAN : Image du jour Plein Écran + Flou --- */}
+            {backgroundUrl && (
+                <Image 
+                    source={{uri: backgroundUrl}} 
+                    style={[
+                        StyleSheet.absoluteFill, // Remplit tout l'écran
+                        { width: screenWidth, height: screenHeight, zIndex: -1 }
+                    ]} 
+                    resizeMode="cover"
+                    blurRadius={40} // Flou Gaussien
+                />
+            )}
+
             <SunbimHeader showCloseButton={false} />
-            <View style={{ flex: 1, position: 'relative' }}>
-                {backgroundUrl && (
-                    <View style={{ position: 'absolute', top: 0, width: screenWidth, aspectRatio: 3/4, zIndex: -1 }}>
-                       <Image source={{uri: backgroundUrl}} style={{width: '100%', height: '100%'}} resizeMode="cover" />
-                    </View>
-                )}
-                
+            
+            <View style={{ flex: 1 }}>
                 {drawings.length > 0 ? (
                     <PagerView 
                         style={{ flex: 1 }} 
@@ -173,19 +182,21 @@ export default function FeedPage() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#FFFFFF' },
+    // Fond noir par défaut si l'image tarde à charger
+    container: { flex: 1, backgroundColor: '#000' },
+    
     loadingContainer: { flex: 1, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    text: { color: '#666', fontSize: 16 },
+    text: { color: '#FFF', fontSize: 16 },
+    
     cardContainer: { flex: 1 },
     cardInfo: {
         flex: 1, 
         backgroundColor: '#FFFFFF', 
-        marginTop: -40, // Chevauchement léger pour le style
+        marginTop: -40, 
         paddingHorizontal: 20, 
         paddingTop: 25,
         shadowColor: "#000", shadowOffset: {width: 0, height: -4}, shadowOpacity: 0.05, shadowRadius: 4, elevation: 5,
-        // ANGLES RECTANGULAIRES (Suppression des borderRadius)
     },
     headerInfo: { marginBottom: 15 },
     
