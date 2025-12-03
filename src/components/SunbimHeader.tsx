@@ -1,117 +1,95 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, StatusBar, Platform, Image } from 'react-native';
-import { X, User } from 'lucide-react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { X, Bell } from 'lucide-react-native'; 
 import { useRouter } from 'expo-router';
-import { useAuth } from '../contexts/AuthContext';
+import * as Updates from 'expo-updates';
 
 interface SunbimHeaderProps {
-  title?: string;
   showCloseButton?: boolean;
   onClose?: () => void;
-  showProfileButton?: boolean;
+  showNotificationButton?: boolean; 
 }
 
 export const SunbimHeader: React.FC<SunbimHeaderProps> = ({ 
-  title = "sunbim", 
-  showCloseButton = false, 
+  showCloseButton, 
   onClose,
-  showProfileButton = false
+  showNotificationButton = false 
 }) => {
   const router = useRouter();
-  const { user, profile } = useAuth(); // On récupère l'utilisateur et le profil
 
-  const handleProfilePress = () => {
-      router.push('/(tabs)/profile');
+  // Récupération de l'ID de mise à jour (ou 'Dev' si en local)
+  const updateLabel = Updates.updateId ? `v.${Updates.updateId.substring(0, 6)}` : 'Dev Mode';
+
+  const handleClose = () => {
+    if (onClose) onClose();
+    else router.back();
+  };
+
+  const handleNotifications = () => {
+      Alert.alert("Notifications", "Aucune nouvelle notification.");
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" />
-      <View style={styles.headerContainer}>
-        
-        {/* Partie gauche : vide ou bouton profil (avec avatar si connecté) */}
-        <View style={styles.leftContainer}>
-            {showProfileButton && (
-                <TouchableOpacity onPress={handleProfilePress} style={styles.iconButton}>
-                    {user && profile?.avatar_url ? (
-                        <Image source={{ uri: profile.avatar_url }} style={styles.avatarTiny} />
-                    ) : (
-                        <View style={[styles.avatarTiny, styles.avatarPlaceholder]}>
-                            <User color="#000" size={18} />
-                        </View>
-                    )}
-                </TouchableOpacity>
-            )}
-        </View>
-
-        {/* Titre central stylisé comme l'index */}
-        <Text style={styles.headerTitle}>{title}</Text>
-
-        {/* Partie droite : bouton fermer ou vide */}
-        <View style={styles.rightContainer}>
-          {showCloseButton && (
-            <TouchableOpacity onPress={onClose} style={styles.iconButton}>
-              <X color="#000" size={28} />
-            </TouchableOpacity>
-          )}
-        </View>
-
+    <View style={styles.headerBar}>
+      {/* Conteneur Titre + Version */}
+      <View style={styles.titleContainer}>
+          <Text style={styles.headerText}>sunbim</Text>
+          <Text style={styles.versionText}>{updateLabel}</Text>
       </View>
-    </SafeAreaView>
+      
+      {showCloseButton && (
+        <TouchableOpacity style={styles.leftBtn} onPress={handleClose} hitSlop={10}>
+           <X color="#000" size={28} />
+        </TouchableOpacity>
+      )}
+
+      <View style={styles.rightBtn}>
+          {showNotificationButton && (
+              <TouchableOpacity onPress={handleNotifications} hitSlop={10}>
+                  <Bell color="#000" size={26} />
+              </TouchableOpacity>
+          )}
+      </View>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  safeArea: {
-    backgroundColor: '#FFF',
-    // Ombre pour iOS
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    // Ombre pour Android
-    elevation: 4,
-    zIndex: 100,
-  },
-  headerContainer: {
-    height: Platform.OS === 'ios' ? 50 : 60,
+  headerBar: {
+    width: '100%',
+    backgroundColor: '#FFFFFF', 
+    paddingTop: 60, 
+    paddingBottom: 15,
+    paddingHorizontal: 20,
     flexDirection: 'row',
+    justifyContent: 'center', 
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 15,
-    backgroundColor: '#FFF', 
+    zIndex: 100, 
+    borderBottomWidth: 1,
+    borderBottomColor: '#F5F5F5', 
   },
-  leftContainer: {
-      width: 40,
-      alignItems: 'flex-start'
+  titleContainer: {
+      alignItems: 'center',
   },
-  rightContainer: {
-      width: 40,
-      alignItems: 'flex-end'
+  headerText: {
+    fontSize: 32,
+    fontWeight: '900',
+    color: '#000000', // Noir pour être visible sur fond blanc
+    lineHeight: 34,
   },
-  // Style repris de l'index (app/index.tsx)
-  headerTitle: {
-    fontSize: 32, // Taille augmentée à 32
-    fontWeight: '900', // Poids max
-    color: '#000', // Noir par défaut (sur fond blanc)
-    textShadowColor: 'rgba(0,0,0,0.1)', // Ombre très légère
-    textShadowOffset: { width: 1, height: 1 }, 
-    textShadowRadius: 1,
-    textAlign: 'center',
+  versionText: {
+      fontSize: 10,
+      color: '#999', // Gris discret
+      marginTop: -2,
   },
-  iconButton: {
-    padding: 5,
+  leftBtn: {
+    position: 'absolute',
+    left: 20,
+    bottom: 20,
   },
-  avatarTiny: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+  rightBtn: {
+    position: 'absolute',
+    right: 20,
+    bottom: 20,
   },
-  avatarPlaceholder: {
-    backgroundColor: '#F0F0F0',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#EEE'
-  }
 });
