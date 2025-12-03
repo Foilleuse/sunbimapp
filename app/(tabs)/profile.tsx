@@ -3,15 +3,16 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { supabase } from '../../src/lib/supabaseClient';
 import { useAuth } from '../../src/contexts/AuthContext';
-import { User, Mail, Lock, LogOut, X, Heart, MessageCircle, AlertCircle, Settings, UserPlus } from 'lucide-react-native'; 
+import { User, Mail, Lock, X, Heart, MessageCircle, AlertCircle, Settings } from 'lucide-react-native'; 
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { CommentsModal } from '../../src/components/CommentsModal';
+import { SettingsModal } from '../../src/components/SettingsModal'; // Import de la nouvelle modale
 // Import du Header global
 import { SunbimHeader } from '../../src/components/SunbimHeader';
 
 export default function ProfilePage() {
   const router = useRouter();
-  const { user, profile, signOut } = useAuth();
+  const { user, profile } = useAuth();
   
   // --- ETATS ---
   const [historyItems, setHistoryItems] = useState<any[]>([]);
@@ -20,6 +21,7 @@ export default function ProfilePage() {
   const [selectedDrawing, setSelectedDrawing] = useState<any | null>(null);
   const [isHolding, setIsHolding] = useState(false);
   const [showComments, setShowComments] = useState(false);
+  const [showSettings, setShowSettings] = useState(false); // État pour la modale paramètres
   
   // États d'interaction pour le dessin sélectionné
   const [isLiked, setIsLiked] = useState(false);
@@ -117,17 +119,6 @@ export default function ProfilePage() {
       } finally {
           setAuthActionLoading(false);
       }
-  };
-
-  // --- ACTION DE DÉCONNEXION ---
-  const handleSignOut = async () => {
-    try {
-        await signOut(); // Déconnecte de Supabase
-        // Redirection forcée vers l'Index (Page de dessin)
-        router.replace('/'); 
-    } catch (error) {
-        console.error("Erreur déconnexion:", error);
-    }
   };
 
   const openDrawing = (drawing: any) => setSelectedDrawing(drawing);
@@ -276,22 +267,14 @@ export default function ProfilePage() {
               </View>
           </View>
 
-          {/* BARRE DE BOUTONS */}
+          {/* BARRE DE BOUTONS : Uniquement Paramètres */}
           <View style={styles.profileActions}>
-              {/* 1. AMIS */}
-              <TouchableOpacity style={[styles.actionButton, styles.primaryBtn]} onPress={() => Alert.alert("Bientôt", "Gestion des amis")}>
-                  <UserPlus color="#000" size={18} />
-                  <Text style={styles.actionButtonText}>Amis</Text>
-              </TouchableOpacity>
-
-              {/* 2. MODIFIER */}
-              <TouchableOpacity style={styles.iconOnlyBtn} onPress={() => Alert.alert("Bientôt", "Édition de profil")}>
-                  <Settings color="#000" size={20} />
-              </TouchableOpacity>
-
-              {/* 3. DÉCONNEXION -> handleSignOut */}
-              <TouchableOpacity style={[styles.iconOnlyBtn, styles.logoutButton]} onPress={handleSignOut}>
-                  <LogOut color="#FF3B30" size={20} />
+              <TouchableOpacity 
+                style={[styles.actionButton, styles.primaryBtn]} // Bouton large principal
+                onPress={() => setShowSettings(true)}
+              >
+                  <Settings color="#000" size={18} />
+                  <Text style={styles.actionButtonText}>Paramètres</Text>
               </TouchableOpacity>
           </View>
       </View>
@@ -380,6 +363,12 @@ export default function ProfilePage() {
               </View>
           )}
       </Modal>
+
+      {/* MODALE PARAMÈTRES */}
+      <SettingsModal 
+        visible={showSettings} 
+        onClose={() => setShowSettings(false)} 
+      />
     </View>
   );
 }
@@ -451,7 +440,7 @@ const styles = StyleSheet.create({
       borderRadius: 10,
   },
   actionButtonText: {
-      fontSize: 13,
+      fontSize: 14,
       fontWeight: '600',
       color: '#000'
   },
