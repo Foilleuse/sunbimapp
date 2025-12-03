@@ -27,15 +27,6 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
             
             {/* IMAGE + DESSIN (Non interactif au toucher) */}
             <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent' }}>
-                {/* Ici, on n'affiche PAS l'image de fond floue, car elle est gérée par le parent (FeedPage).
-                   On affiche seulement l'image NETTE (3:4) qui sert de support au dessin.
-                */}
-                <Image 
-                    source={{ uri: drawing.cloud_image_url }} 
-                    style={StyleSheet.absoluteFill} 
-                    resizeMode="cover" 
-                />
-
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
                         <DrawingViewer
@@ -43,7 +34,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
                             imageUri={drawing.cloud_image_url}
                             canvasData={drawing.canvas_data}
                             viewerSize={canvasSize}
-                            transparentMode={true} // Important: fond transparent pour voir l'image nette dessous
+                            transparentMode={true} 
                             animated={isActive} 
                             startVisible={false} 
                         />
@@ -118,7 +109,7 @@ export default function FeedPage() {
     const [drawings, setDrawings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [currentIndex, setCurrentIndex] = useState(0);
-    const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+    const { width: screenWidth } = Dimensions.get('window');
 
     useEffect(() => { fetchTodaysFeed(); }, []);
 
@@ -141,34 +132,20 @@ export default function FeedPage() {
         } catch (e) { console.error(e); } finally { setLoading(false); }
     };
 
-    // Image de fond (La première dispo)
-    const backgroundUrl = drawings.length > 0 ? drawings[0].cloud_image_url : null;
-
     if (loading) return <View style={styles.loadingContainer}><ActivityIndicator color="#000" size="large" /></View>;
+    
+    const backgroundUrl = drawings.length > 0 ? drawings[0].cloud_image_url : null;
 
     return (
         <View style={styles.container}>
-            
-            {/* --- FOND D'ÉCRAN STATIQUE (PLEIN ÉCRAN + FLOU) --- */}
-            {backgroundUrl && (
-                <Image 
-                    source={{uri: backgroundUrl}} 
-                    style={[
-                        StyleSheet.absoluteFill, // Couvre tout l'écran, derrière tout
-                        { width: screenWidth, height: screenHeight, zIndex: -1 }
-                    ]} 
-                    resizeMode="cover"
-                    blurRadius={50} // Flou fort pour l'ambiance
-                />
-            )}
-
-            {/* Header transparent */}
-            <View style={{ zIndex: 10, backgroundColor: 'transparent' }}>
-                <SunbimHeader showCloseButton={false} />
-            </View>
-            
-            {/* Contenu défilant */}
-            <View style={{ flex: 1 }}>
+            <SunbimHeader showCloseButton={false} />
+            <View style={{ flex: 1, position: 'relative' }}>
+                {backgroundUrl && (
+                    <View style={{ position: 'absolute', top: 0, width: screenWidth, aspectRatio: 3/4, zIndex: -1 }}>
+                       <Image source={{uri: backgroundUrl}} style={{width: '100%', height: '100%'}} resizeMode="cover" />
+                    </View>
+                )}
+                
                 {drawings.length > 0 ? (
                     <PagerView 
                         style={{ flex: 1 }} 
@@ -196,14 +173,10 @@ export default function FeedPage() {
 }
 
 const styles = StyleSheet.create({
-    // Fond noir par défaut (visible si l'image de fond charge lentement)
-    container: { flex: 1, backgroundColor: '#000' }, 
-    
+    container: { flex: 1, backgroundColor: '#FFFFFF' },
     loadingContainer: { flex: 1, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
-    
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    text: { color: '#FFF', fontSize: 16 }, // Texte blanc pour être visible sur fond sombre
-    
+    text: { color: '#666', fontSize: 16 },
     cardContainer: { flex: 1 },
     cardInfo: {
         flex: 1, 
@@ -212,6 +185,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20, 
         paddingTop: 25,
         shadowColor: "#000", shadowOffset: {width: 0, height: -4}, shadowOpacity: 0.05, shadowRadius: 4, elevation: 5,
+        // ANGLES RECTANGULAIRES (Suppression des borderRadius)
     },
     headerInfo: { marginBottom: 15 },
     
