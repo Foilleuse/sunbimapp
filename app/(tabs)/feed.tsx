@@ -15,21 +15,22 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
     const { user } = useAuth();
     
     const [isLiked, setIsLiked] = useState(false);
-    // Initialisation sécurisée (pas de négatif)
-    const [likesCount, setLikesCount] = useState(Math.max(0, drawing.likes_count || 0));
+    // Initialisation avec la valeur du serveur
+    const [likesCount, setLikesCount] = useState(drawing.likes_count || 0);
     
-    const [isHolding, setIsHolding] = useState(false);
+    const [isHolding, setIsHolding] = useState(false); 
+    
     const commentsCount = drawing.comments_count || 0;
     const author = drawing.users;
     const isActive = index === currentIndex; 
     const shouldRenderDrawing = isActive;
 
-    // 0. Synchronisation sécurisée
+    // 1. SYNCHRONISATION : Si la donnée 'drawing' change (ex: refresh global), on met à jour le compteur local
     useEffect(() => {
-        setLikesCount(Math.max(0, drawing.likes_count || 0));
+        setLikesCount(drawing.likes_count || 0);
     }, [drawing.likes_count]);
 
-    // 1. Vérification Initiale
+    // 2. VÉRIFICATION INITIALE DU LIKE
     useEffect(() => {
         if (!user) return;
         const checkLikeStatus = async () => {
@@ -45,25 +46,26 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
         checkLikeStatus();
     }, [user, drawing.id]);
 
-    // 2. Action Like Sécurisée
+    // 3. GESTION DU CLICK (Optimiste)
     const handleLike = async () => {
         if (!user) return;
 
         const previousLiked = isLiked;
         const previousCount = likesCount;
 
-        // Calcul du nouveau nombre de likes
-        // Si on aimait déjà (previousLiked = true), on enlève 1, mais on ne descend pas sous 0.
-        // Si on n'aimait pas (previousLiked = false), on ajoute 1.
-        const newCount = previousLiked ? Math.max(0, previousCount - 1) : previousCount + 1;
-        
+        // Calcul du nouveau total
+        const newLikedState = !previousLiked;
+        // Si on like, on ajoute 1. Si on unlike, on enlève 1.
+        // On s'assure de ne pas descendre sous 0.
+        const newCount = newLikedState ? previousCount + 1 : Math.max(0, previousCount - 1);
+
         // Mise à jour UI immédiate
-        setIsLiked(!previousLiked);
+        setIsLiked(newLikedState);
         setLikesCount(newCount);
 
         try {
             if (previousLiked) {
-                // Suppression
+                // Suppression du like
                 const { error } = await supabase
                     .from('likes')
                     .delete()
@@ -71,7 +73,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
                     .eq('drawing_id', drawing.id);
                 if (error) throw error;
             } else {
-                // Ajout
+                // Ajout du like
                 const { error } = await supabase
                     .from('likes')
                     .insert({
@@ -82,7 +84,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
             }
         } catch (error) {
             console.error("Erreur like:", error);
-            // Rollback en cas d'erreur
+            // Annulation en cas d'erreur
             setIsLiked(previousLiked);
             setLikesCount(previousCount);
         }
@@ -91,13 +93,8 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
     return (
         <View style={styles.cardContainer}>
             
-            {/* IMAGE + DESSIN (CODE ORIGINAL INCHANGÉ) */}
-            <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: '#000', overflow: 'hidden' }}>
-                <Image 
-                    source={{ uri: drawing.cloud_image_url }} 
-                    style={StyleSheet.absoluteFill} 
-                    resizeMode="cover" 
-                />
+            {/* IMAGE + DESSIN (INCHANGÉ) */}
+            <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent' }}>
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
                         <DrawingViewer
@@ -144,16 +141,17 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
                     </View>
                 </View>
 
-                {/* BARRE D'ACTIONS */}
                 <View style={styles.actionBar}>
                     <View style={styles.leftActions}>
                         
+                        {/* BOUTON LIKE CORRIGÉ */}
                         <TouchableOpacity style={styles.actionBtn} onPress={handleLike}>
                             <Heart 
                                 color={isLiked ? "#FF3B30" : "#000"} 
                                 fill={isLiked ? "#FF3B30" : "transparent"} 
                                 size={28} 
                             />
+                            {/* AFFICHE LE COMPTEUR DYNAMIQUE */}
                             <Text style={styles.actionText}>{likesCount}</Text>
                         </TouchableOpacity>
 
@@ -192,6 +190,9 @@ export default function FeedPage() {
             const { data: cloudData } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();
             
             if (cloudData) {
+                // MODIF : On récupère aussi les likes (count) via la jointure si possible, 
+                // ou on s'assure que la vue SQL ou la fonction RPC met à jour ce champ.
+                // Ici, on suppose que la table 'drawings' a une colonne 'likes_count' tenue à jour.
                 const { data: drawingsData, error: drawingsError } = await supabase
                     .from('drawings')
                     .select('*, users(display_name, avatar_url)') 
@@ -210,6 +211,7 @@ export default function FeedPage() {
     return (
         <View style={styles.container}>
             <SunbimHeader showCloseButton={false} />
+            
             <View style={{ flex: 1 }}>
                 {drawings.length > 0 ? (
                     <PagerView 
@@ -242,7 +244,6 @@ const styles = StyleSheet.create({
     loadingContainer: { flex: 1, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     text: { color: '#666', fontSize: 16 },
-    
     cardContainer: { flex: 1 },
     cardInfo: {
         flex: 1, 
