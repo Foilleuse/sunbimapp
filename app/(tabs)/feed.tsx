@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform, Image, Pressable } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform, Image, Pressable, ImageBackground } from 'react-native';
 import { useEffect, useState, memo } from 'react';
 import { Heart, MessageCircle, User, Share2, Eye } from 'lucide-react-native';
 import { supabase } from '../../src/lib/supabaseClient';
@@ -92,6 +92,8 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
     return (
         <View style={styles.cardContainer}>
             
+            {/* ZONE DE DESSIN TRANSPARENTE */}
+            {/* L'image de fond est gérée par le parent (ImageBackground) et est statique */}
             <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent' }}>
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
@@ -100,18 +102,14 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
                             imageUri={drawing.cloud_image_url} 
                             canvasData={drawing.canvas_data}
                             viewerSize={canvasSize}
-                            transparentMode={false} // Afficher l'image du nuage dans le viewer
+                            // IMPORTANT : Transparent pour voir le nuage statique derrière
+                            transparentMode={true} 
                             animated={isActive} 
                             startVisible={false} 
                         />
                     )}
                 </View>
-                {/* Fallback image en arrière plan au cas où, ou pour le mode "holding" */}
-                 <Image 
-                    source={{ uri: drawing.cloud_image_url }}
-                    style={[StyleSheet.absoluteFill, { zIndex: -1 }]}
-                    resizeMode="cover"
-                />
+                {/* Pas d'image fallback ici, car le fond est global */}
             </View>
             
             <View style={styles.cardInfo}>
@@ -192,11 +190,15 @@ export default function FeedPage() {
     const [drawings, setDrawings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [currentIndex, setCurrentIndex] = useState(0);
+    // On garde l'état pour l'image de fond
     const [backgroundCloud, setBackgroundCloud] = useState<string | null>(null);
     const { width: screenWidth } = Dimensions.get('window');
 
     const [selectedUser, setSelectedUser] = useState<any>(null);
     const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
+
+    // Image placeholder locale par défaut
+    const placeholderImage = require('../../assets/cloud-placeholder.jpg'); 
 
     useEffect(() => { fetchTodaysFeed(); }, []);
 
@@ -206,8 +208,9 @@ export default function FeedPage() {
             const { data: cloudData } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();
             
             if (cloudData) {
-                // Pas d'image de fond floue
-                setBackgroundCloud(null); 
+                // On récupère l'image du nuage pour le fond statique
+                const optimizedBg = getOptimizedImageUrl(cloudData.image_url, screenWidth);
+                setBackgroundCloud(optimizedBg || cloudData.image_url);
 
                 const { data: drawingsData, error: drawingsError } = await supabase
                     .from('drawings')
@@ -235,61 +238,73 @@ export default function FeedPage() {
     if (loading) return <View style={styles.loadingContainer}><ActivityIndicator color="#000" size="large" /></View>;
 
     return (
-        <View style={styles.container}>
-            <SunbimHeader showCloseButton={false} />
-            
-            <View style={{ flex: 1, position: 'relative' }}>
-                {/* Suppression du fond flou */}
+        // IMAGE DE FOND STATIQUE GLOBALE
+        // resizeMode="cover" assure que l'image remplit tout l'écran
+        // Le viewer dessinera par dessus
+        <ImageBackground 
+            source={backgroundCloud ? { uri: backgroundCloud } : placeholderImage}
+            style={styles.background}
+            resizeMode="cover" // Important pour que l'image remplisse l'écran
+        >
+            <View style={styles.container}>
+                <SunbimHeader showCloseButton={false} />
                 
-                {drawings.length > 0 ? (
-                    <PagerView 
-                        style={{ flex: 1 }} 
-                        initialPage={0} 
-                        onPageSelected={(e: any) => setCurrentIndex(e.nativeEvent.position)}
-                        offscreenPageLimit={1} 
-                    >
-                        {drawings.map((drawing, index) => (
-                            <View key={drawing.id} style={{ flex: 1 }}>
-                                <FeedCard 
-                                    drawing={drawing} 
-                                    canvasSize={screenWidth} 
-                                    index={index}
-                                    currentIndex={currentIndex}
-                                    onUserPress={handleUserPress}
-                                />
-                            </View>
-                        ))}
-                    </PagerView>
-                ) : (
-                    <View style={styles.centerBox}><Text style={styles.text}>La galerie est vide.</Text></View>
+                <View style={{ flex: 1, position: 'relative' }}>
+                    {drawings.length > 0 ? (
+                        <PagerView 
+                            style={{ flex: 1 }} 
+                            initialPage={0} 
+                            onPageSelected={(e: any) => setCurrentIndex(e.nativeEvent.position)}
+                            offscreenPageLimit={1} 
+                        >
+                            {drawings.map((drawing, index) => (
+                                <View key={drawing.id} style={{ flex: 1 }}>
+                                    <FeedCard 
+                                        drawing={drawing} 
+                                        canvasSize={screenWidth} 
+                                        index={index}
+                                        currentIndex={currentIndex}
+                                        onUserPress={handleUserPress}
+                                    />
+                                </View>
+                            ))}
+                        </PagerView>
+                    ) : (
+                        <View style={styles.centerBox}><Text style={styles.text}>La galerie est vide.</Text></View>
+                    )}
+                </View>
+
+                {selectedUser && (
+                    <UserProfileModal
+                        visible={isProfileModalVisible}
+                        onClose={() => setIsProfileModalVisible(false)}
+                        userId={selectedUser.id}
+                        initialUser={selectedUser}
+                    />
                 )}
             </View>
-
-            {selectedUser && (
-                <UserProfileModal
-                    visible={isProfileModalVisible}
-                    onClose={() => setIsProfileModalVisible(false)}
-                    userId={selectedUser.id}
-                    initialUser={selectedUser}
-                />
-            )}
-        </View>
+        </ImageBackground>
     );
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#FFFFFF' },
+    background: {
+        flex: 1,
+    },
+    container: { flex: 1, backgroundColor: 'transparent' }, 
     loadingContainer: { flex: 1, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    text: { color: '#666', fontSize: 16 },
+    text: { color: '#FFF', fontSize: 16 }, // Texte blanc pour contraste sur fond image
     cardContainer: { flex: 1 },
     cardInfo: {
         flex: 1, 
-        backgroundColor: '#FFFFFF', 
+        backgroundColor: '#FFFFFF', // Carte d'info sur fond blanc
         marginTop: -40, 
         paddingHorizontal: 20, 
         paddingTop: 25,
         shadowColor: "#000", shadowOffset: {width: 0, height: -4}, shadowOpacity: 0.05, shadowRadius: 4, elevation: 5,
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
     },
     headerInfo: { marginBottom: 15 },
     titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
