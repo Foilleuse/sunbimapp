@@ -16,8 +16,10 @@ export default function FriendsPage() {
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
 
-  // Pour la miniature du dessin
-  const MINI_DRAWING_SIZE = 60; 
+  // Hauteur de ligne définie ici pour calculer le ratio
+  const ROW_HEIGHT = 105;
+  const DRAWING_HEIGHT = ROW_HEIGHT - 20; // Marge interne
+  const DRAWING_WIDTH = DRAWING_HEIGHT * (3/4); // Ratio 3:4
 
   useFocusEffect(
     useCallback(() => {
@@ -146,12 +148,13 @@ export default function FriendsPage() {
         
         <View style={styles.rightContainer}>
             {item.todaysDrawing ? (
-                <View style={styles.miniDrawingContainer}>
+                <View style={[styles.miniDrawingContainer, { width: DRAWING_WIDTH, height: DRAWING_HEIGHT }]}>
                     <DrawingViewer 
                         imageUri={item.todaysDrawing.cloudImageUrl}
                         canvasData={item.todaysDrawing.canvasData}
-                        viewerSize={MINI_DRAWING_SIZE}
-                        transparentMode={true} // MODIFIÉ : true pour cacher la photo (nuage)
+                        viewerSize={DRAWING_WIDTH}
+                        viewerHeight={DRAWING_HEIGHT}
+                        transparentMode={true} // Fond transparent (pas de nuage)
                         animated={false}
                         startVisible={true}
                     />
@@ -212,10 +215,10 @@ const styles = StyleSheet.create({
       flexDirection: 'row', 
       alignItems: 'center', 
       justifyContent: 'space-between', 
-      paddingVertical: 15, 
+      paddingVertical: 10, // Réduit le padding vertical car la hauteur est fixée
       borderBottomWidth: 1, 
       borderBottomColor: '#F5F5F5',
-      height: 105 // MODIFIÉ : Hauteur augmentée de ~30% (80 -> 105)
+      height: 105 
   },
   friendInfoContainer: { 
       flexDirection: 'row', 
@@ -237,13 +240,11 @@ const styles = StyleSheet.create({
       minWidth: 60
   },
   miniDrawingContainer: {
-      width: 60,
-      height: 80, 
-      borderRadius: 8,
+      // Dimensions gérées dynamiquement
+      borderRadius: 4,
       overflow: 'hidden',
-      backgroundColor: '#EEE',
-      borderWidth: 1,
-      borderColor: '#F0F0F0'
+      // backgroundColor: 'transparent', // Par défaut
+      // Pas de bordure
   },
   unfollowBtn: { 
       padding: 10,
