@@ -212,7 +212,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
         <View style={styles.container}>
-            {/* HEADER MODALE */}
+            {/* HEADER MODALE PRINCIPALE */}
             <View style={styles.header}>
                 <TouchableOpacity onPress={onClose} style={styles.closeBtn} hitSlop={15}>
                     <X color="#000" size={28} />
@@ -278,35 +278,41 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                 />
             )}
 
-            {/* MODALE D'AGRANDISSEMENT (Overlay interne, style Galerie) */}
-            <Modal visible={!!selectedDrawing} animationType="fade" transparent={true} onRequestClose={closeDrawing}>
+            {/* MODALE D'AGRANDISSEMENT (Style PageSheet comme demandé) */}
+            <Modal visible={!!selectedDrawing} animationType="slide" presentationStyle="pageSheet" onRequestClose={closeDrawing}>
                 {selectedDrawing && (
-                    <View style={styles.fullScreenOverlay}>
-                        <TouchableOpacity style={styles.closeOverlayBtn} onPress={closeDrawing}>
-                            <X color="#000" size={30} />
-                        </TouchableOpacity>
+                    <View style={styles.container}>
+                        {/* Header standard pour fermer */}
+                        <View style={styles.header}>
+                            <TouchableOpacity onPress={closeDrawing} style={styles.closeBtn} hitSlop={15}>
+                                <X color="#000" size={28} />
+                            </TouchableOpacity>
+                        </View>
 
-                        <Pressable 
-                            onPressIn={() => setIsHolding(true)} 
-                            onPressOut={() => setIsHolding(false)}
-                            style={{ width: screenWidth, aspectRatio: 3/4, backgroundColor: '#F0F0F0' }}
-                        >
-                            <Image 
-                                source={{ uri: selectedDrawing.cloud_image_url }}
-                                style={[StyleSheet.absoluteFill, { opacity: 1 }]}
-                                resizeMode="cover"
-                            />
-                            <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
-                                <DrawingViewer
-                                    imageUri={selectedDrawing.cloud_image_url} canvasData={selectedDrawing.canvas_data}
-                                    viewerSize={screenWidth} 
-                                    transparentMode={true} 
-                                    startVisible={false} 
-                                    animated={true}
+                        {/* Contenu Centré */}
+                        <View style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}>
+                            <Pressable 
+                                onPressIn={() => setIsHolding(true)} 
+                                onPressOut={() => setIsHolding(false)}
+                                style={{ width: screenWidth, aspectRatio: 3/4, backgroundColor: '#F0F0F0' }}
+                            >
+                                <Image 
+                                    source={{ uri: selectedDrawing.cloud_image_url }}
+                                    style={[StyleSheet.absoluteFill, { opacity: 1 }]}
+                                    resizeMode="cover"
                                 />
-                            </View>
-                            <Text style={styles.hintText}>Maintenir pour voir l'original</Text>
-                        </Pressable>
+                                <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
+                                    <DrawingViewer
+                                        imageUri={selectedDrawing.cloud_image_url} canvasData={selectedDrawing.canvas_data}
+                                        viewerSize={screenWidth} 
+                                        transparentMode={true} 
+                                        startVisible={false} 
+                                        animated={true}
+                                    />
+                                </View>
+                                <Text style={styles.hintText}>Maintenir pour voir l'original</Text>
+                            </Pressable>
+                        </View>
 
                          {/* Footer complet style Galerie */}
                          <View style={styles.overlayFooter}>
@@ -418,22 +424,6 @@ const styles = StyleSheet.create({
   emptyState: { alignItems: 'center', marginTop: 50, gap: 10 },
   emptyText: { color: '#999', fontSize: 16 },
 
-  // Styles Overlay Agrandissement (Identiques à Gallery)
-  fullScreenOverlay: { 
-      flex: 1, 
-      backgroundColor: '#FFFFFF', 
-      justifyContent: 'center', // Le footer est en bas grâce au flux, mais ici on centre le contenu principal
-      paddingTop: 60 // Espace pour le bouton fermer
-  },
-  closeOverlayBtn: {
-      position: 'absolute',
-      top: 50,
-      right: 20,
-      zIndex: 10,
-      padding: 10,
-      backgroundColor: '#F0F0F0',
-      borderRadius: 25,
-  },
   hintText: { position: 'absolute', bottom: 10, alignSelf: 'center', color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width:1, height:1}, textShadowRadius: 1 },
   
   // Footer Style Galerie
