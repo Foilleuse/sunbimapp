@@ -24,6 +24,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex }: { drawing: 
     return (
         <View style={styles.cardContainer}>
             
+            {/* ZONE DESSIN (Transparent car l'image nette est en fond fixe) */}
             <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent' }}>
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
@@ -130,17 +131,31 @@ export default function FeedPage() {
 
     return (
         <View style={styles.container}>
-            {/* FOND D'ÉCRAN FLOU (Plein écran) */}
+            
+            {/* 1. IMAGE DE FOND FLOU (Ambiance Plein Écran) */}
             {backgroundUrl && (
                 <Image 
                     source={{uri: backgroundUrl}} 
                     style={[
-                        StyleSheet.absoluteFill, // Prend tout l'espace derrière
+                        StyleSheet.absoluteFill, 
                         { width: screenWidth, height: screenHeight }
                     ]} 
                     resizeMode="cover"
-                    blurRadius={40} // Flou Gaussien fort pour faire ressortir le contenu
+                    blurRadius={40} // Le flou est ici
                 />
+            )}
+
+            {/* 2. IMAGE DU JOUR NETTE (Support du dessin 3:4) */}
+            {/* Elle est positionnée exactement là où le dessin va se superposer */}
+            {backgroundUrl && (
+                <View style={{ position: 'absolute', top: 0, width: screenWidth, aspectRatio: 3/4, zIndex: -1 }}>
+                   <Image 
+                        source={{uri: backgroundUrl}} 
+                        style={{width: '100%', height: '100%'}} 
+                        resizeMode="cover" 
+                        // Pas de blurRadius ici -> Nette
+                    />
+                </View>
             )}
 
             <SunbimHeader showCloseButton={false} />
@@ -173,14 +188,12 @@ export default function FeedPage() {
 }
 
 const styles = StyleSheet.create({
-    // Fond noir par défaut (visible avant chargement de l'image)
-    container: { flex: 1, backgroundColor: '#000' },
+    container: { flex: 1, backgroundColor: '#000' }, // Fond noir en fallback
     
-    // Fond semi-transparent pour le chargement
     loadingContainer: { flex: 1, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
     
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    text: { color: '#FFF', fontSize: 16 }, // Texte blanc sur fond sombre
+    text: { color: '#FFF', fontSize: 16 },
     
     cardContainer: { flex: 1 },
     cardInfo: {
