@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Modal, TextInput, TouchableOpacity, ActivityInd
 import { X, Save, LogOut, Trash2, Camera, Lock, User } from 'lucide-react-native';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
+import { useRouter } from 'expo-router'; // Import du router pour la redirection
 
 interface SettingsModalProps {
   visible: boolean;
@@ -11,6 +12,7 @@ interface SettingsModalProps {
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }) => {
   const { user, profile, signOut } = useAuth();
+  const router = useRouter(); // Initialisation du router
   
   const [displayName, setDisplayName] = useState('');
   const [bio, setBio] = useState('');
@@ -23,7 +25,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
     if (visible && profile) {
         setDisplayName(profile.display_name || '');
         setBio(profile.bio || '');
-        setPassword(''); // On ne pré-remplit pas le mot de passe
+        setPassword(''); 
     }
   }, [visible, profile]);
 
@@ -39,7 +41,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
         };
 
         const { error } = await supabase
-            .from('users') // ou 'profiles' selon votre table
+            .from('users') 
             .upsert(updates);
 
         if (error) throw error;
@@ -70,7 +72,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
   const handleSignOut = async () => {
       try {
           await signOut();
-          onClose();
+          onClose(); // Ferme la modale
+          router.replace('/'); // Redirection vers l'index (Page d'accueil/Dessin)
       } catch (error) {
           console.error(error);
       }
@@ -86,16 +89,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
                   text: "Supprimer", 
                   style: "destructive", 
                   onPress: async () => {
-                      // Note: La suppression nécessite souvent une Edge Function ou un paramétrage spécifique côté Supabase (RPC)
-                      // car le client ne peut pas toujours supprimer son propre user auth.
-                      // Ici, on simule la demande.
                       try {
-                          // Appel RPC ou suppression de la table public.users si cascade
+                          // Note: Nécessite une fonction RPC 'delete_user' configurée côté Supabase
+                          // ou une logique backend pour supprimer l'user auth.
                           const { error } = await supabase.rpc('delete_user'); 
                           if (error) throw error;
+                          
                           await signOut();
+                          onClose();
+                          router.replace('/');
                       } catch (e: any) {
-                          Alert.alert("Erreur", "Impossible de supprimer le compte. Contactez le support ou vérifiez vos droits.");
+                          Alert.alert("Erreur", "Impossible de supprimer le compte. Contactez le support.");
                           console.error(e);
                       }
                   }

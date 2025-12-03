@@ -6,34 +6,29 @@ import { useAuth } from '../../src/contexts/AuthContext';
 import { User, Mail, Lock, X, Heart, MessageCircle, AlertCircle, Settings } from 'lucide-react-native'; 
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { CommentsModal } from '../../src/components/CommentsModal';
-import { SettingsModal } from '../../src/components/SettingsModal'; // Import de la nouvelle modale
-// Import du Header global
+import { SettingsModal } from '../../src/components/SettingsModal'; 
 import { SunbimHeader } from '../../src/components/SunbimHeader';
 
 export default function ProfilePage() {
   const router = useRouter();
   const { user, profile } = useAuth();
   
-  // --- ETATS ---
   const [historyItems, setHistoryItems] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
   
   const [selectedDrawing, setSelectedDrawing] = useState<any | null>(null);
   const [isHolding, setIsHolding] = useState(false);
   const [showComments, setShowComments] = useState(false);
-  const [showSettings, setShowSettings] = useState(false); // État pour la modale paramètres
+  const [showSettings, setShowSettings] = useState(false); 
   
-  // États d'interaction pour le dessin sélectionné
   const [isLiked, setIsLiked] = useState(false);
   const [likesCount, setLikesCount] = useState(0);
 
-  // Auth
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
   const [authActionLoading, setAuthActionLoading] = useState(false);
 
-  // --- CONFIGURATION GRILLE ---
   const { width: screenWidth } = Dimensions.get('window');
   const SPACING = 1; 
   const NUM_COLS = 2; 
@@ -43,13 +38,10 @@ export default function ProfilePage() {
     if (user) fetchHistory();
   }, [user]);
 
-  // Initialisation des stats quand un dessin est ouvert
   useEffect(() => {
     if (selectedDrawing && user) {
-        // Init du compteur (si disponible via la jointure, sinon 0)
         setLikesCount(selectedDrawing.likes?.[0]?.count || selectedDrawing.likes_count || 0);
         
-        // Vérifier si l'utilisateur a liké ce dessin
         const checkLikeStatus = async () => {
             const { count } = await supabase
                 .from('likes')
@@ -75,7 +67,6 @@ export default function ProfilePage() {
 
         if (cloudsError) throw cloudsError;
 
-        // MODIFICATION : Ajout de likes(count) et comments(count)
         const { data: userDrawings, error: drawingsError } = await supabase
             .from('drawings')
             .select('*, likes(count), comments(count)')
@@ -164,10 +155,8 @@ export default function ProfilePage() {
     }
   };
 
-  // Récupération du nombre de commentaires (avec fallback robuste)
   const commentsCount = selectedDrawing?.comments?.[0]?.count || selectedDrawing?.comments_count || 0;
 
-  // --- RENDER ITEM ---
   const renderItem = ({ item }: { item: any }) => {
       if (item.type === 'missed') {
           return (
@@ -210,11 +199,9 @@ export default function ProfilePage() {
       );
   };
 
-  // --- NON CONNECTÉ ---
   if (!user) {
       return (
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
-              {/* Ajout du Header même si pas connecté pour la cohérence */}
               <SunbimHeader showCloseButton={false} />
               
               <View style={styles.authContainer}>
@@ -241,14 +228,10 @@ export default function ProfilePage() {
       );
   }
 
-  // --- CONNECTÉ ---
   return (
     <View style={styles.container}>
-      
-      {/* AJOUT DU HEADER GLOBAL */}
       <SunbimHeader showCloseButton={false} />
 
-      {/* BLOC INFO PROFIL */}
       <View style={styles.profileBlock}>
           <View style={styles.profileInfoContainer}>
               {profile?.avatar_url ? (
@@ -265,17 +248,16 @@ export default function ProfilePage() {
                       {profile?.bio || "Aucune bio pour le moment."}
                   </Text>
               </View>
-          </View>
 
-          {/* BARRE DE BOUTONS : Uniquement Paramètres */}
-          <View style={styles.profileActions}>
-              <TouchableOpacity 
-                style={[styles.actionButton, styles.primaryBtn]} // Bouton large principal
-                onPress={() => setShowSettings(true)}
-              >
-                  <Settings color="#000" size={18} />
-                  <Text style={styles.actionButtonText}>Paramètres</Text>
-              </TouchableOpacity>
+              {/* BOUTON PARAMÈTRES (LOGO SEULEMENT) */}
+              <View style={{ marginLeft: 10 }}>
+                 <TouchableOpacity 
+                    style={styles.iconOnlyBtn} 
+                    onPress={() => setShowSettings(true)}
+                  >
+                      <Settings color="#000" size={20} />
+                  </TouchableOpacity>
+              </View>
           </View>
       </View>
 
@@ -300,7 +282,6 @@ export default function ProfilePage() {
           )}
       </View>
 
-      {/* MODALE DÉTAIL DESSIN */}
       <Modal visible={!!selectedDrawing} animationType="slide" presentationStyle="pageSheet" onRequestClose={closeDrawing}>
           {selectedDrawing && (
               <View style={styles.modalContainer}>
@@ -315,7 +296,6 @@ export default function ProfilePage() {
                     onPressOut={() => setIsHolding(false)}
                     style={{ width: screenWidth, aspectRatio: 3/4, backgroundColor: '#F0F0F0' }}
                   >
-                      {/* Ajout de l'image de fond pour le mode transparent (cohérence avec feed/gallery) */}
                       <Image 
                             source={{ uri: selectedDrawing.cloud_image_url }}
                             style={[StyleSheet.absoluteFill, { opacity: 1 }]}
@@ -326,7 +306,7 @@ export default function ProfilePage() {
                             imageUri={selectedDrawing.cloud_image_url}
                             canvasData={selectedDrawing.canvas_data}
                             viewerSize={screenWidth}
-                            transparentMode={true} // Transparent pour voir l'image native dessous
+                            transparentMode={true}
                             animated={true}
                             startVisible={false}
                         />
@@ -341,13 +321,11 @@ export default function ProfilePage() {
                       </View>
                       
                       <View style={styles.statsRowSmall}>
-                          {/* Gestion du Like */}
                           <TouchableOpacity style={{flexDirection: 'row', alignItems: 'center', gap: 4}} onPress={handleLike}>
                               <Heart color={isLiked ? "#FF3B30" : "#000"} fill={isLiked ? "#FF3B30" : "transparent"} size={28} />
                               <Text style={{fontWeight: '600', fontSize: 16, color: '#000'}}>{likesCount}</Text>
                           </TouchableOpacity>
 
-                          {/* Gestion du Commentaire */}
                           <TouchableOpacity style={{flexDirection: 'row', alignItems: 'center', gap: 4}} onPress={() => setShowComments(true)}>
                               <MessageCircle color="#000" size={28} />
                               <Text style={{fontWeight: '600', fontSize: 16, color: '#000'}}>{commentsCount}</Text>
@@ -364,7 +342,6 @@ export default function ProfilePage() {
           )}
       </Modal>
 
-      {/* MODALE PARAMÈTRES */}
       <SettingsModal 
         visible={showSettings} 
         onClose={() => setShowSettings(false)} 
@@ -415,37 +392,13 @@ const styles = StyleSheet.create({
       lineHeight: 20
   },
 
-  profileActions: {
-      flexDirection: 'row',
-      gap: 10,
-  },
-  actionButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: '#F5F5F5',
-      paddingVertical: 10,
-      borderRadius: 10,
-      gap: 6
-  },
-  primaryBtn: {
-      flex: 1, 
-  },
   iconOnlyBtn: {
-      width: 45, 
-      height: 45, 
+      width: 44, 
+      height: 44, 
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: '#F5F5F5',
-      borderRadius: 10,
-  },
-  actionButtonText: {
-      fontSize: 14,
-      fontWeight: '600',
-      color: '#000'
-  },
-  logoutButton: {
-      backgroundColor: '#FFF0F0',
+      borderRadius: 12,
   },
   
   historySection: { flex: 1, paddingTop: 15 },
