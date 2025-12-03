@@ -7,17 +7,16 @@ import { useFocusEffect } from 'expo-router';
 import { Search, Heart, Cloud, CloudOff, XCircle, User, MessageCircle, X } from 'lucide-react-native';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { CommentsModal } from '../../src/components/CommentsModal';
-import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer'; // Import
+import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer'; // Import corrigé
 
 const GalleryItem = memo(({ item, itemSize, showClouds, onPress }: any) => {
     return (
         <TouchableOpacity 
             activeOpacity={0.9} onPress={() => onPress(item)}
-            // FORMAT 3:4
             style={{ width: itemSize, aspectRatio: 3/4, marginBottom: 1, backgroundColor: '#F9F9F9', overflow: 'hidden' }}
         >
             <DrawingViewer
-                imageUri={item.cloud_image_url} // Le viewer optimise maintenant automatiquement
+                imageUri={item.cloud_image_url} 
                 canvasData={item.canvas_data} 
                 viewerSize={itemSize}
                 transparentMode={!showClouds} 
@@ -39,11 +38,9 @@ export default function GalleryPage() {
     const [onlyLiked, setOnlyLiked] = useState(false);
     const [searchText, setSearchText] = useState('');
     
-    // États pour le dessin sélectionné en plein écran
     const [selectedDrawing, setSelectedDrawing] = useState<any | null>(null);
     const [isHolding, setIsHolding] = useState(false);
     
-    // États pour les interactions (Likes/Commentaires) sur le dessin sélectionné
     const [isLiked, setIsLiked] = useState(false);
     const [likesCount, setLikesCount] = useState(0);
     const [showComments, setShowComments] = useState(false);
@@ -63,7 +60,6 @@ export default function GalleryPage() {
                 return;
             }
 
-            // --- FILTRAGE LIKES ---
             let likedIds: string[] = [];
             if (onlyLiked && user) {
                 const { data: userLikes } = await supabase
@@ -172,7 +168,6 @@ export default function GalleryPage() {
     const author = selectedDrawing?.users;
     const commentsCount = selectedDrawing?.comments?.[0]?.count || 0;
 
-    // Optimisation image plein écran
     const optimizedFullImage = selectedDrawing ? getOptimizedImageUrl(selectedDrawing.cloud_image_url, screenWidth) : null;
     const optimizedAvatar = author ? getOptimizedImageUrl(author.avatar_url, 50) : null;
 
@@ -219,7 +214,6 @@ export default function GalleryPage() {
                     )}
                 </View>
 
-                {/* MODALE NATIVE (Type Profil) */}
                 <Modal visible={!!selectedDrawing} animationType="slide" presentationStyle="pageSheet" onRequestClose={closeViewer}>
                     {selectedDrawing && (
                         <View style={styles.modalContainer}>
@@ -247,7 +241,6 @@ export default function GalleryPage() {
                                 <Text style={styles.hintText}>Maintenir pour voir l'original</Text>
                             </Pressable>
 
-                            {/* Footer conservant les infos spécifiques Galerie */}
                             <View style={styles.modalFooter}>
                                 <View style={styles.userInfoRow}>
                                     <View style={styles.profilePlaceholder}>

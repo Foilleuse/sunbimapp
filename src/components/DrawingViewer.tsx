@@ -2,7 +2,7 @@ import React, { useMemo, useEffect, useState } from 'react';
 import { View, StyleSheet, ActivityIndicator, Dimensions } from 'react-native';
 import { Canvas, Path, Image as SkiaImage, useImage, Group, Skia, SkPath } from '@shopify/react-native-skia';
 import { useSharedValue, withTiming, Easing } from 'react-native-reanimated';
-import { getOptimizedImageUrl } from '../utils/imageOptimizer'; // Import de l'utilitaire
+import { getOptimizedImageUrl } from '../utils/imageOptimizer'; // Import corrigé
 
 interface DrawingViewerProps {
   imageUri: string;
@@ -34,8 +34,6 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
   autoCenter = false
 }) => {
   
-  // OPTIMISATION : On charge une version redimensionnée de l'image
-  // La taille demandée correspond à la taille d'affichage (viewerSize)
   const optimizedUri = useMemo(() => {
       return getOptimizedImageUrl(imageUri, viewerSize) || imageUri;
   }, [imageUri, viewerSize]);
@@ -46,7 +44,6 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
   const progress = useSharedValue(animated ? 0 : (startVisible ? 1 : 0));
   const opacity = useSharedValue(animated ? 0 : 1);
 
-  // --- DIMENSIONS DE REFERENCE ---
   const SCREEN_WIDTH = Dimensions.get('window').width;
   
   const REF_PAPER_W = SCREEN_WIDTH;
@@ -60,10 +57,8 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
         progress.value = 0;
         opacity.value = 0;
 
-        // 1. Fade In long (1000ms)
         opacity.value = withTiming(1, { duration: 1000 });
 
-        // 2. Animation du tracé (2200ms)
         progress.value = withTiming(1, { 
             duration: 2200, 
             easing: Easing.linear 
@@ -92,7 +87,6 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
   const transforms = useMemo(() => {
       if (!image) return [];
       
-      // 1. Zoom Auto
       if (autoCenter && skiaPaths.length > 0) {
           const combinedPath = Skia.Path.Make();
           skiaPaths.forEach((p: any) => combinedPath.addPath(p.skPath));
@@ -109,7 +103,6 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
           }
       }
 
-      // 2. Mode STANDARD
       const scale = TARGET_W / REF_PAPER_W;
 
       const scaledW = REF_PAPER_W * scale;
@@ -124,7 +117,6 @@ const DrawingViewerContent: React.FC<DrawingViewerProps> = ({
 
   if (!image) {
     if (transparentMode) return <View style={{width: TARGET_W, height: TARGET_H}} />;
-    // On peut afficher un petit loader discret ou rien
     return <View style={[styles.container, {width: TARGET_W, height: TARGET_H}]} />;
   }
 

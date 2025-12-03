@@ -7,7 +7,7 @@ import { User, UserMinus, UserCheck } from 'lucide-react-native';
 import { useFocusEffect } from 'expo-router';
 import { UserProfileModal } from '../../src/components/UserProfileModal'; 
 import { DrawingViewer } from '../../src/components/DrawingViewer'; 
-import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer'; // Import
+import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer'; // Import corrigé
 
 export default function FriendsPage() {
   const { user } = useAuth();
@@ -154,7 +154,7 @@ export default function FriendsPage() {
                 {item.todaysDrawing ? (
                     <View style={[styles.miniDrawingContainer, { width: DRAWING_WIDTH, height: DRAWING_HEIGHT }]}>
                         <DrawingViewer 
-                            imageUri={item.todaysDrawing.cloudImageUrl} // Le viewer optimise
+                            imageUri={item.todaysDrawing.cloudImageUrl}
                             canvasData={item.todaysDrawing.canvasData}
                             viewerSize={DRAWING_WIDTH}
                             viewerHeight={DRAWING_HEIGHT}

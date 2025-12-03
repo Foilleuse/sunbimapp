@@ -8,7 +8,7 @@ import { useAuth } from '../../src/contexts/AuthContext';
 import { CommentsModal } from '../../src/components/CommentsModal';
 import { UserProfileModal } from '../../src/components/UserProfileModal'; 
 import { useRouter } from 'expo-router';
-import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer'; // Import
+import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer'; // Chemin corrigé (utils)
 
 let PagerView: any;
 if (Platform.OS !== 'web') {
@@ -98,7 +98,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
                     {shouldRenderDrawing && (
                         <DrawingViewer
                             key={`${drawing.id}-${isActive}`} 
-                            imageUri={drawing.cloud_image_url} // Le viewer optimise lui-même
+                            imageUri={drawing.cloud_image_url} 
                             canvasData={drawing.canvas_data}
                             viewerSize={canvasSize}
                             transparentMode={true} 
@@ -201,7 +201,6 @@ export default function FeedPage() {
             const { data: cloudData } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();
             
             if (cloudData) {
-                // Optimisation de l'image de fond (grande taille)
                 const optimizedBg = getOptimizedImageUrl(cloudData.image_url, screenWidth, 90);
                 setBackgroundCloud(optimizedBg || cloudData.image_url);
 
