@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Modal, Image, TouchableOpacity, FlatList, ActivityIndicator, Dimensions, Alert, Pressable } from 'react-native';
-import { X, User, UserPlus, UserCheck, Heart, MessageCircle } from 'lucide-react-native'; // Ajout icônes manquantes si besoin
+import { X, User, UserPlus, UserCheck } from 'lucide-react-native'; // Suppression de MessageCircle
 import { supabase } from '../lib/supabaseClient';
 import { DrawingViewer } from './DrawingViewer';
 import { useAuth } from '../contexts/AuthContext';
-import { CommentsModal } from './CommentsModal'; // Pour pouvoir voir les commentaires du dessin agrandi si on veut
 
 interface UserProfileModalProps {
   visible: boolean;
@@ -26,7 +25,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
   // États pour l'agrandissement d'image
   const [selectedDrawing, setSelectedDrawing] = useState<any | null>(null);
   const [isHolding, setIsHolding] = useState(false);
-  const [showComments, setShowComments] = useState(false); // Optionnel : si on veut commenter le dessin agrandi
 
   // Configuration Grille
   const { width: screenWidth } = Dimensions.get('window');
@@ -44,7 +42,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
         setLoading(true);
         setDrawings([]);
         setIsFollowing(false);
-        setSelectedDrawing(null); // Reset sélection
+        setSelectedDrawing(null); 
     }
   }, [visible, userId]);
 
@@ -106,10 +104,9 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
             setUserProfile(profileData);
         }
 
-        // On récupère aussi les likes/comments count pour l'affichage agrandi
         const { data: drawingsData, error: drawingsError } = await supabase
             .from('drawings')
-            .select('*, likes(count), comments(count)')
+            .select('*')
             .eq('user_id', userId)
             .order('created_at', { ascending: false });
 
@@ -126,7 +123,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
   const openDrawing = (drawing: any) => setSelectedDrawing(drawing);
   const closeDrawing = () => {
       setSelectedDrawing(null);
-      setShowComments(false);
   };
 
   const renderDrawingItem = ({ item }: { item: any }) => (
@@ -173,9 +169,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                         </Text>
                     </View>
 
-                    {/* ACTIONS (Maintenant à côté du texte, ou en colonne selon la place) */}
-                    {/* Pour garder le layout demandé : Avatar gauche, Texte milieu, Actions droite (si possible) ou en dessous */}
-                    {/* Le layout actuel 'profileInfoContainer' est 'row'. On peut ajouter les actions à la fin de cette row */}
+                    {/* ACTIONS : Bouton Follow Carré uniquement */}
                     {currentUser && currentUser.id !== userId && (
                         <View style={{ marginLeft: 10 }}>
                              <TouchableOpacity 
@@ -184,7 +178,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                                 disabled={followLoading}
                             >
                                 {followLoading ? (
-                                    <ActivityIndicator color={isFollowing ? "#000" : "#000"} size="small" />
+                                    <ActivityIndicator color="#000" size="small" />
                                 ) : (
                                     isFollowing ? <UserCheck color="#000" size={20} /> : <UserPlus color="#000" size={20} />
                                 )}
@@ -216,7 +210,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                 />
             )}
 
-            {/* MODALE D'AGRANDISSEMENT (Interne) */}
+            {/* MODALE D'AGRANDISSEMENT */}
             <Modal visible={!!selectedDrawing} animationType="fade" transparent={true} onRequestClose={closeDrawing}>
                 {selectedDrawing && (
                     <View style={styles.fullScreenOverlay}>
@@ -246,7 +240,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                             <Text style={styles.hintText}>Maintenir pour voir l'original</Text>
                         </Pressable>
 
-                         {/* Footer minimaliste pour le dessin agrandi */}
                          <View style={styles.overlayFooter}>
                             <Text style={styles.overlayLabel}>{selectedDrawing.label || "Sans titre"}</Text>
                             <Text style={styles.overlayDate}>{new Date(selectedDrawing.created_at).toLocaleDateString()}</Text>
@@ -308,7 +301,7 @@ const styles = StyleSheet.create({
       height: 44, 
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: '#EEE', // Gris clair par défaut (Non suivi)
+      backgroundColor: '#EEE', // Gris clair par défaut
       borderRadius: 12,
   },
   followingBtn: {
@@ -324,7 +317,7 @@ const styles = StyleSheet.create({
   // Styles Overlay Agrandissement
   fullScreenOverlay: { 
       flex: 1, 
-      backgroundColor: 'rgba(255,255,255,0.98)', 
+      backgroundColor: '#FFFFFF', // Fond blanc opaque comme demandé
       justifyContent: 'center', 
       alignItems: 'center' 
   },
@@ -334,9 +327,8 @@ const styles = StyleSheet.create({
       right: 20,
       zIndex: 10,
       padding: 10,
-      backgroundColor: '#FFF',
+      backgroundColor: '#F0F0F0', // Cohérence avec les autres boutons de fermeture
       borderRadius: 25,
-      shadowColor: "#000", shadowOffset: {width:0, height:2}, shadowOpacity:0.1, shadowRadius:4
   },
   hintText: { position: 'absolute', bottom: 10, alignSelf: 'center', color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width:1, height:1}, textShadowRadius: 1 },
   overlayFooter: {
