@@ -92,8 +92,8 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
     return (
         <View style={styles.cardContainer}>
             
-            {/* ZONE DE DESSIN TRANSPARENTE */}
-            <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent' }}>
+            {/* ZONE DE DESSIN - Doit matcher la taille affichée de l'image de fond */}
+            <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent', overflow: 'hidden' }}>
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
                         <DrawingViewer
@@ -101,10 +101,11 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
                             imageUri={drawing.cloud_image_url} 
                             canvasData={drawing.canvas_data}
                             viewerSize={canvasSize}
-                            // IMPORTANT : Transparent pour voir le nuage statique derrière
+                            // Important : transparentMode=true car le fond est géré par ImageBackground
                             transparentMode={true} 
                             animated={isActive} 
                             startVisible={false} 
+                            // autoCenter={true} // Peut aider si le dessin est décalé, à tester
                         />
                     )}
                 </View>
@@ -194,6 +195,7 @@ export default function FeedPage() {
     const [selectedUser, setSelectedUser] = useState<any>(null);
     const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
 
+    // Image placeholder
     const placeholderImage = require('../../assets/cloud-placeholder.jpg'); 
 
     useEffect(() => { fetchTodaysFeed(); }, []);
@@ -204,7 +206,7 @@ export default function FeedPage() {
             const { data: cloudData } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();
             
             if (cloudData) {
-                // On récupère l'image du nuage pour le fond statique
+                // Optimisation de l'image de fond
                 const optimizedBg = getOptimizedImageUrl(cloudData.image_url, screenWidth);
                 setBackgroundCloud(optimizedBg || cloudData.image_url);
 
@@ -234,16 +236,18 @@ export default function FeedPage() {
     if (loading) return <View style={styles.loadingContainer}><ActivityIndicator color="#000" size="large" /></View>;
 
     return (
+        // IMAGE DE FOND STATIQUE GLOBALE
+        // resizeMode="cover" assure que l'image remplit tout l'écran
+        // Le viewer dessinera par dessus
         <ImageBackground 
             source={backgroundCloud ? { uri: backgroundCloud } : placeholderImage}
             style={styles.background}
-            resizeMode="cover"
+            resizeMode="cover" // Important pour que l'image remplisse l'écran
         >
             <View style={styles.container}>
                 <SunbimHeader showCloseButton={false} />
                 
                 <View style={{ flex: 1, position: 'relative' }}>
-                    
                     {drawings.length > 0 ? (
                         <PagerView 
                             style={{ flex: 1 }} 
@@ -284,19 +288,22 @@ export default function FeedPage() {
 const styles = StyleSheet.create({
     background: {
         flex: 1,
+        backgroundColor: '#000', // Couleur de fallback
     },
     container: { flex: 1, backgroundColor: 'transparent' }, 
     loadingContainer: { flex: 1, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    text: { color: '#666', fontSize: 16 },
+    text: { color: '#FFF', fontSize: 16 }, // Texte blanc pour contraste sur fond image
     cardContainer: { flex: 1 },
     cardInfo: {
         flex: 1, 
-        backgroundColor: '#FFFFFF', 
+        backgroundColor: '#FFFFFF', // Carte d'info sur fond blanc
         marginTop: -40, 
         paddingHorizontal: 20, 
         paddingTop: 25,
         shadowColor: "#000", shadowOffset: {width: 0, height: -4}, shadowOpacity: 0.05, shadowRadius: 4, elevation: 5,
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
     },
     headerInfo: { marginBottom: 15 },
     titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
