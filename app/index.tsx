@@ -250,6 +250,7 @@ export default function DrawPage() {
                 strokeWidth={strokeWidth} onStrokeWidthChange={setStrokeWidth}
                 isEraserMode={isEraserMode} toggleEraser={toggleEraser}
                 onShare={handleSharePress}
+                isAuthenticated={!!user} // Passage de l'état connecté/déconnecté
              />
           </View>
       )}

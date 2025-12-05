@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
-import { Eraser, Undo2, Redo2, Share2 } from 'lucide-react-native';
+import { Eraser, Undo2, Redo2, Share2, LogIn } from 'lucide-react-native';
 
 interface DrawingControlsProps {
   onUndo: () => void;
@@ -11,8 +11,9 @@ interface DrawingControlsProps {
   onStrokeWidthChange: (width: number) => void;
   isEraserMode: boolean;
   toggleEraser: () => void;
-  onShare: () => void; // <--- Vérifie que ceci est bien là
+  onShare: () => void;
   onClear?: () => void;
+  isAuthenticated: boolean; // Nouvelle prop pour l'état de connexion
 }
 
 const COLORS = ['#FFFFFF', '#808080', '#000000'];
@@ -22,12 +23,12 @@ export const DrawingControls: React.FC<DrawingControlsProps> = ({
   strokeColor, onColorChange,
   strokeWidth, onStrokeWidthChange,
   isEraserMode, toggleEraser,
-  onShare // <--- Et que ceci est bien récupéré ici
+  onShare,
+  isAuthenticated // Récupération de la prop
 }) => {
   
   const [showColorMenu, setShowColorMenu] = useState(false);
 
-  // MODIFICATION ICI : Épaisseur max réduite à 20
   const handleSliderTouch = (evt: any) => {
     const { locationX } = evt.nativeEvent;
     const width = 100; 
@@ -88,7 +89,7 @@ export const DrawingControls: React.FC<DrawingControlsProps> = ({
 
         <View style={styles.separator} />
 
-        {/* DROITE : Slider & Share */}
+        {/* DROITE : Slider & Share/Login */}
         <View style={styles.group}>
             <View 
                 style={styles.sliderContainer}
@@ -104,20 +105,23 @@ export const DrawingControls: React.FC<DrawingControlsProps> = ({
                         { 
                             width: strokeWidth, height: strokeWidth, borderRadius: strokeWidth,
                             backgroundColor: isEraserMode ? '#000' : strokeColor,
-                            // MODIFICATION ICI : Ajustement du calcul pour le max 20
                             left: `${(strokeWidth / 20) * 80}%`
                         }
                     ]} 
                 />
             </View>
 
-            {/* C'EST ICI LE PROBLÈME POTENTIEL */}
             <TouchableOpacity 
-                onPress={onShare}  // <--- Vérifie que onPress appelle bien onShare
+                onPress={onShare}
                 style={styles.iconBtn}
-                hitSlop={10} // Zone de clic agrandie
+                hitSlop={10}
             >
-                <Share2 color="#000" size={22} />
+                {/* Condition d'affichage de l'icône */}
+                {isAuthenticated ? (
+                    <Share2 color="#000" size={22} />
+                ) : (
+                    <LogIn color="#000" size={22} />
+                )}
             </TouchableOpacity>
         </View>
 
