@@ -5,9 +5,10 @@ import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
 import { useAuth } from '../../src/contexts/AuthContext';
-import { CommentsModal } from '../../src/components/CommentsModal'; // Import de la modale
-import { UserProfileModal } from '../../src/components/UserProfileModal'; // Import de la modale profil
-import { useRouter } from 'expo-router'; // Import du router
+import { CommentsModal } from '../../src/components/CommentsModal';
+import { UserProfileModal } from '../../src/components/UserProfileModal';
+import { useRouter } from 'expo-router';
+import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer';
 
 let PagerView: any;
 if (Platform.OS !== 'web') {
@@ -21,15 +22,20 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
 
     const [isLiked, setIsLiked] = useState(false);
     const [likesCount, setLikesCount] = useState(initialLikesCount);
-    const [showComments, setShowComments] = useState(false); 
+    const [showComments, setShowComments] = useState(false);
     
-    const [isHolding, setIsHolding] = useState(false); 
+    const [isHolding, setIsHolding] = useState(false);
     
     const commentsCount = drawing.comments?.[0]?.count || 0;
     
     const author = drawing.users;
-    const isActive = index === currentIndex; 
+    const isActive = index === currentIndex;
     const shouldRenderDrawing = isActive;
+
+    // Optimisation de l'avatar
+    const optimizedAvatarUrl = getOptimizedImageUrl(author?.avatar_url, 50);
+    // Optimisation de l'image du nuage (taille de l'écran/canvas)
+    const optimizedCloudUrl = getOptimizedImageUrl(drawing.cloud_image_url, canvasSize);
 
     useEffect(() => {
         setLikesCount(drawing.likes?.[0]?.count || 0);
@@ -90,20 +96,25 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
         <View style={styles.cardContainer}>
             
             <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent' }}>
-                
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
                         <DrawingViewer
-                            key={`${drawing.id}-${isActive}`} 
-                            imageUri={drawing.cloud_image_url}
+                            key={`${drawing.id}-${isActive}`}
+                            imageUri={drawing.cloud_image_url} // Le viewer optimise aussi en interne si configuré, mais on lui passe l'original pour qu'il gère
                             canvasData={drawing.canvas_data}
                             viewerSize={canvasSize}
-                            transparentMode={true} 
-                            animated={isActive} 
-                            startVisible={false} 
+                            transparentMode={false} 
+                            animated={isActive}
+                            startVisible={false}
                         />
                     )}
                 </View>
+                {/* Fallback image : Ici on utilise l'URL optimisée explicitement */}
+                 <Image
+                    source={{ uri: optimizedCloudUrl || drawing.cloud_image_url }}
+                    style={[StyleSheet.absoluteFill, { zIndex: -1 }]}
+                    resizeMode="cover"
+                />
             </View>
             
             <View style={styles.cardInfo}>
@@ -112,7 +123,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
                         <Text style={styles.drawingTitle} numberOfLines={1}>
                             {drawing.label || "Sans titre"}
                         </Text>
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             style={[styles.eyeBtn, isHolding && styles.iconBtnActive]}
                             activeOpacity={1}
                             onPressIn={() => setIsHolding(true)}
@@ -123,14 +134,14 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
                         </TouchableOpacity>
                     </View>
 
-                    <TouchableOpacity 
-                        style={styles.userInfo} 
-                        onPress={() => onUserPress(author)} // Clic sur le profil
+                    <TouchableOpacity
+                        style={styles.userInfo}
+                        onPress={() => onUserPress(author)}
                         activeOpacity={0.7}
                     >
                          <View style={styles.avatar}>
-                            {author?.avatar_url ? (
-                                <Image source={{uri: author.avatar_url}} style={{width:24, height:24, borderRadius:12}} />
+                            {optimizedAvatarUrl ? (
+                                <Image source={{uri: optimizedAvatarUrl}} style={{width:24, height:24, borderRadius:12}} />
                             ) : (
                                 <User size={14} color="#666"/>
                             )}
@@ -142,12 +153,11 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
 
                 <View style={styles.actionBar}>
                     <View style={styles.leftActions}>
-                        
                         <TouchableOpacity style={styles.actionBtn} onPress={handleLike}>
-                            <Heart 
-                                color={isLiked ? "#FF3B30" : "#000"} 
-                                fill={isLiked ? "#FF3B30" : "transparent"} 
-                                size={28} 
+                            <Heart
+                                color={isLiked ? "#FF3B30" : "#000"}
+                                fill={isLiked ? "#FF3B30" : "transparent"}
+                                size={28}
                             />
                             <Text style={styles.actionText}>{likesCount}</Text>
                         </TouchableOpacity>
@@ -166,29 +176,28 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
                 </View>
             </View>
 
-            <CommentsModal 
-                visible={showComments} 
-                onClose={() => setShowComments(false)} 
-                drawingId={drawing.id} 
+            <CommentsModal
+                visible={showComments}
+                onClose={() => setShowComments(false)}
+                drawingId={drawing.id}
             />
         </View>
     );
 }, (prev, next) => {
-    return prev.drawing.id === next.drawing.id && 
-           prev.index === next.index && 
+    return prev.drawing.id === next.drawing.id &&
+           prev.index === next.index &&
            prev.currentIndex === next.currentIndex;
 });
 
 export default function FeedPage() {
-    const { user } = useAuth(); // Récupération de l'utilisateur connecté
-    const router = useRouter(); // Hook de navigation
+    const { user } = useAuth();
+    const router = useRouter();
     const [drawings, setDrawings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [backgroundCloud, setBackgroundCloud] = useState<string | null>(null);
     const { width: screenWidth } = Dimensions.get('window');
 
-    // États pour la modale profil
     const [selectedUser, setSelectedUser] = useState<any>(null);
     const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
 
@@ -200,11 +209,15 @@ export default function FeedPage() {
             const { data: cloudData } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();
             
             if (cloudData) {
-                setBackgroundCloud(cloudData.image_url);
+                // Optimisation de l'image de fond (si utilisée plus tard, ici elle est désactivée par setBackgroundCloud(null))
+                // Mais si on voulait l'afficher, on ferait :
+                // const optimizedBg = getOptimizedImageUrl(cloudData.image_url, screenWidth);
+                
+                setBackgroundCloud(null);
 
                 const { data: drawingsData, error: drawingsError } = await supabase
                     .from('drawings')
-                    .select('*, users(id, display_name, avatar_url), likes(count), comments(count)') 
+                    .select('*, users(id, display_name, avatar_url), likes(count), comments(count)')
                     .eq('cloud_id', cloudData.id)
                     .order('created_at', { ascending: false })
                     .limit(20);
@@ -215,15 +228,11 @@ export default function FeedPage() {
         } catch (e) { console.error(e); } finally { setLoading(false); }
     };
 
-    // Logique de clic sur un utilisateur
     const handleUserPress = (targetUser: any) => {
         if (!targetUser) return;
-
-        // Si c'est l'utilisateur connecté -> Redirection vers l'onglet Profil
         if (user && targetUser.id === user.id) {
             router.push('/(tabs)/profile');
         } else {
-            // Sinon -> Ouverture de la modale profil
             setSelectedUser(targetUser);
             setIsProfileModalVisible(true);
         }
@@ -237,36 +246,21 @@ export default function FeedPage() {
             
             <View style={{ flex: 1, position: 'relative' }}>
                 
-                {backgroundCloud && (
-                    <Image 
-                        source={{ uri: backgroundCloud }}
-                        style={{ 
-                            position: 'absolute', 
-                            top: 0, 
-                            left: 0,
-                            width: screenWidth, 
-                            aspectRatio: 3/4,
-                            zIndex: 0 
-                        }}
-                        resizeMode="cover"
-                    />
-                )}
-
                 {drawings.length > 0 ? (
-                    <PagerView 
-                        style={{ flex: 1, zIndex: 1 }} 
-                        initialPage={0} 
+                    <PagerView
+                        style={{ flex: 1 }}
+                        initialPage={0}
                         onPageSelected={(e: any) => setCurrentIndex(e.nativeEvent.position)}
-                        offscreenPageLimit={1} 
+                        offscreenPageLimit={1}
                     >
                         {drawings.map((drawing, index) => (
                             <View key={drawing.id} style={{ flex: 1 }}>
-                                <FeedCard 
-                                    drawing={drawing} 
-                                    canvasSize={screenWidth} 
+                                <FeedCard
+                                    drawing={drawing}
+                                    canvasSize={screenWidth}
                                     index={index}
                                     currentIndex={currentIndex}
-                                    onUserPress={handleUserPress} // Passage de la nouvelle fonction
+                                    onUserPress={handleUserPress}
                                 />
                             </View>
                         ))}
@@ -276,7 +270,6 @@ export default function FeedPage() {
                 )}
             </View>
 
-            {/* Modale Profil Utilisateur (pour les autres) */}
             {selectedUser && (
                 <UserProfileModal
                     visible={isProfileModalVisible}
@@ -296,10 +289,10 @@ const styles = StyleSheet.create({
     text: { color: '#666', fontSize: 16 },
     cardContainer: { flex: 1 },
     cardInfo: {
-        flex: 1, 
-        backgroundColor: '#FFFFFF', 
-        marginTop: -40, 
-        paddingHorizontal: 20, 
+        flex: 1,
+        backgroundColor: '#FFFFFF',
+        marginTop: -40,
+        paddingHorizontal: 20,
         paddingTop: 25,
         shadowColor: "#000", shadowOffset: {width: 0, height: -4}, shadowOpacity: 0.05, shadowRadius: 4, elevation: 5,
     },
