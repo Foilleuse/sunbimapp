@@ -8,6 +8,7 @@ import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { CommentsModal } from '../../src/components/CommentsModal';
 import { SettingsModal } from '../../src/components/SettingsModal'; 
 import { SunbimHeader } from '../../src/components/SunbimHeader';
+import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer';
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -159,10 +160,11 @@ export default function ProfilePage() {
 
   const renderItem = ({ item }: { item: any }) => {
       if (item.type === 'missed') {
+          const optimizedCloud = getOptimizedImageUrl(item.cloud_image_url, ITEM_SIZE);
           return (
             <View style={{ width: ITEM_SIZE, aspectRatio: 3/4, marginBottom: SPACING, backgroundColor: '#EEE', position: 'relative' }}>
                 <Image 
-                    source={{ uri: item.cloud_image_url }} 
+                    source={{ uri: optimizedCloud || item.cloud_image_url }} 
                     style={{ width: '100%', height: '100%', opacity: 0.6 }} 
                     resizeMode="cover" 
                 />
@@ -235,7 +237,10 @@ export default function ProfilePage() {
       <View style={styles.profileBlock}>
           <View style={styles.profileInfoContainer}>
               {profile?.avatar_url ? (
-                  <Image source={{uri: profile.avatar_url}} style={styles.profileAvatar} />
+                  <Image 
+                    source={{ uri: getOptimizedImageUrl(profile.avatar_url, 100) || profile.avatar_url }} 
+                    style={styles.profileAvatar} 
+                  />
               ) : (
                   <View style={[styles.profileAvatar, styles.placeholderAvatar]}>
                       <User color="#666" size={35} />
@@ -297,7 +302,7 @@ export default function ProfilePage() {
                     style={{ width: screenWidth, aspectRatio: 3/4, backgroundColor: '#F0F0F0' }}
                   >
                       <Image 
-                            source={{ uri: selectedDrawing.cloud_image_url }}
+                            source={{ uri: getOptimizedImageUrl(selectedDrawing.cloud_image_url, screenWidth) || selectedDrawing.cloud_image_url }}
                             style={[StyleSheet.absoluteFill, { opacity: 1 }]}
                             resizeMode="cover"
                         />

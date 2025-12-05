@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabaseClient';
 import { DrawingViewer } from './DrawingViewer';
 import { useAuth } from '../contexts/AuthContext';
 import { CommentsModal } from './CommentsModal';
+import { getOptimizedImageUrl } from '../utils/imageOptimizer';
 
 interface UserProfileModalProps {
   visible: boolean;
@@ -267,7 +268,10 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
             <View style={styles.profileBlock}>
                 <View style={styles.profileInfoContainer}>
                     {userProfile?.avatar_url ? (
-                        <Image source={{ uri: userProfile.avatar_url }} style={styles.profileAvatar} />
+                        <Image 
+                            source={{ uri: getOptimizedImageUrl(userProfile.avatar_url, 100) || userProfile.avatar_url }} 
+                            style={styles.profileAvatar} 
+                        />
                     ) : (
                         <View style={[styles.profileAvatar, styles.placeholderAvatar]}>
                             <User size={35} color="#666" />
@@ -339,7 +343,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                                 style={{ width: screenWidth, aspectRatio: 3/4, backgroundColor: '#F0F0F0' }}
                             >
                                 <Image 
-                                    source={{ uri: selectedDrawing.cloud_image_url }}
+                                    source={{ uri: getOptimizedImageUrl(selectedDrawing.cloud_image_url, screenWidth) || selectedDrawing.cloud_image_url }}
                                     style={[StyleSheet.absoluteFill, { opacity: 1 }]}
                                     resizeMode="cover"
                                 />
@@ -361,7 +365,10 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                             <View style={styles.userInfoRow}>
                                 <View style={styles.profilePlaceholder}>
                                     {userProfile?.avatar_url ? (
-                                        <Image source={{uri: userProfile.avatar_url}} style={{width:40, height:40, borderRadius:20}} />
+                                        <Image 
+                                            source={{ uri: getOptimizedImageUrl(userProfile.avatar_url, 50) || userProfile.avatar_url }} 
+                                            style={{width:40, height:40, borderRadius:20}} 
+                                        />
                                     ) : (
                                         <User color="#FFF" size={20} />
                                     )}

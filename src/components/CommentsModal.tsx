@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Modal, FlatList, TextInput, TouchableOpacity, K
 import { X, Send, User } from 'lucide-react-native';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
+import { getOptimizedImageUrl } from '../utils/imageOptimizer';
 
 interface CommentsModalProps {
   visible: boolean;
@@ -72,7 +73,10 @@ export const CommentsModal: React.FC<CommentsModalProps> = ({ visible, onClose, 
     <View style={styles.commentItem}>
         <View style={styles.avatarContainer}>
             {item.users?.avatar_url ? (
-                <Image source={{ uri: item.users.avatar_url }} style={styles.avatar} />
+                <Image 
+                  source={{ uri: getOptimizedImageUrl(item.users.avatar_url, 50) || item.users.avatar_url }} 
+                  style={styles.avatar} 
+                />
             ) : (
                 <View style={[styles.avatar, styles.placeholderAvatar]}><User size={12} color="#666"/></View>
             )}

@@ -8,6 +8,7 @@ import { useAuth } from '../../src/contexts/AuthContext';
 import { CommentsModal } from '../../src/components/CommentsModal'; // Import de la modale
 import { UserProfileModal } from '../../src/components/UserProfileModal'; // Import de la modale profil
 import { useRouter } from 'expo-router'; // Import du router
+import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer';
 
 let PagerView: any;
 if (Platform.OS !== 'web') {
@@ -86,6 +87,9 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
         }
     };
 
+    // Optimisation de l'avatar dans la carte
+    const optimizedAvatar = author?.avatar_url ? getOptimizedImageUrl(author.avatar_url, 50) : null;
+
     return (
         <View style={styles.cardContainer}>
             
@@ -130,7 +134,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
                     >
                          <View style={styles.avatar}>
                             {author?.avatar_url ? (
-                                <Image source={{uri: author.avatar_url}} style={{width:24, height:24, borderRadius:12}} />
+                                <Image source={{uri: optimizedAvatar || author.avatar_url}} style={{width:24, height:24, borderRadius:12}} />
                             ) : (
                                 <User size={14} color="#666"/>
                             )}
@@ -200,6 +204,7 @@ export default function FeedPage() {
             const { data: cloudData } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();
             
             if (cloudData) {
+                // On stocke l'URL brute mais on l'optimisera au rendu
                 setBackgroundCloud(cloudData.image_url);
 
                 const { data: drawingsData, error: drawingsError } = await supabase
@@ -231,6 +236,9 @@ export default function FeedPage() {
 
     if (loading) return <View style={styles.loadingContainer}><ActivityIndicator color="#000" size="large" /></View>;
 
+    // Optimisation de l'image de fond
+    const optimizedBackground = backgroundCloud ? getOptimizedImageUrl(backgroundCloud, screenWidth) : null;
+
     return (
         <View style={styles.container}>
             <SunbimHeader showCloseButton={false} />
@@ -239,7 +247,7 @@ export default function FeedPage() {
                 
                 {backgroundCloud && (
                     <Image 
-                        source={{ uri: backgroundCloud }}
+                        source={{ uri: optimizedBackground || backgroundCloud }}
                         style={{ 
                             position: 'absolute', 
                             top: 0, 
