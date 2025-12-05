@@ -27,10 +27,11 @@ export const DrawingControls: React.FC<DrawingControlsProps> = ({
   
   const [showColorMenu, setShowColorMenu] = useState(false);
 
+  // MODIFICATION ICI : Épaisseur max réduite à 20
   const handleSliderTouch = (evt: any) => {
     const { locationX } = evt.nativeEvent;
     const width = 100; 
-    const newSize = Math.max(2, Math.min(40, (locationX / width) * 40));
+    const newSize = Math.max(2, Math.min(20, (locationX / width) * 20));
     onStrokeWidthChange(newSize);
   };
 
@@ -103,7 +104,8 @@ export const DrawingControls: React.FC<DrawingControlsProps> = ({
                         { 
                             width: strokeWidth, height: strokeWidth, borderRadius: strokeWidth,
                             backgroundColor: isEraserMode ? '#000' : strokeColor,
-                            left: `${(strokeWidth / 40) * 80}%`
+                            // MODIFICATION ICI : Ajustement du calcul pour le max 20
+                            left: `${(strokeWidth / 20) * 80}%`
                         }
                     ]} 
                 />

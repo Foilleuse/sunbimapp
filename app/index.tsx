@@ -32,7 +32,8 @@ export default function DrawPage() {
   const splashOpacity = useRef(new Animated.Value(1)).current; 
   
   const [strokeColor, setStrokeColor] = useState('#000000');
-  const [strokeWidth, setStrokeWidth] = useState(6);
+  // MODIFICATION ICI : Épaisseur initiale réglée sur 2 (la plus fine)
+  const [strokeWidth, setStrokeWidth] = useState(2);
   const [isEraserMode, setIsEraserMode] = useState(false);
   
   const [modalVisible, setModalVisible] = useState(false);
