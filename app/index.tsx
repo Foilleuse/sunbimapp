@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ActivityIndicator, Alert, Modal, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Animated, Dimensions, AppState } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, Alert, Modal, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Animated, Dimensions, AppState, Image } from 'react-native';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '../src/lib/supabaseClient';
 import { DrawingCanvas, DrawingCanvasRef } from '../src/components/DrawingCanvas';
@@ -57,15 +57,16 @@ export default function DrawPage() {
 
   // --- ANIMATION D'OUVERTURE (SPLASH) ---
   useEffect(() => {
+    // On laisse l'image floue visible 2 secondes, puis on fade out vers l'image nette
     const timer = setTimeout(() => {
         Animated.timing(splashOpacity, {
             toValue: 0,
-            duration: 500, // Durée ajustée à 0.5s
+            duration: 800, // Transition un peu plus lente pour apprécier la netteté (0.8s)
             useNativeDriver: true,
         }).start(() => {
             setShowSplash(false); 
         });
-    }, 2000); // Reste affiché 2s avant de fondre
+    }, 2000); 
 
     return () => clearTimeout(timer);
   }, []);
@@ -93,8 +94,6 @@ export default function DrawPage() {
 
   const checkStatusAndLoad = async () => {
     // CORRECTION : On ne met loading=true QUE si on n'a pas encore de nuage.
-    // Si le nuage est déjà affiché (et qu'on a dessiné dessus), on ne veut pas 
-    // afficher le spinner qui démonterait le composant Canvas et effacerait le dessin.
     if (!cloud) {
         setLoading(true); 
     }
@@ -335,23 +334,31 @@ export default function DrawPage() {
           )}
       </Animated.View>
 
-      {/* --- SPLASH SCREEN INTERNE --- */}
-      {showSplash && (
+      {/* --- SPLASH SCREEN INTERNE MODIFIÉ --- */}
+      {showSplash && cloud && (
         <Animated.View 
             style={[
                 StyleSheet.absoluteFill, 
                 { 
-                    backgroundColor: 'white', 
                     opacity: splashOpacity, 
-                    zIndex: 5, // Inférieur au header (10) mais supérieur au canvas
+                    zIndex: 5, 
                     justifyContent: 'center', 
                     alignItems: 'center',
-                    paddingTop: 100 // Pour décaler le texte sous le header
+                    paddingTop: 100 
                 }
             ]}
             pointerEvents={showSplash ? "auto" : "none"}
         >
-            <Text style={styles.splashText}>Dessine ce que tu vois</Text>
+            {/* L'image floutée en fond pour la transition */}
+            <Image 
+                source={{ uri: cloud.image_url }}
+                style={StyleSheet.absoluteFill}
+                blurRadius={20} // Un flou assez prononcé
+                resizeMode="cover"
+            />
+
+            {/* Texte avec ombre pour lisibilité sur image */}
+            <Text style={[styles.splashText, styles.splashTextShadow]}>Dessine ce que tu vois</Text>
         </Animated.View>
       )}
 
@@ -387,5 +394,12 @@ const styles = StyleSheet.create({
       fontWeight: '900',
       color: '#000',
       letterSpacing: 1
+  },
+  // Nouvelle classe pour garantir la lisibilité du texte sur n'importe quelle image
+  splashTextShadow: {
+      color: '#FFF', 
+      textShadowColor: 'rgba(0,0,0,0.7)', 
+      textShadowOffset: { width: 1, height: 1 }, 
+      textShadowRadius: 5
   }
 });
