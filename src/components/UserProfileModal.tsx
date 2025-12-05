@@ -220,6 +220,10 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
       setShowComments(false);
   };
 
+  // Optimisations
+  const profileAvatarOptimized = userProfile?.avatar_url ? getOptimizedImageUrl(userProfile.avatar_url, 100) : null;
+  const selectedDrawingImageOptimized = selectedDrawing ? getOptimizedImageUrl(selectedDrawing.cloud_image_url, screenWidth) : null;
+
   const renderDrawingItem = ({ item }: { item: any }) => {
     const isUnlocked = (currentUser?.id === userId) || unlockedCloudIds.includes(item.cloud_id);
 
@@ -269,7 +273,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                 <View style={styles.profileInfoContainer}>
                     {userProfile?.avatar_url ? (
                         <Image 
-                            source={{ uri: getOptimizedImageUrl(userProfile.avatar_url, 100) || userProfile.avatar_url }} 
+                            source={{ uri: profileAvatarOptimized || userProfile.avatar_url }} 
                             style={styles.profileAvatar} 
                         />
                     ) : (
@@ -343,7 +347,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                                 style={{ width: screenWidth, aspectRatio: 3/4, backgroundColor: '#F0F0F0' }}
                             >
                                 <Image 
-                                    source={{ uri: getOptimizedImageUrl(selectedDrawing.cloud_image_url, screenWidth) || selectedDrawing.cloud_image_url }}
+                                    source={{ uri: selectedDrawingImageOptimized || selectedDrawing.cloud_image_url }}
                                     style={[StyleSheet.absoluteFill, { opacity: 1 }]}
                                     resizeMode="cover"
                                 />

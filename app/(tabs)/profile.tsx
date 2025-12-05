@@ -158,13 +158,21 @@ export default function ProfilePage() {
 
   const commentsCount = selectedDrawing?.comments?.[0]?.count || selectedDrawing?.comments_count || 0;
 
+  // Optimisation de l'avatar pour l'affichage principal (taille ~100px)
+  const profileAvatarOptimized = profile?.avatar_url ? getOptimizedImageUrl(profile.avatar_url, 100) : null;
+  
+  // Optimisation de l'image agrandie (pleine largeur)
+  const selectedDrawingImageOptimized = selectedDrawing ? getOptimizedImageUrl(selectedDrawing.cloud_image_url, screenWidth) : null;
+
   const renderItem = ({ item }: { item: any }) => {
+      // Optimisation de la miniature (taille de la colonne)
+      const thumbOptimized = getOptimizedImageUrl(item.cloud_image_url, ITEM_SIZE);
+
       if (item.type === 'missed') {
-          const optimizedCloud = getOptimizedImageUrl(item.cloud_image_url, ITEM_SIZE);
           return (
             <View style={{ width: ITEM_SIZE, aspectRatio: 3/4, marginBottom: SPACING, backgroundColor: '#EEE', position: 'relative' }}>
                 <Image 
-                    source={{ uri: optimizedCloud || item.cloud_image_url }} 
+                    source={{ uri: thumbOptimized || item.cloud_image_url }} 
                     style={{ width: '100%', height: '100%', opacity: 0.6 }} 
                     resizeMode="cover" 
                 />
@@ -238,7 +246,7 @@ export default function ProfilePage() {
           <View style={styles.profileInfoContainer}>
               {profile?.avatar_url ? (
                   <Image 
-                    source={{ uri: getOptimizedImageUrl(profile.avatar_url, 100) || profile.avatar_url }} 
+                    source={{ uri: profileAvatarOptimized || profile.avatar_url }} 
                     style={styles.profileAvatar} 
                   />
               ) : (
@@ -302,7 +310,7 @@ export default function ProfilePage() {
                     style={{ width: screenWidth, aspectRatio: 3/4, backgroundColor: '#F0F0F0' }}
                   >
                       <Image 
-                            source={{ uri: getOptimizedImageUrl(selectedDrawing.cloud_image_url, screenWidth) || selectedDrawing.cloud_image_url }}
+                            source={{ uri: selectedDrawingImageOptimized || selectedDrawing.cloud_image_url }}
                             style={[StyleSheet.absoluteFill, { opacity: 1 }]}
                             resizeMode="cover"
                         />
@@ -320,9 +328,22 @@ export default function ProfilePage() {
                   </Pressable>
 
                   <View style={styles.modalFooter}>
-                      <View>
-                          <Text style={styles.drawingLabel}>{selectedDrawing.label || "Sans titre"}</Text>
-                          <Text style={styles.dateText}>{new Date(selectedDrawing.created_at).toLocaleDateString()}</Text>
+                      <View style={styles.userInfoRow}>
+                        {/* Optimisation de l'avatar dans le footer (petit format) */}
+                        <View style={styles.profilePlaceholder}>
+                            {profile?.avatar_url ? (
+                                <Image 
+                                    source={{ uri: getOptimizedImageUrl(profile.avatar_url, 50) || profile.avatar_url }} 
+                                    style={{width:40, height:40, borderRadius:20}} 
+                                />
+                            ) : (
+                                <User color="#FFF" size={20} />
+                            )}
+                        </View>
+                        <View>
+                            <Text style={styles.userName}>{profile?.display_name || "Anonyme"}</Text>
+                            <Text style={styles.drawingLabel}>{selectedDrawing.label || "Sans titre"}</Text>
+                        </View>
                       </View>
                       
                       <View style={styles.statsRowSmall}>
@@ -366,7 +387,7 @@ const styles = StyleSheet.create({
   },
   
   profileInfoContainer: {
-      flexDirection: 'row',
+      flexDirection: 'row', 
       alignItems: 'center',
       marginBottom: 20,
   },
@@ -428,8 +449,12 @@ const styles = StyleSheet.create({
   modalHeader: { width: '100%', height: 60, justifyContent: 'center', alignItems: 'flex-end', paddingRight: 20, paddingTop: 10, backgroundColor: '#FFF', zIndex: 20 },
   closeModalBtn: { padding: 5 },
   modalFooter: { padding: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#F0F0F0', marginTop: 10 },
-  drawingLabel: { fontSize: 20, fontWeight: '800', color: '#000' },
+  drawingLabel: { fontSize: 16, color: '#666', marginTop: 2 },
   dateText: { fontSize: 14, color: '#999' },
   statsRowSmall: { flexDirection: 'row', alignItems: 'center', gap: 15 },
   hintText: { position: 'absolute', bottom: 10, alignSelf: 'center', color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width:1, height:1}, textShadowRadius: 1 },
+  
+  userInfoRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  profilePlaceholder: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#CCC', justifyContent: 'center', alignItems: 'center', overflow:'hidden' },
+  userName: { fontWeight: '700', fontSize: 14, color: '#000' },
 });
