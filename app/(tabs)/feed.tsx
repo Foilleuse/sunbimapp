@@ -6,9 +6,9 @@ import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { CommentsModal } from '../../src/components/CommentsModal';
-import { UserProfileModal } from '../../src/components/UserProfileModal';
+import { UserProfileModal } from '../../src/components/UserProfileModal'; 
 import { useRouter } from 'expo-router';
-import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer';
+import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer'; 
 
 let PagerView: any;
 if (Platform.OS !== 'web') {
@@ -22,17 +22,16 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
 
     const [isLiked, setIsLiked] = useState(false);
     const [likesCount, setLikesCount] = useState(initialLikesCount);
-    const [showComments, setShowComments] = useState(false);
+    const [showComments, setShowComments] = useState(false); 
     
-    const [isHolding, setIsHolding] = useState(false);
+    const [isHolding, setIsHolding] = useState(false); 
     
     const commentsCount = drawing.comments?.[0]?.count || 0;
     
     const author = drawing.users;
-    const isActive = index === currentIndex;
+    const isActive = index === currentIndex; 
     const shouldRenderDrawing = isActive;
 
-    // Optimisation de l'avatar uniquement ici
     const optimizedAvatarUrl = getOptimizedImageUrl(author?.avatar_url, 50);
 
     useEffect(() => {
@@ -93,22 +92,22 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
     return (
         <View style={styles.cardContainer}>
             
-            {/* ZONE DE DESSIN TRANSPARENTE */}
+            {/* ZONE DE DESSIN */}
+            {/* La taille et le ratio doivent correspondre exactement à l'image de fond globale */}
             <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent' }}>
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
                         <DrawingViewer
-                            key={`${drawing.id}-${isActive}`}
-                            imageUri={drawing.cloud_image_url}
+                            key={`${drawing.id}-${isActive}`} 
+                            imageUri={drawing.cloud_image_url} 
                             canvasData={drawing.canvas_data}
                             viewerSize={canvasSize}
-                            transparentMode={true} // IMPORTANT: Le viewer est transparent pour voir le fond statique
-                            animated={isActive}
-                            startVisible={false}
+                            transparentMode={true} // Transparent pour voir l'image statique derrière
+                            animated={isActive} 
+                            startVisible={false} 
                         />
                     )}
                 </View>
-                {/* Pas d'image fallback ici car le fond est géré globalement */}
             </View>
             
             <View style={styles.cardInfo}>
@@ -117,7 +116,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
                         <Text style={styles.drawingTitle} numberOfLines={1}>
                             {drawing.label || "Sans titre"}
                         </Text>
-                        <TouchableOpacity
+                        <TouchableOpacity 
                             style={[styles.eyeBtn, isHolding && styles.iconBtnActive]}
                             activeOpacity={1}
                             onPressIn={() => setIsHolding(true)}
@@ -128,9 +127,9 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
                         </TouchableOpacity>
                     </View>
 
-                    <TouchableOpacity
-                        style={styles.userInfo}
-                        onPress={() => onUserPress(author)}
+                    <TouchableOpacity 
+                        style={styles.userInfo} 
+                        onPress={() => onUserPress(author)} 
                         activeOpacity={0.7}
                     >
                          <View style={styles.avatar}>
@@ -148,10 +147,10 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
                 <View style={styles.actionBar}>
                     <View style={styles.leftActions}>
                         <TouchableOpacity style={styles.actionBtn} onPress={handleLike}>
-                            <Heart
-                                color={isLiked ? "#FF3B30" : "#000"}
-                                fill={isLiked ? "#FF3B30" : "transparent"}
-                                size={28}
+                            <Heart 
+                                color={isLiked ? "#FF3B30" : "#000"} 
+                                fill={isLiked ? "#FF3B30" : "transparent"} 
+                                size={28} 
                             />
                             <Text style={styles.actionText}>{likesCount}</Text>
                         </TouchableOpacity>
@@ -170,22 +169,22 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
                 </View>
             </View>
 
-            <CommentsModal
-                visible={showComments}
-                onClose={() => setShowComments(false)}
-                drawingId={drawing.id}
+            <CommentsModal 
+                visible={showComments} 
+                onClose={() => setShowComments(false)} 
+                drawingId={drawing.id} 
             />
         </View>
     );
 }, (prev, next) => {
-    return prev.drawing.id === next.drawing.id &&
-           prev.index === next.index &&
+    return prev.drawing.id === next.drawing.id && 
+           prev.index === next.index && 
            prev.currentIndex === next.currentIndex;
 });
 
 export default function FeedPage() {
-    const { user } = useAuth();
-    const router = useRouter();
+    const { user } = useAuth(); 
+    const router = useRouter(); 
     const [drawings, setDrawings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [currentIndex, setCurrentIndex] = useState(0);
@@ -195,7 +194,6 @@ export default function FeedPage() {
     const [selectedUser, setSelectedUser] = useState<any>(null);
     const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
 
-    // Image placeholder locale par défaut
     const placeholderImage = require('../../assets/cloud-placeholder.jpg'); 
 
     useEffect(() => { fetchTodaysFeed(); }, []);
@@ -206,13 +204,12 @@ export default function FeedPage() {
             const { data: cloudData } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();
             
             if (cloudData) {
-                // Optimisation de l'image de fond pour le plein écran
                 const optimizedBg = getOptimizedImageUrl(cloudData.image_url, screenWidth);
                 setBackgroundCloud(optimizedBg || cloudData.image_url);
 
                 const { data: drawingsData, error: drawingsError } = await supabase
                     .from('drawings')
-                    .select('*, users(id, display_name, avatar_url), likes(count), comments(count)')
+                    .select('*, users(id, display_name, avatar_url), likes(count), comments(count)') 
                     .eq('cloud_id', cloudData.id)
                     .order('created_at', { ascending: false })
                     .limit(20);
@@ -236,27 +233,33 @@ export default function FeedPage() {
     if (loading) return <View style={styles.loadingContainer}><ActivityIndicator color="#000" size="large" /></View>;
 
     return (
-        <ImageBackground 
-            source={backgroundCloud ? { uri: backgroundCloud } : placeholderImage}
-            style={styles.background}
-            resizeMode="cover" // Important pour remplir l'écran
-        >
-            <View style={styles.container}>
+        <View style={styles.container}>
+             {/* IMAGE DE FOND STATIQUE (Alignée comme le dessin) */}
+             {/* On utilise un conteneur absolu qui a EXACTEMENT la même taille/position que le viewer de dessin */}
+             <View style={styles.fixedBackgroundContainer}>
+                <Image 
+                    source={backgroundCloud ? { uri: backgroundCloud } : placeholderImage}
+                    style={{ width: screenWidth, aspectRatio: 3/4 }} // Ratio 3:4 STRICT
+                    resizeMode="cover" // Remplit le rectangle 3:4
+                />
+             </View>
+
+            <View style={styles.contentOverlay}>
                 <SunbimHeader showCloseButton={false} />
                 
                 <View style={{ flex: 1, position: 'relative' }}>
                     {drawings.length > 0 ? (
-                        <PagerView
-                            style={{ flex: 1 }}
-                            initialPage={0}
+                        <PagerView 
+                            style={{ flex: 1 }} 
+                            initialPage={0} 
                             onPageSelected={(e: any) => setCurrentIndex(e.nativeEvent.position)}
-                            offscreenPageLimit={1}
+                            offscreenPageLimit={1} 
                         >
                             {drawings.map((drawing, index) => (
                                 <View key={drawing.id} style={{ flex: 1 }}>
-                                    <FeedCard
-                                        drawing={drawing}
-                                        canvasSize={screenWidth}
+                                    <FeedCard 
+                                        drawing={drawing} 
+                                        canvasSize={screenWidth} 
                                         index={index}
                                         currentIndex={currentIndex}
                                         onUserPress={handleUserPress}
@@ -268,36 +271,47 @@ export default function FeedPage() {
                         <View style={styles.centerBox}><Text style={styles.text}>La galerie est vide.</Text></View>
                     )}
                 </View>
-
-                {selectedUser && (
-                    <UserProfileModal
-                        visible={isProfileModalVisible}
-                        onClose={() => setIsProfileModalVisible(false)}
-                        userId={selectedUser.id}
-                        initialUser={selectedUser}
-                    />
-                )}
             </View>
-        </ImageBackground>
+
+            {selectedUser && (
+                <UserProfileModal
+                    visible={isProfileModalVisible}
+                    onClose={() => setIsProfileModalVisible(false)}
+                    userId={selectedUser.id}
+                    initialUser={selectedUser}
+                />
+            )}
+        </View>
     );
 }
 
 const styles = StyleSheet.create({
-    background: {
-        flex: 1,
+    container: { flex: 1, backgroundColor: '#000' }, // Fond noir derrière l'image 3:4 pour les bords si écran plus long
+    fixedBackgroundContainer: {
+        position: 'absolute',
+        top: 60, // Ajuster selon la hauteur du header + status bar pour s'aligner
+        left: 0,
+        right: 0,
+        zIndex: 0,
+        alignItems: 'center', // Centre l'image horizontalement
     },
-    container: { flex: 1, backgroundColor: 'transparent' },
+    contentOverlay: {
+        flex: 1,
+        zIndex: 1,
+    },
     loadingContainer: { flex: 1, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    text: { color: '#FFF', fontSize: 16 }, // Texte blanc pour être visible sur l'image
+    text: { color: '#666', fontSize: 16 },
     cardContainer: { flex: 1 },
     cardInfo: {
-        flex: 1,
-        backgroundColor: '#FFFFFF', // On garde le fond blanc pour les infos comme demandé
-        marginTop: -40,
-        paddingHorizontal: 20,
+        flex: 1, 
+        backgroundColor: '#FFFFFF', 
+        marginTop: -40, 
+        paddingHorizontal: 20, 
         paddingTop: 25,
         shadowColor: "#000", shadowOffset: {width: 0, height: -4}, shadowOpacity: 0.05, shadowRadius: 4, elevation: 5,
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
     },
     headerInfo: { marginBottom: 15 },
     titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
