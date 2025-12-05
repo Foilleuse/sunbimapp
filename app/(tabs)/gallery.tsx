@@ -9,6 +9,7 @@ import { useAuth } from '../../src/contexts/AuthContext';
 import { CommentsModal } from '../../src/components/CommentsModal';
 import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer';
 
+// Composant mémorisé pour éviter les re-rendus inutiles
 const GalleryItem = memo(({ item, itemSize, showClouds, onPress }: any) => {
     return (
         <TouchableOpacity 
@@ -26,6 +27,7 @@ const GalleryItem = memo(({ item, itemSize, showClouds, onPress }: any) => {
         </TouchableOpacity>
     );
 }, (prev, next) => {
+    // Comparaison stricte pour la performance
     return prev.item.id === next.item.id && prev.showClouds === next.showClouds;
 });
 
@@ -51,14 +53,32 @@ export default function GalleryPage() {
 
     const fetchGallery = async (searchQuery = searchText) => {
         try {
-            setLoading(true);
+            if (!refreshing) setLoading(true);
             const today = new Date().toISOString().split('T')[0];
-            const { data: cloudData } = await supabase.from('clouds').select('id').eq('published_for', today).maybeSingle();
+            
+            // 1. On récupère l'image du jour en plus de l'ID
+            const { data: cloudData } = await supabase
+                .from('clouds')
+                .select('id, image_url')
+                .eq('published_for', today)
+                .maybeSingle();
 
             if (!cloudData) {
                 setDrawings([]);
+                setLoading(false);
                 return;
             }
+
+            // --- OPTIMISATION CLEF ---
+            // On précharge l'image du fond en cache (taille x2 pour la netteté, comme DrawingViewer)
+            // Ainsi, quand les 20 vignettes s'affichent, l'image est DÉJÀ là.
+            if (cloudData.image_url) {
+                const prefetchUrl = getOptimizedImageUrl(cloudData.image_url, ITEM_SIZE * 2);
+                if (prefetchUrl) {
+                    Image.prefetch(prefetchUrl).catch(e => console.log("Prefetch error (ignorable):", e));
+                }
+            }
+            // ------------------------
 
             let likedIds: string[] = [];
             if (onlyLiked && user) {
@@ -90,7 +110,12 @@ export default function GalleryPage() {
             const { data, error } = await query;
             if (error) throw error;
             setDrawings(data || []);
-        } catch (e) { console.error(e); } finally { setLoading(false); setRefreshing(false); }
+        } catch (e) { 
+            console.error(e); 
+        } finally { 
+            setLoading(false); 
+            setRefreshing(false); 
+        }
     };
 
     useEffect(() => { fetchGallery(); }, [onlyLiked]);
