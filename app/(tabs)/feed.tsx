@@ -1,14 +1,13 @@
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform, Image, ImageBackground } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform, Image, Pressable } from 'react-native';
 import { useEffect, useState, memo } from 'react';
 import { Heart, MessageCircle, User, Share2, Eye } from 'lucide-react-native';
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
 import { useAuth } from '../../src/contexts/AuthContext';
-import { CommentsModal } from '../../src/components/CommentsModal';
-import { UserProfileModal } from '../../src/components/UserProfileModal'; 
-import { useRouter } from 'expo-router';
-import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer'; 
+import { CommentsModal } from '../../src/components/CommentsModal'; // Import de la modale
+import { UserProfileModal } from '../../src/components/UserProfileModal'; // Import de la modale profil
+import { useRouter } from 'expo-router'; // Import du router
 
 let PagerView: any;
 if (Platform.OS !== 'web') {
@@ -31,8 +30,6 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
     const author = drawing.users;
     const isActive = index === currentIndex; 
     const shouldRenderDrawing = isActive;
-
-    const optimizedAvatarUrl = getOptimizedImageUrl(author?.avatar_url, 50);
 
     useEffect(() => {
         setLikesCount(drawing.likes?.[0]?.count || 0);
@@ -92,17 +89,16 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
     return (
         <View style={styles.cardContainer}>
             
-            {/* ZONE DE DESSIN */}
-            {/* La taille et le ratio doivent correspondre exactement à l'image de fond globale */}
             <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent' }}>
+                
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
                         <DrawingViewer
                             key={`${drawing.id}-${isActive}`} 
-                            imageUri={drawing.cloud_image_url} 
+                            imageUri={drawing.cloud_image_url}
                             canvasData={drawing.canvas_data}
                             viewerSize={canvasSize}
-                            transparentMode={true} // Transparent pour voir l'image statique derrière
+                            transparentMode={true} 
                             animated={isActive} 
                             startVisible={false} 
                         />
@@ -129,12 +125,12 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
 
                     <TouchableOpacity 
                         style={styles.userInfo} 
-                        onPress={() => onUserPress(author)} 
+                        onPress={() => onUserPress(author)} // Clic sur le profil
                         activeOpacity={0.7}
                     >
                          <View style={styles.avatar}>
-                            {optimizedAvatarUrl ? (
-                                <Image source={{uri: optimizedAvatarUrl}} style={{width:24, height:24, borderRadius:12}} />
+                            {author?.avatar_url ? (
+                                <Image source={{uri: author.avatar_url}} style={{width:24, height:24, borderRadius:12}} />
                             ) : (
                                 <User size={14} color="#666"/>
                             )}
@@ -146,6 +142,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
 
                 <View style={styles.actionBar}>
                     <View style={styles.leftActions}>
+                        
                         <TouchableOpacity style={styles.actionBtn} onPress={handleLike}>
                             <Heart 
                                 color={isLiked ? "#FF3B30" : "#000"} 
@@ -183,18 +180,17 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
 });
 
 export default function FeedPage() {
-    const { user } = useAuth(); 
-    const router = useRouter(); 
+    const { user } = useAuth(); // Récupération de l'utilisateur connecté
+    const router = useRouter(); // Hook de navigation
     const [drawings, setDrawings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [backgroundCloud, setBackgroundCloud] = useState<string | null>(null);
     const { width: screenWidth } = Dimensions.get('window');
 
+    // États pour la modale profil
     const [selectedUser, setSelectedUser] = useState<any>(null);
     const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
-
-    const placeholderImage = require('../../assets/cloud-placeholder.jpg'); 
 
     useEffect(() => { fetchTodaysFeed(); }, []);
 
@@ -204,8 +200,7 @@ export default function FeedPage() {
             const { data: cloudData } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();
             
             if (cloudData) {
-                const optimizedBg = getOptimizedImageUrl(cloudData.image_url, screenWidth);
-                setBackgroundCloud(optimizedBg || cloudData.image_url);
+                setBackgroundCloud(cloudData.image_url);
 
                 const { data: drawingsData, error: drawingsError } = await supabase
                     .from('drawings')
@@ -220,11 +215,15 @@ export default function FeedPage() {
         } catch (e) { console.error(e); } finally { setLoading(false); }
     };
 
+    // Logique de clic sur un utilisateur
     const handleUserPress = (targetUser: any) => {
         if (!targetUser) return;
+
+        // Si c'est l'utilisateur connecté -> Redirection vers l'onglet Profil
         if (user && targetUser.id === user.id) {
             router.push('/(tabs)/profile');
         } else {
+            // Sinon -> Ouverture de la modale profil
             setSelectedUser(targetUser);
             setIsProfileModalVisible(true);
         }
@@ -234,45 +233,50 @@ export default function FeedPage() {
 
     return (
         <View style={styles.container}>
-             {/* IMAGE DE FOND STATIQUE (Alignée comme le dessin) */}
-             {/* On utilise un conteneur absolu qui a EXACTEMENT la même taille/position que le viewer de dessin */}
-             <View style={styles.fixedBackgroundContainer}>
-                <Image 
-                    source={backgroundCloud ? { uri: backgroundCloud } : placeholderImage}
-                    style={{ width: screenWidth, aspectRatio: 3/4 }} // Ratio 3:4 STRICT
-                    resizeMode="cover" // Remplit le rectangle 3:4
-                />
-             </View>
-
-            <View style={styles.contentOverlay}>
-                <SunbimHeader showCloseButton={false} />
+            <SunbimHeader showCloseButton={false} />
+            
+            <View style={{ flex: 1, position: 'relative' }}>
                 
-                <View style={{ flex: 1, position: 'relative' }}>
-                    {drawings.length > 0 ? (
-                        <PagerView 
-                            style={{ flex: 1 }} 
-                            initialPage={0} 
-                            onPageSelected={(e: any) => setCurrentIndex(e.nativeEvent.position)}
-                            offscreenPageLimit={1} 
-                        >
-                            {drawings.map((drawing, index) => (
-                                <View key={drawing.id} style={{ flex: 1 }}>
-                                    <FeedCard 
-                                        drawing={drawing} 
-                                        canvasSize={screenWidth} 
-                                        index={index}
-                                        currentIndex={currentIndex}
-                                        onUserPress={handleUserPress}
-                                    />
-                                </View>
-                            ))}
-                        </PagerView>
-                    ) : (
-                        <View style={styles.centerBox}><Text style={styles.text}>La galerie est vide.</Text></View>
-                    )}
-                </View>
+                {backgroundCloud && (
+                    <Image 
+                        source={{ uri: backgroundCloud }}
+                        style={{ 
+                            position: 'absolute', 
+                            top: 0, 
+                            left: 0,
+                            width: screenWidth, 
+                            aspectRatio: 3/4,
+                            zIndex: 0 
+                        }}
+                        resizeMode="cover"
+                    />
+                )}
+
+                {drawings.length > 0 ? (
+                    <PagerView 
+                        style={{ flex: 1, zIndex: 1 }} 
+                        initialPage={0} 
+                        onPageSelected={(e: any) => setCurrentIndex(e.nativeEvent.position)}
+                        offscreenPageLimit={1} 
+                    >
+                        {drawings.map((drawing, index) => (
+                            <View key={drawing.id} style={{ flex: 1 }}>
+                                <FeedCard 
+                                    drawing={drawing} 
+                                    canvasSize={screenWidth} 
+                                    index={index}
+                                    currentIndex={currentIndex}
+                                    onUserPress={handleUserPress} // Passage de la nouvelle fonction
+                                />
+                            </View>
+                        ))}
+                    </PagerView>
+                ) : (
+                    <View style={styles.centerBox}><Text style={styles.text}>La galerie est vide.</Text></View>
+                )}
             </View>
 
+            {/* Modale Profil Utilisateur (pour les autres) */}
             {selectedUser && (
                 <UserProfileModal
                     visible={isProfileModalVisible}
@@ -286,19 +290,7 @@ export default function FeedPage() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#000' }, // Fond noir derrière l'image 3:4 pour les bords si écran plus long
-    fixedBackgroundContainer: {
-        position: 'absolute',
-        top: 60, // Ajuster selon la hauteur du header + status bar pour s'aligner
-        left: 0,
-        right: 0,
-        zIndex: 0,
-        alignItems: 'center', // Centre l'image horizontalement
-    },
-    contentOverlay: {
-        flex: 1,
-        zIndex: 1,
-    },
+    container: { flex: 1, backgroundColor: '#FFFFFF' },
     loadingContainer: { flex: 1, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     text: { color: '#666', fontSize: 16 },
@@ -310,8 +302,6 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20, 
         paddingTop: 25,
         shadowColor: "#000", shadowOffset: {width: 0, height: -4}, shadowOpacity: 0.05, shadowRadius: 4, elevation: 5,
-        borderTopLeftRadius: 20,
-        borderTopRightRadius: 20,
     },
     headerInfo: { marginBottom: 15 },
     titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
