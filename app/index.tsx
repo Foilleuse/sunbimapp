@@ -131,13 +131,24 @@ export default function DrawPage() {
 
   const handleSharePress = () => {
     if (!canvasRef.current) return;
+    
+    // Si l'utilisateur n'est PAS connecté
+    if (!user) { 
+        // Vérification si l'utilisateur a dessiné quelque chose
+        const paths = canvasRef.current.getPaths();
+        if (!paths || paths.length === 0) {
+            Alert.alert("Oups...", "Dessine quelque chose !");
+        } else {
+             // S'il a dessiné, on ouvre directement la modale de connexion
+            setAuthModalVisible(true);
+        }
+        return; 
+    }
+
+    // Si l'utilisateur EST connecté, vérification habituelle du dessin
     const paths = canvasRef.current.getPaths();
     if (!paths || paths.length === 0) { Alert.alert("Oups", "Dessine quelque chose !"); return; }
     
-    if (!user) { 
-        setAuthModalVisible(true);
-        return; 
-    }
     setModalVisible(true);
   };
 

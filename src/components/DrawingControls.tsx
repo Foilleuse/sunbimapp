@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
-import { Eraser, Undo2, Redo2, Share2, LogIn } from 'lucide-react-native';
+import { Eraser, Undo2, Redo2, Share2, User } from 'lucide-react-native';
 
 interface DrawingControlsProps {
   onUndo: () => void;
@@ -89,7 +89,7 @@ export const DrawingControls: React.FC<DrawingControlsProps> = ({
 
         <View style={styles.separator} />
 
-        {/* DROITE : Slider & Share/Login */}
+        {/* DROITE : Slider & Share/User */}
         <View style={styles.group}>
             <View 
                 style={styles.sliderContainer}
@@ -120,7 +120,7 @@ export const DrawingControls: React.FC<DrawingControlsProps> = ({
                 {isAuthenticated ? (
                     <Share2 color="#000" size={22} />
                 ) : (
-                    <LogIn color="#000" size={22} />
+                    <User color="#000" size={22} />
                 )}
             </TouchableOpacity>
         </View>
