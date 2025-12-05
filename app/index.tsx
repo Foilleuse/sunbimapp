@@ -92,7 +92,13 @@ export default function DrawPage() {
   }, [user]);
 
   const checkStatusAndLoad = async () => {
-    setLoading(true); 
+    // CORRECTION : On ne met loading=true QUE si on n'a pas encore de nuage.
+    // Si le nuage est déjà affiché (et qu'on a dessiné dessus), on ne veut pas 
+    // afficher le spinner qui démonterait le composant Canvas et effacerait le dessin.
+    if (!cloud) {
+        setLoading(true); 
+    }
+    
     try {
         if (!supabase) throw new Error("No Supabase");
         const today = new Date().toISOString().split('T')[0];
