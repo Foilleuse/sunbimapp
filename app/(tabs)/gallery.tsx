@@ -7,7 +7,7 @@ import { useFocusEffect } from 'expo-router';
 import { Search, Heart, Cloud, CloudOff, XCircle, User, MessageCircle, X } from 'lucide-react-native';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { CommentsModal } from '../../src/components/CommentsModal';
-import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer'; // Import corrigé
+import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer';
 
 const GalleryItem = memo(({ item, itemSize, showClouds, onPress }: any) => {
     return (
@@ -168,8 +168,9 @@ export default function GalleryPage() {
     const author = selectedDrawing?.users;
     const commentsCount = selectedDrawing?.comments?.[0]?.count || 0;
 
+    // OPTIMISATION DES IMAGES MODALE
     const optimizedFullImage = selectedDrawing ? getOptimizedImageUrl(selectedDrawing.cloud_image_url, screenWidth) : null;
-    const optimizedAvatar = author ? getOptimizedImageUrl(author.avatar_url, 50) : null;
+    const optimizedAvatar = author?.avatar_url ? getOptimizedImageUrl(author.avatar_url, 50) : null;
 
     const renderItem = useCallback(({ item }: { item: any }) => (
         <GalleryItem 
