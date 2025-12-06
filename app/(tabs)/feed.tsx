@@ -153,14 +153,14 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
                     )}
                 </View>
 
-                {/* Bouton Oeil déplacé SUR la photo (Coin bas droit) */}
+                {/* Bouton Oeil déplacé SUR la photo (Coin bas droit), style statique */}
                 <TouchableOpacity 
                     style={styles.eyeOverlay}
                     activeOpacity={1}
                     onPressIn={() => setIsHolding(true)}
                     onPressOut={() => setIsHolding(false)}
                 >
-                    <Eye color="#000" size={24} />
+                    <Eye color="#000" size={28} />
                 </TouchableOpacity>
             </View>
             
@@ -246,7 +246,6 @@ export default function FeedPage() {
     const [backgroundCloud, setBackgroundCloud] = useState<string | null>(null);
     const { width: screenWidth } = Dimensions.get('window');
     
-    // État pour la taille du conteneur du carrousel
     const [layout, setLayout] = useState<{ width: number; height: number } | null>(null);
 
     const [selectedUser, setSelectedUser] = useState<any>(null);
@@ -313,7 +312,6 @@ export default function FeedPage() {
         <View style={styles.container}>
             <SunbimHeader showCloseButton={false} />
             
-            {/* On mesure la vue conteneur pour donner les dimensions exactes au Carousel */}
             <View 
                 style={{ flex: 1, position: 'relative' }} 
                 onLayout={(e) => setLayout(e.nativeEvent.layout)}
@@ -334,10 +332,9 @@ export default function FeedPage() {
                     />
                 )}
 
-                {/* Affichage du Carousel uniquement quand on a les données ET les dimensions */}
                 {drawings.length > 0 && layout ? (
                     <Carousel
-                        loop={true} // Boucle infinie activée
+                        loop={true}
                         width={layout.width}
                         height={layout.height}
                         autoPlay={false}
@@ -378,7 +375,7 @@ const styles = StyleSheet.create({
     loadingContainer: { flex: 1, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     text: { color: '#666', fontSize: 16 },
-    cardContainer: { flex: 1, justifyContent: 'flex-start' }, // S'assurer que la carte s'aligne bien en haut
+    cardContainer: { flex: 1, justifyContent: 'flex-start' }, 
     cardInfo: {
         flex: 1, 
         backgroundColor: '#FFFFFF', 
@@ -394,21 +391,15 @@ const styles = StyleSheet.create({
     
     moreBtn: { padding: 5, marginTop: 5 }, 
     
+    // MODIFICATION ICI : Style statique (sans fond)
     eyeOverlay: {
         position: 'absolute',
-        bottom: 55, 
-        right: 15,
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: 'rgba(255,255,255,0.85)',
+        bottom: 55, // Positionné au-dessus de la carte blanche
+        right: 20,
+        // Pas de background, pas d'ombre, pas de bordure = "Statique" visuellement
         justifyContent: 'center',
         alignItems: 'center',
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.2,
-        shadowRadius: 3,
-        elevation: 3
+        zIndex: 50, // Priorité haute pour le clic
     },
     
     userInfo: { flexDirection: 'row', alignItems: 'center', gap: 8 },
