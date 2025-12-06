@@ -2,8 +2,12 @@ import { Stack } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { ErrorBoundary } from '../src/components/ErrorBoundary';
 import { AuthProvider } from '../src/contexts/AuthContext';
+import { useNotificationsSetup } from '../src/hooks/useNotificationsSetup';
 
 export default function RootLayout() {
+  // Activation des notifications au lancement de l'app
+  useNotificationsSetup();
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ErrorBoundary>
@@ -18,7 +22,6 @@ export default function RootLayout() {
               <Stack.Screen name="index" /> 
               <Stack.Screen name="(tabs)" /> 
               
-              {/* --- LA CORRECTION EST ICI --- */}
               <Stack.Screen 
                 name="profile" 
                 options={{

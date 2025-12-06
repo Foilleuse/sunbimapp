@@ -1,92 +1,53 @@
-import { useState, useEffect, useRef } from 'react';
-import { Platform } from 'react-native';
+import { useEffect } from 'react';
 import * as Notifications from 'expo-notifications';
-import * as Device from 'expo-device';
+import { Platform } from 'react-native';
 
+// 1. Définir comment l'app réagit aux notifications quand elle est ouverte (au premier plan)
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
+    shouldShowAlert: true, // Afficher l'alerte même si l'app est ouverte
     shouldPlaySound: true,
     shouldSetBadge: false,
   }),
 });
 
-export const useNotificationsSetup = () => {
-  const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
-  const [isReady, setIsReady] = useState(false);
-  const notificationListener = useRef<Notifications.Subscription>();
-  const responseListener = useRef<Notifications.Subscription>();
-
+export function useNotificationsSetup() {
   useEffect(() => {
-    registerForPushNotificationsAsync().then((token) => {
-      if (token) {
-        setExpoPushToken(token);
-      }
-      setIsReady(true);
-    });
-
-    notificationListener.current = Notifications.addNotificationReceivedListener((notification) => {
-      console.log('Notification received:', notification);
-    });
-
-    responseListener.current = Notifications.addNotificationResponseReceivedListener((response) => {
-      console.log('Notification response:', response);
-    });
-
-    return () => {
-      if (notificationListener.current) {
-        Notifications.removeNotificationSubscription(notificationListener.current);
-      }
-      if (responseListener.current) {
-        Notifications.removeNotificationSubscription(responseListener.current);
-      }
-    };
+    configureNotifications();
   }, []);
 
-  return {
-    expoPushToken,
-    isReady,
-  };
-};
-
-async function registerForPushNotificationsAsync() {
-  if (Platform.OS === 'web') {
-    return null;
-  }
-
-  let token: string | null = null;
-
-  if (Device.isDevice) {
+  const configureNotifications = async () => {
+    // A. Demander les permissions à l'utilisateur
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
-
+    
     if (existingStatus !== 'granted') {
       const { status } = await Notifications.requestPermissionsAsync();
       finalStatus = status;
     }
 
     if (finalStatus !== 'granted') {
-      console.log('Failed to get push token for push notification!');
-      return null;
+      console.log('Permission de notification refusée !');
+      return;
     }
 
-    try {
-      token = (await Notifications.getExpoPushTokenAsync()).data;
-    } catch (error) {
-      console.log('Error getting push token:', error);
-    }
-  } else {
-    console.log('Must use physical device for Push Notifications');
-  }
+    // B. Nettoyage : On annule tout pour éviter d'empiler les notifications si l'app redémarre
+    await Notifications.cancelAllScheduledNotificationsAsync();
 
-  if (Platform.OS === 'android') {
-    Notifications.setNotificationChannelAsync('default', {
-      name: 'default',
-      importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#87CEEB',
+    // C. Programmation de la notification de 9h00
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: "☁️ Le nuage du jour est disponible ☁️",
+        body: "Viens dessiner ce que tu vois !",
+        sound: true,
+      },
+      trigger: {
+        hour: 9,
+        minute: 0,
+        repeats: true, // Répéter chaque jour
+      },
     });
-  }
-
-  return token;
+    
+    console.log("Notification programmée pour 9h00.");
+  };
 }
