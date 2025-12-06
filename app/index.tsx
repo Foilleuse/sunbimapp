@@ -379,8 +379,9 @@ export default function DrawPage() {
             ]}
             pointerEvents={showSplash ? "auto" : "none"}
         >
-            <Text style={[styles.splashText, styles.splashTextShadow]}>Dessine ce que tu vois</Text>
-            {/* Affichage du sous-texte s'il existe */}
+            {/* RETRAIT DU TITRE "Dessine ce que tu vois" */}
+            
+            {/* Affichage du sous-texte s'il existe (qui devient le texte principal) */}
             {subPrompt ? (
                 <Text style={[styles.splashSubText, styles.splashTextShadow]}>{subPrompt}</Text>
             ) : null}
@@ -420,14 +421,15 @@ const styles = StyleSheet.create({
       letterSpacing: 1,
       textAlign: 'center'
   },
-  // Style pour le sous-titre
+  // Style pour le sous-titre (maintenant mis en valeur comme texte principal)
   splashSubText: {
-      fontSize: 16,
-      fontWeight: '500',
-      color: 'rgba(255, 255, 255, 0.9)', 
+      fontSize: 22, // Augmenté pour être le texte principal
+      fontWeight: '700',
+      color: '#FFFFFF', 
       marginTop: 10,
       textAlign: 'center',
-      fontStyle: 'italic'
+      paddingHorizontal: 30, // Pour éviter que le texte ne touche les bords
+      lineHeight: 30 // Meilleure lisibilité
   },
   splashTextShadow: {
       textShadowColor: 'rgba(0,0,0,0.7)', 
