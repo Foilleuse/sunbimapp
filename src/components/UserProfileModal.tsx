@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, memo } from 'react';
 import { View, Text, StyleSheet, Modal, Image, TouchableOpacity, FlatList, ActivityIndicator, Dimensions, Alert, Pressable, Platform, SafeAreaView } from 'react-native';
-import { X, User, UserPlus, UserCheck, Heart, MessageCircle, Lock, AlertCircle } from 'lucide-react-native';
+import { X, User, UserPlus, UserCheck, Heart, MessageCircle, Lock, AlertCircle, Unlock } from 'lucide-react-native';
 import { supabase } from '../lib/supabaseClient';
 import { DrawingViewer } from './DrawingViewer';
 import { useAuth } from '../contexts/AuthContext';
@@ -14,19 +14,47 @@ interface UserProfileModalProps {
   initialUser?: any; 
 }
 
+// --- COMPOSANT MÉMORISÉ POUR LA GRILLE ---
+const DrawingGridItem = memo(({ item, size, isUnlocked, onPress, spacing }: any) => {
+    return (
+        <TouchableOpacity 
+            onPress={() => onPress(item)}
+            disabled={!isUnlocked} 
+            style={{ width: size, aspectRatio: 3/4, marginBottom: spacing, backgroundColor: '#F9F9F9', overflow: 'hidden', position: 'relative' }}
+        >
+            <DrawingViewer 
+                imageUri={item.cloud_image_url}
+                canvasData={isUnlocked ? item.canvas_data : []}
+                viewerSize={size}
+                transparentMode={false}
+                animated={false}
+                startVisible={true}
+            />
+            {!isUnlocked && (
+                <View style={styles.missedOverlay}>
+                    <AlertCircle color="#000" size={32} style={{ marginBottom: 5 }} />
+                    <Text style={styles.missedDate}>
+                        {new Date(item.created_at).toLocaleDateString(undefined, {day: '2-digit', month: '2-digit'})}
+                    </Text>
+                </View>
+            )}
+        </TouchableOpacity>
+    );
+}, (prev, next) => {
+    return prev.item.id === next.item.id && prev.isUnlocked === next.isUnlocked && prev.size === next.size;
+});
+
 export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onClose, userId, initialUser }) => {
   const { user: currentUser } = useAuth();
   const [userProfile, setUserProfile] = useState<any>(initialUser || null);
   const [drawings, setDrawings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // État pour savoir si l'utilisateur courant a le droit de voir (a dessiné aujourd'hui)
   const [canViewContent, setCanViewContent] = useState(false);
-
-  // Liste des ID de nuages que l'utilisateur courant a "débloqués"
   const [unlockedCloudIds, setUnlockedCloudIds] = useState<string[]>([]);
 
   const [isFollowing, setIsFollowing] = useState(false);
+  const [isBlocked, setIsBlocked] = useState(false); // État pour le blocage
   const [followLoading, setFollowLoading] = useState(false);
 
   const [selectedDrawing, setSelectedDrawing] = useState<any | null>(null);
@@ -46,24 +74,25 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
 
     const initModal = async () => {
         if (visible && userId) {
-            // Reset state first
             if (isMounted) {
                 setLoading(true);
                 setCanViewContent(false); 
                 setDrawings([]);
                 setUnlockedCloudIds([]);
+                setIsBlocked(false);
             }
 
             if (currentUser && currentUser.id !== userId) {
                 checkFollowStatus();
+                checkBlockStatus(); // Vérification du blocage
             }
             await fetchData(isMounted);
         } else {
-            // Reset complet à la fermeture
             if (isMounted) {
                 setLoading(true);
                 setDrawings([]);
                 setIsFollowing(false);
+                setIsBlocked(false);
                 setSelectedDrawing(null); 
                 setCanViewContent(false);
                 setUnlockedCloudIds([]);
@@ -76,7 +105,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
     return () => { isMounted = false; };
   }, [visible, userId, currentUser]);
 
-  // Initialisation des stats quand un dessin est ouvert
   useEffect(() => {
     if (selectedDrawing && currentUser) {
         setLikesCount(selectedDrawing.likes?.[0]?.count || selectedDrawing.likes_count || 0);
@@ -108,6 +136,20 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
       }
   };
 
+  const checkBlockStatus = async () => {
+      try {
+          const { count } = await supabase
+            .from('blocks')
+            .select('*', { count: 'exact', head: true })
+            .eq('blocker_id', currentUser?.id)
+            .eq('blocked_id', userId);
+          
+          setIsBlocked(count !== null && count > 0);
+      } catch (e) {
+          console.error("Erreur check block:", e);
+      }
+  };
+
   const toggleFollow = async () => {
       if (!currentUser) return;
       setFollowLoading(true);
@@ -132,6 +174,29 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
           }
       } catch (e: any) {
           Alert.alert("Erreur", "Impossible de modifier l'abonnement.");
+          console.error(e);
+      } finally {
+          setFollowLoading(false);
+      }
+  };
+
+  const handleUnblock = async () => {
+      if (!currentUser) return;
+      setFollowLoading(true);
+      try {
+          const { error } = await supabase
+            .from('blocks')
+            .delete()
+            .eq('blocker_id', currentUser.id)
+            .eq('blocked_id', userId);
+          
+          if (error) throw error;
+          
+          setIsBlocked(false);
+          Alert.alert("Utilisateur débloqué", "Vous pouvez maintenant voir son contenu.");
+          fetchData(true); // Recharger les données pour afficher les dessins
+      } catch (e: any) {
+          Alert.alert("Erreur", "Impossible de débloquer.");
           console.error(e);
       } finally {
           setFollowLoading(false);
@@ -188,12 +253,12 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
             .from('drawings')
             .select('*, likes(count), comments(count)')
             .eq('user_id', userId)
+            .eq('is_hidden', false) // Respecter la censure
             .order('created_at', { ascending: false });
 
         if (drawingsError) throw drawingsError;
         if (isMounted) setDrawings(drawingsData || []);
 
-        // Récupérer les participations de l'utilisateur COURANT
         if (currentUser) {
             const { data: myDrawings } = await supabase
                 .from('drawings')
@@ -213,46 +278,30 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
     }
   };
 
-  const openDrawing = (drawing: any) => setSelectedDrawing(drawing);
+  const openDrawing = useCallback((drawing: any) => setSelectedDrawing(drawing), []);
+  
   const closeDrawing = () => {
       setSelectedDrawing(null);
       setIsLiked(false);
       setShowComments(false);
   };
 
-  // Optimisations
   const profileAvatarOptimized = userProfile?.avatar_url ? getOptimizedImageUrl(userProfile.avatar_url, 100) : null;
   const selectedDrawingImageOptimized = selectedDrawing ? getOptimizedImageUrl(selectedDrawing.cloud_image_url, screenWidth) : null;
 
-  const renderDrawingItem = ({ item }: { item: any }) => {
+  const renderDrawingItem = useCallback(({ item }: { item: any }) => {
     const isUnlocked = (currentUser?.id === userId) || unlockedCloudIds.includes(item.cloud_id);
 
     return (
-        <TouchableOpacity 
-            onPress={() => openDrawing(item)}
-            disabled={!isUnlocked} // DÉSACTIVE LE CLIC SI NON DÉBLOQUÉ
-            style={{ width: ITEM_SIZE, aspectRatio: 3/4, marginBottom: SPACING, backgroundColor: '#F9F9F9', overflow: 'hidden', position: 'relative' }}
-        >
-            <DrawingViewer 
-                imageUri={item.cloud_image_url}
-                canvasData={isUnlocked ? item.canvas_data : []}
-                viewerSize={ITEM_SIZE}
-                transparentMode={false}
-                animated={false}
-                startVisible={true}
-            />
-            {/* OVERLAY SI NON DÉBLOQUÉ */}
-            {!isUnlocked && (
-                <View style={styles.missedOverlay}>
-                    <AlertCircle color="#000" size={32} style={{ marginBottom: 5 }} />
-                    <Text style={styles.missedDate}>
-                        {new Date(item.created_at).toLocaleDateString(undefined, {day: '2-digit', month: '2-digit'})}
-                    </Text>
-                </View>
-            )}
-        </TouchableOpacity>
+        <DrawingGridItem 
+            item={item}
+            size={ITEM_SIZE}
+            spacing={SPACING}
+            isUnlocked={isUnlocked}
+            onPress={openDrawing}
+        />
     );
-  };
+  }, [currentUser, userId, unlockedCloudIds, ITEM_SIZE, SPACING, openDrawing]);
 
   const commentsCount = selectedDrawing?.comments?.[0]?.count || selectedDrawing?.comments_count || 0;
   
@@ -291,41 +340,65 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
 
                     {currentUser && currentUser.id !== userId && (
                         <View style={{ marginLeft: 10 }}>
-                             <TouchableOpacity 
-                                style={[styles.iconOnlyBtn, isFollowing && styles.followingBtn]} 
-                                onPress={toggleFollow}
-                                disabled={followLoading}
-                            >
-                                {followLoading ? (
-                                    <ActivityIndicator color="#000" size="small" />
-                                ) : (
-                                    isFollowing ? <UserCheck color="#000" size={20} /> : <UserPlus color="#000" size={20} />
-                                )}
-                            </TouchableOpacity>
+                             {/* Affichage conditionnel du bouton Débloquer / Suivre */}
+                             {isBlocked ? (
+                                <TouchableOpacity 
+                                    style={[styles.iconOnlyBtn, styles.unblockBtn]} 
+                                    onPress={handleUnblock}
+                                    disabled={followLoading}
+                                >
+                                    {followLoading ? (
+                                        <ActivityIndicator color="#FFF" size="small" />
+                                    ) : (
+                                        <Unlock color="#FFF" size={20} />
+                                    )}
+                                </TouchableOpacity>
+                             ) : (
+                                <TouchableOpacity 
+                                    style={[styles.iconOnlyBtn, isFollowing && styles.followingBtn]} 
+                                    onPress={toggleFollow}
+                                    disabled={followLoading}
+                                >
+                                    {followLoading ? (
+                                        <ActivityIndicator color="#000" size="small" />
+                                    ) : (
+                                        isFollowing ? <UserCheck color="#000" size={20} /> : <UserPlus color="#000" size={20} />
+                                    )}
+                                </TouchableOpacity>
+                             )}
                         </View>
                     )}
                 </View>
             </View>
 
-            {loading ? (
-                <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color="#000" />
+            {/* CONTENU PRINCIPAL : Message bloqué ou Liste */}
+            {isBlocked ? (
+                <View style={styles.blockedState}>
+                    <Lock color="#CCC" size={40} />
+                    <Text style={styles.emptyText}>Vous avez bloqué cet utilisateur.</Text>
+                    <Text style={styles.blockedSubText}>Débloquez-le pour voir ses dessins.</Text>
                 </View>
             ) : (
-                <FlatList
-                    data={drawings}
-                    renderItem={renderDrawingItem}
-                    keyExtractor={(item) => item.id}
-                    numColumns={NUM_COLS}
-                    columnWrapperStyle={{ gap: SPACING }}
-                    ListEmptyComponent={
-                        <View style={styles.emptyState}>
-                            <User color="#CCC" size={32} />
-                            <Text style={styles.emptyText}>Aucun dessin publié.</Text>
-                        </View>
-                    }
-                    contentContainerStyle={{ paddingBottom: 40 }}
-                />
+                loading ? (
+                    <View style={styles.loadingContainer}>
+                        <ActivityIndicator size="large" color="#000" />
+                    </View>
+                ) : (
+                    <FlatList
+                        data={drawings}
+                        renderItem={renderDrawingItem}
+                        keyExtractor={(item) => item.id}
+                        numColumns={NUM_COLS}
+                        columnWrapperStyle={{ gap: SPACING }}
+                        ListEmptyComponent={
+                            <View style={styles.emptyState}>
+                                <User color="#CCC" size={32} />
+                                <Text style={styles.emptyText}>Aucun dessin publié.</Text>
+                            </View>
+                        }
+                        contentContainerStyle={{ paddingBottom: 40 }}
+                    />
+                )
             )}
 
             {/* MODALE D'AGRANDISSEMENT */}
@@ -471,12 +544,27 @@ const styles = StyleSheet.create({
       borderWidth: 2,
       borderColor: '#000'
   },
+  unblockBtn: {
+      backgroundColor: '#FF3B30', // Rouge pour l'action de déblocage
+  },
 
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   emptyState: { alignItems: 'center', marginTop: 50, gap: 10 },
   emptyText: { color: '#999', fontSize: 16 },
+  
+  // Style spécifique pour l'état bloqué
+  blockedState: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 10,
+      marginTop: -50 // Pour remonter un peu visuellement
+  },
+  blockedSubText: {
+      color: '#666',
+      fontSize: 14,
+  },
 
-  // NOUVEAUX STYLES POUR L'OVERLAY DE VERROUILLAGE
   missedOverlay: { 
       position: 'absolute', 
       top: 0, 
