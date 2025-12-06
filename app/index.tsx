@@ -29,10 +29,16 @@ export default function DrawPage() {
   
   // --- SPLASH SCREEN INTERNE ---
   const [showSplash, setShowSplash] = useState(true);
+  
+  // Animation d'opacité pour le texte et le voile
   const splashOpacity = useRef(new Animated.Value(1)).current; 
   
+  // Animation pour le flou du canvas (valeur animée)
+  const blurAnim = useRef(new Animated.Value(15)).current;
+  // État local pour passer la valeur au Canvas (qui attend un number)
+  const [canvasBlur, setCanvasBlur] = useState(15);
+  
   const [strokeColor, setStrokeColor] = useState('#000000');
-  // MODIFICATION ICI : Épaisseur initiale réglée sur 2 (la plus fine)
   const [strokeWidth, setStrokeWidth] = useState(2);
   const [isEraserMode, setIsEraserMode] = useState(false);
   
@@ -57,18 +63,33 @@ export default function DrawPage() {
 
   // --- ANIMATION D'OUVERTURE (SPLASH) ---
   useEffect(() => {
-    // On laisse l'image floue visible 2 secondes, puis on fade out vers l'image nette
+    // Listener pour mettre à jour le state canvasBlur quand l'animation tourne
+    const listener = blurAnim.addListener(({ value }) => {
+        setCanvasBlur(value);
+    });
+
     const timer = setTimeout(() => {
-        Animated.timing(splashOpacity, {
-            toValue: 0,
-            duration: 800, // Transition un peu plus lente pour apprécier la netteté (0.8s)
-            useNativeDriver: true,
-        }).start(() => {
+        // Animation parallèle : Fade Out du texte + Défloutage du Canvas
+        Animated.parallel([
+            Animated.timing(splashOpacity, {
+                toValue: 0,
+                duration: 800, 
+                useNativeDriver: true,
+            }),
+            Animated.timing(blurAnim, {
+                toValue: 0, // Vers net
+                duration: 800,
+                useNativeDriver: false, // False car on écoute la valeur pour un setState
+            })
+        ]).start(() => {
             setShowSplash(false); 
         });
     }, 2000); 
 
-    return () => clearTimeout(timer);
+    return () => {
+        clearTimeout(timer);
+        blurAnim.removeListener(listener);
+    };
   }, []);
 
   useFocusEffect(
@@ -93,7 +114,7 @@ export default function DrawPage() {
   }, [user]);
 
   const checkStatusAndLoad = async () => {
-    // CORRECTION : On ne met loading=true QUE si on n'a pas encore de nuage.
+    // Si le nuage est déjà affiché, on ne recharge pas l'UI
     if (!cloud) {
         setLoading(true); 
     }
@@ -137,20 +158,16 @@ export default function DrawPage() {
   const handleSharePress = () => {
     if (!canvasRef.current) return;
     
-    // Si l'utilisateur n'est PAS connecté
     if (!user) { 
-        // Vérification si l'utilisateur a dessiné quelque chose
         const paths = canvasRef.current.getPaths();
         if (!paths || paths.length === 0) {
             Alert.alert("Oups...", "Dessine quelque chose !");
         } else {
-             // S'il a dessiné, on ouvre directement la modale de connexion
             setAuthModalVisible(true);
         }
         return; 
     }
 
-    // Si l'utilisateur EST connecté, vérification habituelle du dessin
     const paths = canvasRef.current.getPaths();
     if (!paths || paths.length === 0) { Alert.alert("Oups", "Dessine quelque chose !"); return; }
     
@@ -253,6 +270,8 @@ export default function DrawPage() {
               strokeWidth={strokeWidth}
               isEraserMode={isEraserMode}
               onClear={handleClear}
+              // Passage de la valeur de flou animée
+              blurRadius={showSplash ? canvasBlur : 0}
             />
         )}
       </View>
@@ -266,7 +285,7 @@ export default function DrawPage() {
                 strokeWidth={strokeWidth} onStrokeWidthChange={setStrokeWidth}
                 isEraserMode={isEraserMode} toggleEraser={toggleEraser}
                 onShare={handleSharePress}
-                isAuthenticated={!!user} // Passage de l'état connecté/déconnecté
+                isAuthenticated={!!user} 
              />
           </View>
       )}
@@ -334,12 +353,14 @@ export default function DrawPage() {
           )}
       </Animated.View>
 
-      {/* --- SPLASH SCREEN INTERNE MODIFIÉ --- */}
+      {/* --- SPLASH SCREEN TRANSPARENT AVEC TEXTE --- */}
       {showSplash && cloud && (
         <Animated.View 
             style={[
                 StyleSheet.absoluteFill, 
                 { 
+                    // Fond transparent pour voir le Canvas flouté dessous
+                    backgroundColor: 'transparent', 
                     opacity: splashOpacity, 
                     zIndex: 5, 
                     justifyContent: 'center', 
@@ -349,15 +370,6 @@ export default function DrawPage() {
             ]}
             pointerEvents={showSplash ? "auto" : "none"}
         >
-            {/* L'image floutée en fond pour la transition */}
-            <Image 
-                source={{ uri: cloud.image_url }}
-                style={StyleSheet.absoluteFill}
-                blurRadius={20} // Un flou assez prononcé
-                resizeMode="cover"
-            />
-
-            {/* Texte avec ombre pour lisibilité sur image */}
             <Text style={[styles.splashText, styles.splashTextShadow]}>Dessine ce que tu vois</Text>
         </Animated.View>
       )}
@@ -370,7 +382,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
   canvasContainer: { width: '100%', height: '100%', backgroundColor: '#000' },
   
-  // Header toujours au-dessus (zIndex 10)
   header: { position: 'absolute', top: 0, left: 0, right: 0, paddingTop: 60, paddingBottom: 15, alignItems: 'center', zIndex: 10, pointerEvents: 'none' },
   headerText: { fontSize: 32, fontWeight: '900', color: '#FFFFFF', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 0 },
   versionText: { fontSize: 10, color: 'rgba(255,255,255,0.5)', marginTop: 2, textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 1 },
@@ -392,12 +403,10 @@ const styles = StyleSheet.create({
   splashText: {
       fontSize: 24,
       fontWeight: '900',
-      color: '#000',
+      color: '#FFFFFF', // Texte blanc pour ressortir sur l'image
       letterSpacing: 1
   },
-  // Nouvelle classe pour garantir la lisibilité du texte sur n'importe quelle image
   splashTextShadow: {
-      color: '#FFF', 
       textShadowColor: 'rgba(0,0,0,0.7)', 
       textShadowOffset: { width: 1, height: 1 }, 
       textShadowRadius: 5

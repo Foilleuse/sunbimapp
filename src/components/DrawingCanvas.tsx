@@ -1,7 +1,7 @@
 import React, { forwardRef, useImperativeHandle, useState, useMemo, useRef } from 'react';
 import { StyleSheet, View, Platform, Dimensions, PanResponder, ActivityIndicator } from 'react-native';
 import {
-  Canvas, Path, useImage, Image as SkiaImage, Group, Skia, SkPath
+  Canvas, Path, useImage, Image as SkiaImage, Group, Skia, SkPath, Blur
 } from '@shopify/react-native-skia';
 
 interface DrawingCanvasProps {
@@ -10,6 +10,7 @@ interface DrawingCanvasProps {
   strokeWidth: number;
   onClear?: () => void;
   isEraserMode?: boolean;
+  blurRadius?: number; // Nouvelle prop pour le flou
 }
 
 export interface DrawingCanvasRef {
@@ -28,7 +29,7 @@ interface DrawingPath {
 }
 
 export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
-  ({ imageUri, strokeColor, strokeWidth, isEraserMode }, ref) => {
+  ({ imageUri, strokeColor, strokeWidth, isEraserMode, blurRadius = 0 }, ref) => {
     if (Platform.OS === 'web') return <View />;
 
     // Dimensions de l'écran (Viewport)
@@ -223,7 +224,10 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
                   width={PAPER_WIDTH} 
                   height={PAPER_HEIGHT} 
                   fit="cover" 
-              />
+              >
+                {/* Ajout du filtre de flou dynamique */}
+                {blurRadius > 0 && <Blur blur={blurRadius} />}
+              </SkiaImage>
               
               <Group layer={true}>
                 {paths.map((p, index) => {
