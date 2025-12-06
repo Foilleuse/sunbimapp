@@ -71,7 +71,6 @@ export default function GalleryPage() {
 
             // --- OPTIMISATION CLEF ---
             // On précharge l'image du fond en cache (taille x2 pour la netteté, comme DrawingViewer)
-            // Ainsi, quand les 20 vignettes s'affichent, l'image est DÉJÀ là.
             if (cloudData.image_url) {
                 const prefetchUrl = getOptimizedImageUrl(cloudData.image_url, ITEM_SIZE * 2);
                 if (prefetchUrl) {
@@ -79,6 +78,20 @@ export default function GalleryPage() {
                 }
             }
             // ------------------------
+
+            // --- LOGIQUE DE FILTRAGE (BLOCAGES) ---
+            let blockedUserIds: string[] = [];
+            if (user) {
+                const { data: blocks } = await supabase
+                    .from('blocks')
+                    .select('blocked_id')
+                    .eq('blocker_id', user.id);
+                
+                if (blocks && blocks.length > 0) {
+                    blockedUserIds = blocks.map(b => b.blocked_id);
+                }
+            }
+            // --------------------------------------
 
             let likedIds: string[] = [];
             if (onlyLiked && user) {
@@ -99,7 +112,13 @@ export default function GalleryPage() {
                 .from('drawings')
                 .select('*, users(display_name, avatar_url), likes(count), comments(count)')
                 .eq('cloud_id', cloudData.id)
+                .eq('is_hidden', false) // Filtrer les dessins censurés
                 .order('created_at', { ascending: false });
+
+            // Application du filtre si des utilisateurs sont bloqués
+            if (blockedUserIds.length > 0) {
+                query = query.not('user_id', 'in', `(${blockedUserIds.join(',')})`);
+            }
 
             if (onlyLiked && likedIds.length > 0) {
                 query = query.in('id', likedIds);
@@ -118,7 +137,7 @@ export default function GalleryPage() {
         }
     };
 
-    useEffect(() => { fetchGallery(); }, [onlyLiked]);
+    useEffect(() => { fetchGallery(); }, [onlyLiked, user]); // Ajout de `user` aux dépendances pour recharger si on bloque qqn
     
     useFocusEffect(useCallback(() => { 
         fetchGallery(); 
