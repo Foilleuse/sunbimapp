@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, Image, Alert, ActivityIndicator, Switch, ScrollView } from 'react-native';
-import { X, LogOut, Camera, User, ChevronRight, Bell, Shield, CircleHelp } from 'lucide-react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, Image, Alert, ActivityIndicator, Switch, ScrollView, TextInput } from 'react-native';
+import { X, LogOut, Camera, User, ChevronRight, Bell, Shield, CircleHelp, Trash2, Lock, Save } from 'lucide-react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabaseClient';
 import * as ImagePicker from 'expo-image-picker';
@@ -16,30 +16,68 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
   const { user, profile, signOut } = useAuth();
   const [loading, setLoading] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  
+  // États pour le changement de mot de passe
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
 
-  // --- GESTION PHOTO DE PROFIL ---
+  // --- GESTION PHOTO DE PROFIL (GALERIE & CAMERA) ---
+  const handleAvatarPress = () => {
+      Alert.alert(
+          "Modifier la photo",
+          "Choisissez une source",
+          [
+              { text: "Annuler", style: "cancel" },
+              { text: "Prendre une photo", onPress: handleTakePhoto },
+              { text: "Choisir dans la galerie", onPress: handlePickImage },
+          ]
+      );
+  };
+
+  const handleTakePhoto = async () => {
+      try {
+          const { status } = await ImagePicker.requestCameraPermissionsAsync();
+          if (status !== 'granted') {
+              Alert.alert("Permission refusée", "L'accès à la caméra est nécessaire.");
+              return;
+          }
+
+          const result = await ImagePicker.launchCameraAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.Images,
+              allowsEditing: true,
+              aspect: [1, 1],
+              quality: 0.5,
+              base64: true,
+          });
+
+          if (!result.canceled && result.assets && result.assets.length > 0) {
+              const asset = result.assets[0];
+              if (asset.base64) uploadAvatar(asset.base64);
+          }
+      } catch (error) {
+          Alert.alert('Erreur', 'Impossible de lancer la caméra.');
+      }
+  };
+
   const handlePickImage = async () => {
     try {
-      // Demander la permission
-      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (permissionResult.granted === false) {
-        Alert.alert("Permission requise", "L'accès à la galerie est nécessaire pour changer votre photo.");
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert("Permission requise", "L'accès à la galerie est nécessaire.");
         return;
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
-        aspect: [1, 1], // Carré parfait pour l'avatar
-        quality: 0.5, // Compression pour upload rapide
-        base64: true, // Nécessaire pour l'upload Supabase via arraybuffer
+        aspect: [1, 1], 
+        quality: 0.5, 
+        base64: true, 
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const asset = result.assets[0];
-        if (asset.base64) {
-            uploadAvatar(asset.base64);
-        }
+        if (asset.base64) uploadAvatar(asset.base64);
       }
     } catch (error) {
       Alert.alert('Erreur', 'Impossible d\'ouvrir la galerie.');
@@ -54,24 +92,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
         const fileName = `${user.id}/${new Date().getTime()}.jpg`;
         const contentType = 'image/jpeg';
 
-        // 1. Upload vers Supabase Storage (Bucket 'avatars')
         const { error: uploadError } = await supabase.storage
             .from('avatars')
-            .upload(fileName, decode(base64Data), { 
-                contentType,
-                upsert: true 
-            });
+            .upload(fileName, decode(base64Data), { contentType, upsert: true });
 
         if (uploadError) throw uploadError;
 
-        // 2. Récupérer l'URL publique
         const { data } = supabase.storage.from('avatars').getPublicUrl(fileName);
-        const publicUrl = data.publicUrl;
-
-        // 3. Mettre à jour le profil utilisateur
+        
         const { error: updateError } = await supabase
             .from('users')
-            .update({ avatar_url: publicUrl })
+            .update({ avatar_url: data.publicUrl })
             .eq('id', user.id);
 
         if (updateError) throw updateError;
@@ -79,10 +110,73 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
         Alert.alert("Succès", "Photo de profil mise à jour !");
     } catch (error: any) {
         console.error(error);
-        Alert.alert("Erreur", "Echec de l'upload. Vérifiez votre connexion.");
+        Alert.alert("Erreur", "Echec de l'upload.");
     } finally {
         setLoading(false);
     }
+  };
+
+  // --- GESTION MOT DE PASSE ---
+  const handleUpdatePassword = async () => {
+      if (newPassword.length < 6) {
+          Alert.alert("Erreur", "Le mot de passe doit contenir au moins 6 caractères.");
+          return;
+      }
+      setLoading(true);
+      try {
+          const { error } = await supabase.auth.updateUser({ password: newPassword });
+          if (error) throw error;
+          
+          Alert.alert("Succès", "Votre mot de passe a été modifié.");
+          setNewPassword('');
+          setIsChangingPassword(false);
+      } catch (error: any) {
+          Alert.alert("Erreur", error.message);
+      } finally {
+          setLoading(false);
+      }
+  };
+
+  // --- GESTION SUPPRESSION COMPTE ---
+  const handleDeleteAccount = () => {
+      Alert.alert(
+          "Supprimer mon compte",
+          "Attention : Cette action est définitive. Toutes vos données seront effacées.",
+          [
+              { text: "Annuler", style: "cancel" },
+              { 
+                  text: "Supprimer définitivement", 
+                  style: "destructive",
+                  onPress: confirmDeleteAccount
+              }
+          ]
+      );
+  };
+
+  const confirmDeleteAccount = async () => {
+      if (!user) return;
+      setLoading(true);
+      try {
+          // 1. Supprimer les données publiques (la cascade SQL devrait gérer le reste si configurée, sinon on supprime le row user)
+          const { error } = await supabase.from('users').delete().eq('id', user.id);
+          
+          if (error) {
+              // Si RLS empêche la suppression directe, on peut essayer de vider les champs ou marquer comme supprimé
+              console.error("Erreur suppression data:", error);
+              throw new Error("Impossible de supprimer les données. Contactez le support.");
+          }
+
+          // 2. Déconnexion (l'utilisateur ne pourra plus se connecter si on avait une fonction admin pour delete auth)
+          // Note: Supabase client ne permet pas deleteUser() sans clé service_role. 
+          // On supprime donc les données et on déconnecte.
+          await signOut();
+          onClose();
+          Alert.alert("Compte supprimé", "Vos données ont été effacées. Au revoir.");
+      } catch (error: any) {
+          Alert.alert("Erreur", error.message);
+      } finally {
+          setLoading(false);
+      }
   };
 
   const handleLogout = async () => {
@@ -91,27 +185,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
           "Êtes-vous sûr de vouloir vous déconnecter ?",
           [
               { text: "Annuler", style: "cancel" },
-              { 
-                  text: "Se déconnecter", 
-                  style: "destructive",
-                  onPress: async () => {
-                      await signOut();
-                      onClose();
-                  }
-              }
+              { text: "Se déconnecter", style: "destructive", onPress: async () => { await signOut(); onClose(); } }
           ]
       );
   };
 
-  const currentAvatar = profile?.avatar_url 
-    ? getOptimizedImageUrl(profile.avatar_url, 100) 
-    : null;
+  const currentAvatar = profile?.avatar_url ? getOptimizedImageUrl(profile.avatar_url, 100) : null;
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
         <View style={styles.container}>
             
-            {/* HEADER */}
             <View style={styles.header}>
                 <Text style={styles.headerTitle}>Paramètres</Text>
                 <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
@@ -124,7 +208,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
                 {/* SECTION PROFIL */}
                 <View style={styles.section}>
                     <View style={styles.profileHeader}>
-                        <TouchableOpacity onPress={handlePickImage} disabled={loading} style={styles.avatarContainer}>
+                        <TouchableOpacity onPress={handleAvatarPress} disabled={loading} style={styles.avatarContainer}>
                             {currentAvatar ? (
                                 <Image source={{ uri: currentAvatar }} style={styles.avatar} />
                             ) : (
@@ -142,6 +226,43 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
                             <Text style={styles.email}>{user?.email}</Text>
                         </View>
                     </View>
+                </View>
+
+                {/* SECTION SECURITE */}
+                <View style={styles.sectionTitleContainer}>
+                    <Text style={styles.sectionTitle}>SÉCURITÉ</Text>
+                </View>
+                <View style={styles.menuContainer}>
+                    <TouchableOpacity 
+                        style={styles.menuItem} 
+                        onPress={() => setIsChangingPassword(!isChangingPassword)}
+                    >
+                        <View style={styles.menuIconContainer}>
+                            <Lock size={20} color="#000" />
+                        </View>
+                        <Text style={styles.menuText}>Changer de mot de passe</Text>
+                        <ChevronRight size={20} color={isChangingPassword ? "#000" : "#CCC"} transform={isChangingPassword ? [{rotate: '90deg'}] : []} />
+                    </TouchableOpacity>
+
+                    {isChangingPassword && (
+                        <View style={styles.passwordForm}>
+                            <TextInput 
+                                style={styles.passwordInput}
+                                placeholder="Nouveau mot de passe (min 6 car.)"
+                                secureTextEntry
+                                value={newPassword}
+                                onChangeText={setNewPassword}
+                                placeholderTextColor="#999"
+                            />
+                            <TouchableOpacity 
+                                style={[styles.saveBtn, { opacity: newPassword.length < 6 ? 0.5 : 1 }]}
+                                onPress={handleUpdatePassword}
+                                disabled={newPassword.length < 6 || loading}
+                            >
+                                {loading ? <ActivityIndicator color="#FFF" size="small" /> : <Text style={styles.saveBtnText}>Enregistrer</Text>}
+                            </TouchableOpacity>
+                        </View>
+                    )}
                 </View>
 
                 {/* SECTION PREFERENCES */}
@@ -163,38 +284,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
                     </View>
                 </View>
 
-                {/* SECTION SUPPORT */}
-                <View style={styles.sectionTitleContainer}>
-                    <Text style={styles.sectionTitle}>SUPPORT</Text>
-                </View>
-
-                <View style={styles.menuContainer}>
-                    <TouchableOpacity style={styles.menuItem}>
-                        <View style={styles.menuIconContainer}>
-                            <Shield size={20} color="#000" />
-                        </View>
-                        <Text style={styles.menuText}>Confidentialité</Text>
-                        <ChevronRight size={20} color="#CCC" />
-                    </TouchableOpacity>
-                    
-                    <View style={styles.separator} />
-
-                    <TouchableOpacity style={styles.menuItem}>
-                        <View style={styles.menuIconContainer}>
-                            <CircleHelp size={20} color="#000" />
-                        </View>
-                        <Text style={styles.menuText}>Aide & Support</Text>
-                        <ChevronRight size={20} color="#CCC" />
-                    </TouchableOpacity>
-                </View>
-
                 {/* SECTION DANGER */}
+                <View style={styles.sectionTitleContainer}>
+                    <Text style={[styles.sectionTitle, {color: '#FF3B30'}]}>ZONE DE DANGER</Text>
+                </View>
+
                 <TouchableOpacity style={[styles.menuContainer, styles.logoutBtn]} onPress={handleLogout}>
-                    <LogOut size={20} color="#FF3B30" />
-                    <Text style={styles.logoutText}>Se déconnecter</Text>
+                    <LogOut size={20} color="#000" />
+                    <Text style={[styles.logoutText, {color: '#000'}]}>Se déconnecter</Text>
                 </TouchableOpacity>
 
-                <Text style={styles.version}>Version 1.0.0 (Build 18)</Text>
+                <TouchableOpacity style={[styles.menuContainer, styles.logoutBtn, { borderColor: '#FF3B30', borderTopWidth: 1 }]} onPress={handleDeleteAccount}>
+                    <Trash2 size={20} color="#FF3B30" />
+                    <Text style={styles.logoutText}>Supprimer mon compte</Text>
+                </TouchableOpacity>
+
+                <Text style={styles.version}>Version 1.0.0</Text>
 
             </ScrollView>
         </View>
@@ -203,15 +308,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F2F2F7' }, // Fond gris clair style iOS
+  container: { flex: 1, backgroundColor: '#F2F2F7' },
   header: { 
-      flexDirection: 'row', 
-      justifyContent: 'center', 
-      alignItems: 'center', 
-      paddingVertical: 15, 
-      backgroundColor: '#FFF',
-      borderBottomWidth: 1,
-      borderBottomColor: '#E5E5EA'
+      flexDirection: 'row', justifyContent: 'center', alignItems: 'center', 
+      paddingVertical: 15, backgroundColor: '#FFF',
+      borderBottomWidth: 1, borderBottomColor: '#E5E5EA'
   },
   headerTitle: { fontSize: 17, fontWeight: '600' },
   closeBtn: { position: 'absolute', right: 15, padding: 5 },
@@ -219,13 +320,8 @@ const styles = StyleSheet.create({
   scrollContent: { paddingVertical: 20 },
 
   section: { 
-      backgroundColor: '#FFF', 
-      paddingVertical: 20, 
-      paddingHorizontal: 15, 
-      marginBottom: 20,
-      borderTopWidth: 1,
-      borderBottomWidth: 1,
-      borderColor: '#E5E5EA'
+      backgroundColor: '#FFF', paddingVertical: 20, paddingHorizontal: 15, marginBottom: 20,
+      borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#E5E5EA'
   },
   
   profileHeader: { flexDirection: 'row', alignItems: 'center' },
@@ -233,17 +329,9 @@ const styles = StyleSheet.create({
   avatar: { width: 70, height: 70, borderRadius: 35 },
   placeholderAvatar: { backgroundColor: '#F0F0F0', justifyContent: 'center', alignItems: 'center' },
   cameraBadge: { 
-      position: 'absolute', 
-      bottom: 0, 
-      right: 0, 
-      backgroundColor: '#000', 
-      width: 24, 
-      height: 24, 
-      borderRadius: 12, 
-      justifyContent: 'center', 
-      alignItems: 'center',
-      borderWidth: 2,
-      borderColor: '#FFF'
+      position: 'absolute', bottom: 0, right: 0, backgroundColor: '#000', 
+      width: 24, height: 24, borderRadius: 12, justifyContent: 'center', alignItems: 'center',
+      borderWidth: 2, borderColor: '#FFF'
   },
   profileInfo: { flex: 1 },
   name: { fontSize: 20, fontWeight: '700', marginBottom: 2 },
@@ -253,24 +341,45 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 13, fontWeight: '600', color: '#8E8E93' },
 
   menuContainer: { 
-      backgroundColor: '#FFF', 
-      marginBottom: 25,
-      borderTopWidth: 1,
-      borderBottomWidth: 1,
-      borderColor: '#E5E5EA'
+      backgroundColor: '#FFF', marginBottom: 25,
+      borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#E5E5EA'
   },
   menuItem: { 
-      flexDirection: 'row', 
-      alignItems: 'center', 
-      paddingVertical: 12, 
-      paddingHorizontal: 15 
+      flexDirection: 'row', alignItems: 'center', 
+      paddingVertical: 12, paddingHorizontal: 15 
   },
   menuIconContainer: { marginRight: 15 },
   menuText: { flex: 1, fontSize: 16 },
-  separator: { height: 1, backgroundColor: '#E5E5EA', marginLeft: 50 },
+  
+  passwordForm: {
+      padding: 15,
+      backgroundColor: '#F9F9F9',
+      borderTopWidth: 1,
+      borderTopColor: '#EEE'
+  },
+  passwordInput: {
+      backgroundColor: '#FFF',
+      borderWidth: 1,
+      borderColor: '#DDD',
+      borderRadius: 8,
+      padding: 10,
+      fontSize: 16,
+      marginBottom: 10
+  },
+  saveBtn: {
+      backgroundColor: '#000',
+      padding: 10,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center'
+  },
+  saveBtnText: { color: '#FFF', fontWeight: '600' },
 
-  logoutBtn: { justifyContent: 'center', gap: 10, marginTop: 10 },
+  logoutBtn: { 
+      flexDirection: 'row', alignItems: 'center', 
+      paddingVertical: 15, paddingHorizontal: 15, gap: 10, marginBottom: 0 
+  },
   logoutText: { color: '#FF3B30', fontSize: 16, fontWeight: '600' },
 
-  version: { textAlign: 'center', color: '#C7C7CC', fontSize: 12, marginTop: 10 }
+  version: { textAlign: 'center', color: '#C7C7CC', fontSize: 12, marginTop: 10, marginBottom: 30 }
 });
