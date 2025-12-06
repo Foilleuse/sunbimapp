@@ -9,11 +9,7 @@ import { CommentsModal } from '../../src/components/CommentsModal';
 import { UserProfileModal } from '../../src/components/UserProfileModal'; 
 import { useRouter } from 'expo-router'; 
 import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer';
-
-let PagerView: any;
-if (Platform.OS !== 'web') {
-    try { PagerView = require('react-native-pager-view').default; } catch (e) { PagerView = View; }
-} else { PagerView = View; }
+import Carousel from 'react-native-reanimated-carousel';
 
 const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }: { drawing: any, canvasSize: number, index: number, currentIndex: number, onUserPress: (user: any) => void }) => {
     const { user } = useAuth();
@@ -249,6 +245,9 @@ export default function FeedPage() {
     const [currentIndex, setCurrentIndex] = useState(0);
     const [backgroundCloud, setBackgroundCloud] = useState<string | null>(null);
     const { width: screenWidth } = Dimensions.get('window');
+    
+    // État pour la taille du conteneur du carrousel
+    const [layout, setLayout] = useState<{ width: number; height: number } | null>(null);
 
     const [selectedUser, setSelectedUser] = useState<any>(null);
     const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
@@ -314,7 +313,11 @@ export default function FeedPage() {
         <View style={styles.container}>
             <SunbimHeader showCloseButton={false} />
             
-            <View style={{ flex: 1, position: 'relative' }}>
+            {/* On mesure la vue conteneur pour donner les dimensions exactes au Carousel */}
+            <View 
+                style={{ flex: 1, position: 'relative' }} 
+                onLayout={(e) => setLayout(e.nativeEvent.layout)}
+            >
                 
                 {backgroundCloud && (
                     <Image 
@@ -331,27 +334,30 @@ export default function FeedPage() {
                     />
                 )}
 
-                {drawings.length > 0 ? (
-                    <PagerView 
-                        style={{ flex: 1, zIndex: 1 }} 
-                        initialPage={0} 
-                        onPageSelected={(e: any) => setCurrentIndex(e.nativeEvent.position)}
-                        offscreenPageLimit={1} 
-                    >
-                        {drawings.map((drawing, index) => (
-                            <View key={drawing.id} style={{ flex: 1 }}>
-                                <FeedCard 
-                                    drawing={drawing} 
-                                    canvasSize={screenWidth} 
-                                    index={index}
-                                    currentIndex={currentIndex}
-                                    onUserPress={handleUserPress}
-                                />
-                            </View>
-                        ))}
-                    </PagerView>
+                {/* Affichage du Carousel uniquement quand on a les données ET les dimensions */}
+                {drawings.length > 0 && layout ? (
+                    <Carousel
+                        loop={true} // Boucle infinie activée
+                        width={layout.width}
+                        height={layout.height}
+                        autoPlay={false}
+                        data={drawings}
+                        scrollAnimationDuration={500}
+                        onSnapToItem={(index) => setCurrentIndex(index)}
+                        renderItem={({ item, index }) => (
+                            <FeedCard 
+                                drawing={item} 
+                                canvasSize={layout.width} 
+                                index={index}
+                                currentIndex={currentIndex}
+                                onUserPress={handleUserPress}
+                            />
+                        )}
+                    />
                 ) : (
-                    <View style={styles.centerBox}><Text style={styles.text}>La galerie est vide.</Text></View>
+                    !loading && drawings.length === 0 ? (
+                        <View style={styles.centerBox}><Text style={styles.text}>La galerie est vide.</Text></View>
+                    ) : null
                 )}
             </View>
 
@@ -372,7 +378,7 @@ const styles = StyleSheet.create({
     loadingContainer: { flex: 1, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     text: { color: '#666', fontSize: 16 },
-    cardContainer: { flex: 1 },
+    cardContainer: { flex: 1, justifyContent: 'flex-start' }, // S'assurer que la carte s'aligne bien en haut
     cardInfo: {
         flex: 1, 
         backgroundColor: '#FFFFFF', 
@@ -386,12 +392,11 @@ const styles = StyleSheet.create({
     titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
     drawingTitle: { fontSize: 28, fontWeight: '900', color: '#000', letterSpacing: -0.5, flex: 1, marginRight: 10 },
     
-    moreBtn: { padding: 5, marginTop: 5 }, // Alignement vertical avec le titre
+    moreBtn: { padding: 5, marginTop: 5 }, 
     
-    // Style du bouton Oeil sur la photo
     eyeOverlay: {
         position: 'absolute',
-        bottom: 55, // Remonté pour éviter d'être caché par la carte blanche (marginTop -40)
+        bottom: 55, 
         right: 15,
         width: 44,
         height: 44,
