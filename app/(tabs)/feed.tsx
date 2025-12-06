@@ -288,6 +288,7 @@ export default function FeedPage() {
                     .from('drawings')
                     .select('*, users(id, display_name, avatar_url), likes(count), comments(count)') 
                     .eq('cloud_id', cloudData.id)
+                    .eq('is_hidden', false) // EXCLURE LES DESSINS CENSURÉS
                     .order('created_at', { ascending: false })
                     .limit(20);
 
