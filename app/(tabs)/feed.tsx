@@ -5,9 +5,9 @@ import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
 import { useAuth } from '../../src/contexts/AuthContext';
-import { CommentsModal } from '../../src/components/CommentsModal'; // Import de la modale
-import { UserProfileModal } from '../../src/components/UserProfileModal'; // Import de la modale profil
-import { useRouter } from 'expo-router'; // Import du router
+import { CommentsModal } from '../../src/components/CommentsModal'; 
+import { UserProfileModal } from '../../src/components/UserProfileModal'; 
+import { useRouter } from 'expo-router'; 
 import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer';
 
 let PagerView: any;
@@ -87,7 +87,6 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
         }
     };
 
-    // Fonction de signalement
     const handleReport = () => {
         Alert.alert(
             "Options",
@@ -123,9 +122,8 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
                             
                             if (error) throw error;
                             Alert.alert("Utilisateur bloqué", "Vous ne verrez plus les contenus de cet utilisateur.");
-                            // Ici idéalement on devrait rafraichir le feed, mais pour simplifier on laisse l'alerte
                         } catch (e: any) {
-                            if (e.code === '23505') { // Code erreur contrainte unique (déjà bloqué)
+                            if (e.code === '23505') { 
                                  Alert.alert("Info", "Vous avez déjà bloqué cet utilisateur.");
                             } else {
                                 console.error(e);
@@ -138,13 +136,12 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
         );
     };
 
-    // Optimisation de l'avatar dans la carte
     const optimizedAvatar = author?.avatar_url ? getOptimizedImageUrl(author.avatar_url, 50) : null;
 
     return (
         <View style={styles.cardContainer}>
             
-            <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent' }}>
+            <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent', position: 'relative' }}>
                 
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
@@ -159,6 +156,16 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
                         />
                     )}
                 </View>
+
+                {/* Bouton Oeil déplacé SUR la photo (Coin bas droit) */}
+                <TouchableOpacity 
+                    style={styles.eyeOverlay}
+                    activeOpacity={1}
+                    onPressIn={() => setIsHolding(true)}
+                    onPressOut={() => setIsHolding(false)}
+                >
+                    <Eye color="#000" size={24} />
+                </TouchableOpacity>
             </View>
             
             <View style={styles.cardInfo}>
@@ -168,31 +175,19 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
                             {drawing.label || "Sans titre"}
                         </Text>
                         
-                        {/* Colonne d'actions à droite : Options + Oeil */}
-                        <View style={styles.sideColumn}>
-                            <TouchableOpacity 
-                                onPress={handleReport} 
-                                style={styles.moreBtn}
-                                hitSlop={10}
-                            >
-                                <MoreHorizontal color="#999" size={24} />
-                            </TouchableOpacity>
-
-                            <TouchableOpacity 
-                                style={[styles.eyeBtn, isHolding && styles.iconBtnActive]}
-                                activeOpacity={1}
-                                onPressIn={() => setIsHolding(true)}
-                                onPressOut={() => setIsHolding(false)}
-                                hitSlop={15}
-                            >
-                                <Eye color={isHolding ? "#000" : "#000"} size={26} />
-                            </TouchableOpacity>
-                        </View>
+                        {/* Bouton Options "..." aligné avec le titre */}
+                        <TouchableOpacity 
+                            onPress={handleReport} 
+                            style={styles.moreBtn}
+                            hitSlop={15}
+                        >
+                            <MoreHorizontal color="#999" size={24} />
+                        </TouchableOpacity>
                     </View>
 
                     <TouchableOpacity 
                         style={styles.userInfo} 
-                        onPress={() => onUserPress(author)} // Clic sur le profil
+                        onPress={() => onUserPress(author)} 
                         activeOpacity={0.7}
                     >
                          <View style={styles.avatar}>
@@ -247,19 +242,18 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
 });
 
 export default function FeedPage() {
-    const { user } = useAuth(); // Récupération de l'utilisateur connecté
-    const router = useRouter(); // Hook de navigation
+    const { user } = useAuth();
+    const router = useRouter();
     const [drawings, setDrawings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [backgroundCloud, setBackgroundCloud] = useState<string | null>(null);
     const { width: screenWidth } = Dimensions.get('window');
 
-    // États pour la modale profil
     const [selectedUser, setSelectedUser] = useState<any>(null);
     const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
 
-    useEffect(() => { fetchTodaysFeed(); }, [user]); // Rechargement si l'utilisateur change (login/logout) pour mettre à jour les blocages
+    useEffect(() => { fetchTodaysFeed(); }, [user]); 
 
     const fetchTodaysFeed = async () => {
         try {
@@ -267,10 +261,8 @@ export default function FeedPage() {
             const { data: cloudData } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();
             
             if (cloudData) {
-                // On stocke l'URL brute mais on l'optimisera au rendu
                 setBackgroundCloud(cloudData.image_url);
 
-                // --- LOGIQUE DE FILTRAGE (BLOCAGES) ---
                 let blockedUserIds: string[] = [];
                 if (user) {
                     const { data: blocks } = await supabase
@@ -282,19 +274,16 @@ export default function FeedPage() {
                         blockedUserIds = blocks.map(b => b.blocked_id);
                     }
                 }
-                // --------------------------------------
 
                 let query = supabase
                     .from('drawings')
                     .select('*, users(id, display_name, avatar_url), likes(count), comments(count)') 
                     .eq('cloud_id', cloudData.id)
-                    .eq('is_hidden', false) // EXCLURE LES DESSINS CENSURÉS
+                    .eq('is_hidden', false) 
                     .order('created_at', { ascending: false })
                     .limit(20);
 
-                // Application du filtre si des utilisateurs sont bloqués
                 if (blockedUserIds.length > 0) {
-                    // La syntaxe Supabase pour "NOT IN" est .not('col', 'in', '(val1,val2)')
                     query = query.not('user_id', 'in', `(${blockedUserIds.join(',')})`);
                 }
 
@@ -306,15 +295,12 @@ export default function FeedPage() {
         } catch (e) { console.error(e); } finally { setLoading(false); }
     };
 
-    // Logique de clic sur un utilisateur
     const handleUserPress = (targetUser: any) => {
         if (!targetUser) return;
 
-        // Si c'est l'utilisateur connecté -> Redirection vers l'onglet Profil
         if (user && targetUser.id === user.id) {
             router.push('/(tabs)/profile');
         } else {
-            // Sinon -> Ouverture de la modale profil
             setSelectedUser(targetUser);
             setIsProfileModalVisible(true);
         }
@@ -322,7 +308,6 @@ export default function FeedPage() {
 
     if (loading) return <View style={styles.loadingContainer}><ActivityIndicator color="#000" size="large" /></View>;
 
-    // Optimisation de l'image de fond
     const optimizedBackground = backgroundCloud ? getOptimizedImageUrl(backgroundCloud, screenWidth) : null;
 
     return (
@@ -360,7 +345,7 @@ export default function FeedPage() {
                                     canvasSize={screenWidth} 
                                     index={index}
                                     currentIndex={currentIndex}
-                                    onUserPress={handleUserPress} // Passage de la nouvelle fonction
+                                    onUserPress={handleUserPress}
                                 />
                             </View>
                         ))}
@@ -370,7 +355,6 @@ export default function FeedPage() {
                 )}
             </View>
 
-            {/* Modale Profil Utilisateur (pour les autres) */}
             {selectedUser && (
                 <UserProfileModal
                     visible={isProfileModalVisible}
@@ -398,14 +382,29 @@ const styles = StyleSheet.create({
         shadowColor: "#000", shadowOffset: {width: 0, height: -4}, shadowOpacity: 0.05, shadowRadius: 4, elevation: 5,
     },
     headerInfo: { marginBottom: 15 },
-    // Ajustement de l'alignement pour gérer la hauteur variable de la colonne de droite
-    titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
-    drawingTitle: { fontSize: 28, fontWeight: '900', color: '#000', letterSpacing: -0.5, flex: 1, marginRight: 10, marginTop: 10 }, // marginTop pour aligner avec l'oeil si besoin, ou ajuster
     
-    // Styles pour la colonne d'icônes à droite
-    sideColumn: { alignItems: 'center', gap: 15 },
-    moreBtn: { padding: 5 },
-    eyeBtn: { padding: 5 },
+    titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
+    drawingTitle: { fontSize: 28, fontWeight: '900', color: '#000', letterSpacing: -0.5, flex: 1, marginRight: 10 },
+    
+    moreBtn: { padding: 5, marginTop: 5 }, // Alignement vertical avec le titre
+    
+    // Style du bouton Oeil sur la photo
+    eyeOverlay: {
+        position: 'absolute',
+        bottom: 15,
+        right: 15,
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: 'rgba(255,255,255,0.85)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 3,
+        elevation: 3
+    },
     
     userInfo: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     avatar: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#F0F0F0', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
