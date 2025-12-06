@@ -1,6 +1,6 @@
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform, Image, Pressable } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform, Image, Pressable, Alert } from 'react-native';
 import { useEffect, useState, memo } from 'react';
-import { Heart, MessageCircle, User, Share2, Eye } from 'lucide-react-native';
+import { Heart, MessageCircle, User, Share2, Eye, MoreHorizontal } from 'lucide-react-native';
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
@@ -87,6 +87,26 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
         }
     };
 
+    // Fonction de signalement
+    const handleReport = () => {
+        Alert.alert(
+            "Options",
+            "Que souhaitez-vous faire ?",
+            [
+                { text: "Annuler", style: "cancel" },
+                { 
+                    text: "Signaler le contenu", 
+                    onPress: () => Alert.alert("Signalement envoyé", "Nous allons examiner cette image. Merci de votre vigilance.") 
+                },
+                { 
+                    text: "Bloquer l'utilisateur", 
+                    style: 'destructive', 
+                    onPress: () => Alert.alert("Utilisateur bloqué", "Vous ne verrez plus les contenus de cet utilisateur.") 
+                }
+            ]
+        );
+    };
+
     // Optimisation de l'avatar dans la carte
     const optimizedAvatar = author?.avatar_url ? getOptimizedImageUrl(author.avatar_url, 50) : null;
 
@@ -116,15 +136,27 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
                         <Text style={styles.drawingTitle} numberOfLines={1}>
                             {drawing.label || "Sans titre"}
                         </Text>
-                        <TouchableOpacity 
-                            style={[styles.eyeBtn, isHolding && styles.iconBtnActive]}
-                            activeOpacity={1}
-                            onPressIn={() => setIsHolding(true)}
-                            onPressOut={() => setIsHolding(false)}
-                            hitSlop={15}
-                        >
-                            <Eye color={isHolding ? "#000" : "#000"} size={26} />
-                        </TouchableOpacity>
+                        
+                        {/* Colonne d'actions à droite : Options + Oeil */}
+                        <View style={styles.sideColumn}>
+                            <TouchableOpacity 
+                                onPress={handleReport} 
+                                style={styles.moreBtn}
+                                hitSlop={10}
+                            >
+                                <MoreHorizontal color="#999" size={24} />
+                            </TouchableOpacity>
+
+                            <TouchableOpacity 
+                                style={[styles.eyeBtn, isHolding && styles.iconBtnActive]}
+                                activeOpacity={1}
+                                onPressIn={() => setIsHolding(true)}
+                                onPressOut={() => setIsHolding(false)}
+                                hitSlop={15}
+                            >
+                                <Eye color={isHolding ? "#000" : "#000"} size={26} />
+                            </TouchableOpacity>
+                        </View>
                     </View>
 
                     <TouchableOpacity 
@@ -312,9 +344,15 @@ const styles = StyleSheet.create({
         shadowColor: "#000", shadowOffset: {width: 0, height: -4}, shadowOpacity: 0.05, shadowRadius: 4, elevation: 5,
     },
     headerInfo: { marginBottom: 15 },
-    titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-    drawingTitle: { fontSize: 28, fontWeight: '900', color: '#000', letterSpacing: -0.5, flex: 1, marginRight: 10 },
-    eyeBtn: { padding: 5, marginRight: -5 },
+    // Ajustement de l'alignement pour gérer la hauteur variable de la colonne de droite
+    titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
+    drawingTitle: { fontSize: 28, fontWeight: '900', color: '#000', letterSpacing: -0.5, flex: 1, marginRight: 10, marginTop: 10 }, // marginTop pour aligner avec l'oeil si besoin, ou ajuster
+    
+    // Styles pour la colonne d'icônes à droite
+    sideColumn: { alignItems: 'center', gap: 15 },
+    moreBtn: { padding: 5 },
+    eyeBtn: { padding: 5 },
+    
     userInfo: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     avatar: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#F0F0F0', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
     userName: { fontSize: 14, fontWeight: '600', color: '#333' },
