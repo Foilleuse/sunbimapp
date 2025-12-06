@@ -25,6 +25,7 @@ export default function DrawPage() {
   const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
   
   const [cloud, setCloud] = useState<Cloud | null>(null);
+  const [subPrompt, setSubPrompt] = useState<string>(''); // État pour la phrase sous-titre
   const [loading, setLoading] = useState(true);
   
   // --- SPLASH SCREEN INTERNE ---
@@ -33,9 +34,8 @@ export default function DrawPage() {
   // Animation d'opacité pour le texte et le voile
   const splashOpacity = useRef(new Animated.Value(1)).current; 
   
-  // Animation pour le flou du canvas (valeur animée)
+  // Animation pour le flou du canvas
   const blurAnim = useRef(new Animated.Value(15)).current;
-  // État local pour passer la valeur au Canvas (qui attend un number)
   const [canvasBlur, setCanvasBlur] = useState(15);
   
   const [strokeColor, setStrokeColor] = useState('#000000');
@@ -63,13 +63,11 @@ export default function DrawPage() {
 
   // --- ANIMATION D'OUVERTURE (SPLASH) ---
   useEffect(() => {
-    // Listener pour mettre à jour le state canvasBlur quand l'animation tourne
     const listener = blurAnim.addListener(({ value }) => {
         setCanvasBlur(value);
     });
 
     const timer = setTimeout(() => {
-        // Animation parallèle : Fade Out du texte + Défloutage du Canvas
         Animated.parallel([
             Animated.timing(splashOpacity, {
                 toValue: 0,
@@ -77,9 +75,9 @@ export default function DrawPage() {
                 useNativeDriver: true,
             }),
             Animated.timing(blurAnim, {
-                toValue: 0, // Vers net
+                toValue: 0, 
                 duration: 800,
-                useNativeDriver: false, // False car on écoute la valeur pour un setState
+                useNativeDriver: false, 
             })
         ]).start(() => {
             setShowSplash(false); 
@@ -114,7 +112,6 @@ export default function DrawPage() {
   }, [user]);
 
   const checkStatusAndLoad = async () => {
-    // Si le nuage est déjà affiché, on ne recharge pas l'UI
     if (!cloud) {
         setLoading(true); 
     }
@@ -123,7 +120,21 @@ export default function DrawPage() {
         if (!supabase) throw new Error("No Supabase");
         const today = new Date().toISOString().split('T')[0];
         
-        const { data: cloudData, error: cloudError } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();   
+        // Chargement parallèle : Nuage + Prompt
+        const [cloudResponse, promptResponse] = await Promise.all([
+            supabase.from('clouds').select('*').eq('published_for', today).maybeSingle(),
+            // On récupère tous les prompts actifs pour en choisir un aléatoire côté client (simple et efficace pour peu de données)
+            supabase.from('daily_prompts').select('content').eq('is_active', true) 
+        ]);
+
+        const { data: cloudData, error: cloudError } = cloudResponse;
+        
+        // Gestion du prompt aléatoire
+        if (promptResponse.data && promptResponse.data.length > 0) {
+            const randomIndex = Math.floor(Math.random() * promptResponse.data.length);
+            setSubPrompt(promptResponse.data[randomIndex].content);
+        }
+
         if (cloudError) throw cloudError;
         const currentCloud = cloudData || FALLBACK_CLOUD;
         setCloud(currentCloud);
@@ -270,7 +281,6 @@ export default function DrawPage() {
               strokeWidth={strokeWidth}
               isEraserMode={isEraserMode}
               onClear={handleClear}
-              // Passage de la valeur de flou animée
               blurRadius={showSplash ? canvasBlur : 0}
             />
         )}
@@ -353,13 +363,12 @@ export default function DrawPage() {
           )}
       </Animated.View>
 
-      {/* --- SPLASH SCREEN TRANSPARENT AVEC TEXTE --- */}
+      {/* --- SPLASH SCREEN TRANSPARENT AVEC TEXTE ET SOUS-TEXTE --- */}
       {showSplash && cloud && (
         <Animated.View 
             style={[
                 StyleSheet.absoluteFill, 
                 { 
-                    // Fond transparent pour voir le Canvas flouté dessous
                     backgroundColor: 'transparent', 
                     opacity: splashOpacity, 
                     zIndex: 5, 
@@ -371,6 +380,10 @@ export default function DrawPage() {
             pointerEvents={showSplash ? "auto" : "none"}
         >
             <Text style={[styles.splashText, styles.splashTextShadow]}>Dessine ce que tu vois</Text>
+            {/* Affichage du sous-texte s'il existe */}
+            {subPrompt ? (
+                <Text style={[styles.splashSubText, styles.splashTextShadow]}>{subPrompt}</Text>
+            ) : null}
         </Animated.View>
       )}
 
@@ -403,8 +416,18 @@ const styles = StyleSheet.create({
   splashText: {
       fontSize: 24,
       fontWeight: '900',
-      color: '#FFFFFF', // Texte blanc pour ressortir sur l'image
-      letterSpacing: 1
+      color: '#FFFFFF', 
+      letterSpacing: 1,
+      textAlign: 'center'
+  },
+  // Style pour le sous-titre
+  splashSubText: {
+      fontSize: 16,
+      fontWeight: '500',
+      color: 'rgba(255, 255, 255, 0.9)', 
+      marginTop: 10,
+      textAlign: 'center',
+      fontStyle: 'italic'
   },
   splashTextShadow: {
       textShadowColor: 'rgba(0,0,0,0.7)', 
