@@ -96,12 +96,43 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
                 { text: "Annuler", style: "cancel" },
                 { 
                     text: "Signaler le contenu", 
-                    onPress: () => Alert.alert("Signalement envoyé", "Nous allons examiner cette image. Merci de votre vigilance.") 
+                    onPress: async () => {
+                        if (!user) return Alert.alert("Erreur", "Vous devez être connecté pour signaler.");
+                        try {
+                            const { error } = await supabase
+                                .from('reports')
+                                .insert({ reporter_id: user.id, drawing_id: drawing.id, reason: 'Contenu inapproprié' });
+                            
+                            if (error) throw error;
+                            Alert.alert("Signalement envoyé", "Nous allons examiner cette image. Merci de votre vigilance.");
+                        } catch (e) {
+                            console.error(e);
+                            Alert.alert("Erreur", "Impossible d'envoyer le signalement.");
+                        }
+                    }
                 },
                 { 
                     text: "Bloquer l'utilisateur", 
                     style: 'destructive', 
-                    onPress: () => Alert.alert("Utilisateur bloqué", "Vous ne verrez plus les contenus de cet utilisateur.") 
+                    onPress: async () => {
+                        if (!user) return Alert.alert("Erreur", "Vous devez être connecté pour bloquer.");
+                        try {
+                            const { error } = await supabase
+                                .from('blocks')
+                                .insert({ blocker_id: user.id, blocked_id: author.id });
+                            
+                            if (error) throw error;
+                            Alert.alert("Utilisateur bloqué", "Vous ne verrez plus les contenus de cet utilisateur.");
+                            // Ici idéalement on devrait rafraichir le feed, mais pour simplifier on laisse l'alerte
+                        } catch (e: any) {
+                            if (e.code === '23505') { // Code erreur contrainte unique (déjà bloqué)
+                                 Alert.alert("Info", "Vous avez déjà bloqué cet utilisateur.");
+                            } else {
+                                console.error(e);
+                                Alert.alert("Erreur", "Impossible de bloquer l'utilisateur.");
+                            }
+                        }
+                    }
                 }
             ]
         );
@@ -228,7 +259,7 @@ export default function FeedPage() {
     const [selectedUser, setSelectedUser] = useState<any>(null);
     const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
 
-    useEffect(() => { fetchTodaysFeed(); }, []);
+    useEffect(() => { fetchTodaysFeed(); }, [user]); // Rechargement si l'utilisateur change (login/logout) pour mettre à jour les blocages
 
     const fetchTodaysFeed = async () => {
         try {
@@ -239,12 +270,34 @@ export default function FeedPage() {
                 // On stocke l'URL brute mais on l'optimisera au rendu
                 setBackgroundCloud(cloudData.image_url);
 
-                const { data: drawingsData, error: drawingsError } = await supabase
+                // --- LOGIQUE DE FILTRAGE (BLOCAGES) ---
+                let blockedUserIds: string[] = [];
+                if (user) {
+                    const { data: blocks } = await supabase
+                        .from('blocks')
+                        .select('blocked_id')
+                        .eq('blocker_id', user.id);
+                    
+                    if (blocks && blocks.length > 0) {
+                        blockedUserIds = blocks.map(b => b.blocked_id);
+                    }
+                }
+                // --------------------------------------
+
+                let query = supabase
                     .from('drawings')
                     .select('*, users(id, display_name, avatar_url), likes(count), comments(count)') 
                     .eq('cloud_id', cloudData.id)
                     .order('created_at', { ascending: false })
                     .limit(20);
+
+                // Application du filtre si des utilisateurs sont bloqués
+                if (blockedUserIds.length > 0) {
+                    // La syntaxe Supabase pour "NOT IN" est .not('col', 'in', '(val1,val2)')
+                    query = query.not('user_id', 'in', `(${blockedUserIds.join(',')})`);
+                }
+
+                const { data: drawingsData, error: drawingsError } = await query;
 
                 if (drawingsError) throw drawingsError;
                 setDrawings(drawingsData || []);
