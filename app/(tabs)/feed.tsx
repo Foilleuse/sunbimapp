@@ -11,7 +11,8 @@ import { useRouter } from 'expo-router';
 import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer';
 import Carousel from 'react-native-reanimated-carousel';
 
-const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }: { drawing: any, canvasSize: number, index: number, currentIndex: number, onUserPress: (user: any) => void }) => {
+// Ajout de la prop isHolding pour contrôler la visibilité depuis le parent
+const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, isHolding }: { drawing: any, canvasSize: number, index: number, currentIndex: number, onUserPress: (user: any) => void, isHolding: boolean }) => {
     const { user } = useAuth();
     
     const initialLikesCount = drawing.likes?.[0]?.count || 0;
@@ -20,7 +21,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
     const [likesCount, setLikesCount] = useState(initialLikesCount);
     const [showComments, setShowComments] = useState(false); 
     
-    const [isHolding, setIsHolding] = useState(false); 
+    // Suppression de l'état local isHolding car géré par le parent via le bouton statique
     
     const commentsCount = drawing.comments?.[0]?.count || 0;
     
@@ -139,6 +140,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
             
             <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent', position: 'relative' }}>
                 
+                {/* On utilise la prop isHolding passée par le parent */}
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
                         <DrawingViewer
@@ -152,16 +154,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
                         />
                     )}
                 </View>
-
-                {/* Bouton Oeil déplacé SUR la photo (Coin bas droit), style statique */}
-                <TouchableOpacity 
-                    style={styles.eyeOverlay}
-                    activeOpacity={1}
-                    onPressIn={() => setIsHolding(true)}
-                    onPressOut={() => setIsHolding(false)}
-                >
-                    <Eye color="#000" size={28} />
-                </TouchableOpacity>
+                {/* L'icône Oeil a été retirée d'ici pour être dans le parent (FeedPage) */}
             </View>
             
             <View style={styles.cardInfo}>
@@ -171,7 +164,6 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
                             {drawing.label || "Sans titre"}
                         </Text>
                         
-                        {/* Bouton Options "..." aligné avec le titre */}
                         <TouchableOpacity 
                             onPress={handleReport} 
                             style={styles.moreBtn}
@@ -234,7 +226,8 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress }
 }, (prev, next) => {
     return prev.drawing.id === next.drawing.id && 
            prev.index === next.index && 
-           prev.currentIndex === next.currentIndex;
+           prev.currentIndex === next.currentIndex &&
+           prev.isHolding === next.isHolding; // Important : Re-render si l'état holding change
 });
 
 export default function FeedPage() {
@@ -246,10 +239,16 @@ export default function FeedPage() {
     const [backgroundCloud, setBackgroundCloud] = useState<string | null>(null);
     const { width: screenWidth } = Dimensions.get('window');
     
+    // État global pour le maintien du bouton Oeil
+    const [isGlobalHolding, setIsGlobalHolding] = useState(false);
+    
     const [layout, setLayout] = useState<{ width: number; height: number } | null>(null);
 
     const [selectedUser, setSelectedUser] = useState<any>(null);
     const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
+
+    // Calcul de la hauteur de l'image (ratio 3:4) pour positionner le bouton statique
+    const IMAGE_HEIGHT = screenWidth * (4/3);
 
     useEffect(() => { fetchTodaysFeed(); }, [user]); 
 
@@ -348,6 +347,8 @@ export default function FeedPage() {
                                 index={index}
                                 currentIndex={currentIndex}
                                 onUserPress={handleUserPress}
+                                // On passe l'état holding uniquement à la carte active
+                                isHolding={isGlobalHolding && index === currentIndex}
                             />
                         )}
                     />
@@ -356,6 +357,23 @@ export default function FeedPage() {
                         <View style={styles.centerBox}><Text style={styles.text}>La galerie est vide.</Text></View>
                     ) : null
                 )}
+
+                {/* BOUTON OEIL STATIQUE FLOTTANT */}
+                {/* Positionné en dehors du Carousel pour ne pas bouger */}
+                {drawings.length > 0 && (
+                    <TouchableOpacity 
+                        style={[
+                            styles.staticEyeBtn, 
+                            { top: IMAGE_HEIGHT - 35 } // Positionné juste au-dessus de la carte blanche
+                        ]}
+                        activeOpacity={0.8}
+                        onPressIn={() => setIsGlobalHolding(true)}
+                        onPressOut={() => setIsGlobalHolding(false)}
+                    >
+                        <Eye color="#000" size={24} />
+                    </TouchableOpacity>
+                )}
+
             </View>
 
             {selectedUser && (
@@ -391,15 +409,23 @@ const styles = StyleSheet.create({
     
     moreBtn: { padding: 5, marginTop: 5 }, 
     
-    // MODIFICATION ICI : Style statique (sans fond)
-    eyeOverlay: {
+    // Style du bouton Oeil Statique (restauré avec background)
+    staticEyeBtn: {
         position: 'absolute',
-        bottom: 55, // Positionné au-dessus de la carte blanche
         right: 20,
-        // Pas de background, pas d'ombre, pas de bordure = "Statique" visuellement
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: 'rgba(255,255,255,0.9)', // Fond blanc semi-transparent
         justifyContent: 'center',
         alignItems: 'center',
-        zIndex: 50, // Priorité haute pour le clic
+        zIndex: 100, // Au-dessus de tout
+        // Ombres
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 3,
+        elevation: 4
     },
     
     userInfo: { flexDirection: 'row', alignItems: 'center', gap: 8 },

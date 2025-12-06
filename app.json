@@ -48,6 +48,12 @@
           "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera to capture clouds.",
           "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone for video."
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow $(PRODUCT_NAME) to access your photos to update your profile picture."
+        }
       ]
     ],
     "extra": {
