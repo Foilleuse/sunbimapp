@@ -391,7 +391,7 @@ const styles = StyleSheet.create({
     // Style du bouton Oeil sur la photo
     eyeOverlay: {
         position: 'absolute',
-        bottom: 15,
+        bottom: 55, // Remonté pour éviter d'être caché par la carte blanche (marginTop -40)
         right: 15,
         width: 44,
         height: 44,
