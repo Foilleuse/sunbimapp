@@ -57,7 +57,7 @@ export const DrawingControls: React.FC<DrawingControlsProps> = ({
         </View>
       )}
 
-      {/* BARRE D'OUTILS - EFFET LIQUID GLASS */}
+      {/* BARRE D'OUTILS - EFFET LIQUID GLASS PLUS TRANSPARENT */}
       <View style={styles.toolbar}>
         
         {/* GAUCHE : Undo / Redo */}
@@ -131,36 +131,37 @@ export const DrawingControls: React.FC<DrawingControlsProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    position: 'absolute', bottom: 20, left: 20, right: 20, alignItems: 'center', // Marge autour pour l'effet flottant
+    position: 'absolute', bottom: 20, left: 20, right: 20, alignItems: 'center', 
   },
   toolbar: {
     flexDirection: 'row', 
-    // Fond semi-transparent blanc (Glassmorphism)
-    backgroundColor: 'rgba(255, 255, 255, 0.85)', 
+    // Fond beaucoup plus transparent (0.5 au lieu de 0.85)
+    backgroundColor: 'rgba(255, 255, 255, 0.5)', 
     paddingVertical: 15, 
     paddingHorizontal: 20,
     alignItems: 'center', 
     justifyContent: 'space-between', 
     width: '100%',
-    borderRadius: 30, // Coins très arrondis
-    // Ombres douces pour le relief
+    borderRadius: 30, 
+    // Ombres ajustées pour garder de la lisibilité malgré la transparence
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 10,
     elevation: 5,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.5)', // Bordure subtile pour l'effet verre
+    borderColor: 'rgba(255,255,255,0.3)', // Bordure encore plus subtile
   },
   group: { flexDirection: 'row', alignItems: 'center', gap: 15 },
-  separator: { width: 1, height: 20, backgroundColor: 'rgba(0,0,0,0.1)', marginHorizontal: 5 }, // Séparateur plus discret
+  separator: { width: 1, height: 20, backgroundColor: 'rgba(0,0,0,0.1)', marginHorizontal: 5 },
   iconBtn: { padding: 4 },
-  toolBtn: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.05)' }, // Fond bouton plus subtil
+  // Fond des boutons ajusté pour la lisibilité sur fond transparent
+  toolBtn: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.4)' }, 
   activeTool: { backgroundColor: '#000' },
   colorTrigger: { width: 30, height: 30, borderRadius: 15, borderWidth: 1, borderColor: 'rgba(0,0,0,0.1)' },
   inactiveColor: { opacity: 0.3 },
   colorMenu: {
-    position: 'absolute', bottom: 80, backgroundColor: 'rgba(255,255,255,0.95)', padding: 10, borderRadius: 20,
+    position: 'absolute', bottom: 80, backgroundColor: 'rgba(255,255,255,0.9)', padding: 10, borderRadius: 20,
     flexDirection: 'row', gap: 10, shadowColor: "#000", shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15, shadowRadius: 8, elevation: 6, zIndex: 999,
   },
@@ -169,10 +170,10 @@ const styles = StyleSheet.create({
     position: 'absolute', bottom: -6, left: '50%', marginLeft: -6, width: 0, height: 0,
     borderLeftWidth: 6, borderRightWidth: 6, borderTopWidth: 6,
     borderStyle: 'solid', backgroundColor: 'transparent',
-    borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: 'rgba(255,255,255,0.95)',
+    borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: 'rgba(255,255,255,0.9)',
   },
   sliderContainer: { width: 80, height: 40, justifyContent: 'center' },
   sliderTrack: { width: '100%', height: 20, justifyContent: 'center' },
-  trackLine: { backgroundColor: 'rgba(0,0,0,0.1)', width: '100%' }, // Track plus discret
+  trackLine: { backgroundColor: 'rgba(0,0,0,0.1)', width: '100%' }, 
   sliderCursor: { position: 'absolute', borderWidth: 1, borderColor: 'rgba(0,0,0,0.2)' }
 });
