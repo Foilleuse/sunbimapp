@@ -374,7 +374,10 @@ export default function DrawPage() {
                     zIndex: 5, 
                     justifyContent: 'center', 
                     alignItems: 'center',
-                    paddingTop: 100 
+                    // On garde le paddingTop pour ne pas que le texte soit caché par le header si besoin, 
+                    // mais dans un contexte centré, flex:1 et justifyContent: 'center' font le gros du travail.
+                    // Pour centrer parfaitement, on peut retirer ou réduire le paddingTop
+                    paddingTop: 0 
                 }
             ]}
             pointerEvents={showSplash ? "auto" : "none"}
