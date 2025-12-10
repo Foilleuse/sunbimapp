@@ -22,7 +22,14 @@
         "NSLocationWhenInUseUsageDescription": "This app does not use location data directly, but third-party libraries may require this permission.",
         "NSCameraUsageDescription": "Allow $(PRODUCT_NAME) to access your camera to capture clouds.",
         "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to access your microphone for video.",
-        "NSPhotoLibraryUsageDescription": "Allow $(PRODUCT_NAME) to access your photos to update your profile picture."
+        "NSPhotoLibraryUsageDescription": "Allow $(PRODUCT_NAME) to access your photos to update your profile picture.",
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": [
+              "com.googleusercontent.apps.296503578118-pdqa6300t0r1l315e94nn07uuj8fdepq"
+            ]
+          }
+        ]
       }
     },
     "android": {
@@ -38,7 +45,7 @@
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE"
       ],
-      "googleServicesFile": "./google-services.json" 
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "favicon": "./assets/images/favicon.png"

@@ -62,8 +62,10 @@ export default function DrawPage() {
   // --- CONFIGURATION GOOGLE SIGNIN (Au montage) ---
   useEffect(() => {
     GoogleSignin.configure({
-      iosClientId: '296503578118-pdqa6300t0r1l315e94nn07uuj8fdepq.apps.googleusercontent.com', // À REMPLACER
-      webClientId: '296503578118-9otrhg40mnenuvh1ir16o4qoujhvmb74.apps.googleusercontent.com', // À REMPLACER
+      // L'ID iOS sert à ouvrir la fenêtre de connexion sur l'iPhone
+      iosClientId: '296503578118-pdqa6300t0r1l315e94nn07uuj8fdepq.apps.googleusercontent.com', 
+      // L'ID Web est OBLIGATOIRE pour obtenir l'idToken pour Supabase
+      webClientId: '296503578118-9otrhg40mnenuvh1ir16o4qoujhvmb74.apps.googleusercontent.com', 
       scopes: ['profile', 'email'],
     });
   }, []);
@@ -73,18 +75,32 @@ export default function DrawPage() {
     try {
       await GoogleSignin.hasPlayServices();
       const userInfo = await GoogleSignin.signIn();
-      if (userInfo.idToken) {
+      
+      if (userInfo.data?.idToken) { // Modification ici : userInfo.data.idToken dans les nouvelles versions
         setAuthLoading(true);
         const { error } = await supabase.auth.signInWithIdToken({
           provider: 'google',
-          token: userInfo.idToken,
+          token: userInfo.data.idToken, // Modification ici
         });
         if (error) throw error;
         // La redirection ou la fermeture de modale sera gérée par le useEffect sur 'user'
+      } else if (userInfo.idToken) {
+          // Fallback pour anciennes versions
+          setAuthLoading(true);
+          const { error } = await supabase.auth.signInWithIdToken({
+            provider: 'google',
+            token: userInfo.idToken,
+          });
+          if (error) throw error;
+      } else {
+        throw new Error('Pas de token ID Google reçu');
       }
     } catch (error: any) {
       if (error.code !== statusCodes.SIGN_IN_CANCELLED && error.code !== statusCodes.IN_PROGRESS) {
         Alert.alert("Erreur Google", error.message);
+      } else {
+        // Annulation silencieuse
+        console.log("Google Sign In Cancelled/In Progress");
       }
       setAuthLoading(false);
     }
@@ -309,6 +325,7 @@ export default function DrawPage() {
   return (
     <View style={styles.container}>
       
+      {/* HEADER TOUJOURS VISIBLE (zIndex > Splash) */}
       <View style={styles.header}>
         <Text style={styles.headerText}>sunbim</Text>
         {updateLabel ? <Text style={styles.versionText}>{updateLabel}</Text> : null}
@@ -348,12 +365,12 @@ export default function DrawPage() {
                 strokeWidth={strokeWidth} onStrokeWidthChange={setStrokeWidth}
                 isEraserMode={isEraserMode} toggleEraser={toggleEraser}
                 onShare={handleSharePress}
-                isAuthenticated={!!user} 
+                isAuthenticated={!!user} // Passage de l'état connecté/déconnecté
              />
           </View>
       )}
 
-      {/* MODALE CONNEXION (Mise à jour avec boutons sociaux) */}
+      {/* MODALES... */}
       <Modal animationType="slide" transparent={true} visible={authModalVisible} onRequestClose={() => setAuthModalVisible(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
             <View style={styles.modalContent}>
@@ -480,6 +497,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
   canvasContainer: { width: '100%', height: '100%', backgroundColor: '#000' },
   
+  // Header toujours au-dessus (zIndex 10)
   header: { position: 'absolute', top: 0, left: 0, right: 0, paddingTop: 60, paddingBottom: 15, alignItems: 'center', zIndex: 10, pointerEvents: 'none' },
   headerText: { fontSize: 32, fontWeight: '900', color: '#FFFFFF', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 0 },
   versionText: { fontSize: 10, color: 'rgba(255,255,255,0.5)', marginTop: 2, textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 1 },
