@@ -1,16 +1,15 @@
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform, Image, Pressable, Alert } from 'react-native';
-import { useEffect, useState, memo, useCallback } from 'react'; // Ajout de useCallback manquant
+import { useEffect, useState, memo, useCallback } from 'react';
 import { User, Eye, MoreHorizontal, Lightbulb, Palette, Zap, Heart } from 'lucide-react-native';
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { UserProfileModal } from '../../src/components/UserProfileModal'; 
-import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router'; // Ajout de useLocalSearchParams
+import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router'; 
 import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer';
 import Carousel from 'react-native-reanimated-carousel';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withSequence } from 'react-native-reanimated';
-// On utilise Skia pour le masquage avancé (fondu transparent)
 import { Canvas, Rect, LinearGradient as SkiaGradient, vec, useImage, Image as SkiaImage } from "@shopify/react-native-skia";
 
 // Types de réactions possibles
@@ -335,7 +334,6 @@ export default function FeedPage() {
     
     const eyeButtonTop = IMAGE_HEIGHT - EYE_BUTTON_SIZE - MARGIN_BOTTOM;
 
-    // UseFocusEffect pour re-vérifier à chaque fois qu'on arrive sur la page
     useFocusEffect(
         useCallback(() => {
             fetchTodaysFeed();
@@ -434,13 +432,14 @@ export default function FeedPage() {
                 style={[styles.mainContent, { paddingTop: TOP_HEADER_SPACE }]} 
                 onLayout={(e) => setLayout(e.nativeEvent.layout)}
             >
-                {/* 2. Photo du jour NETTE AVEC BORDS FONDUS (Remplaçant l'Image standard) */}
+                {/* 2. Photo du jour NETTE AVEC BORDS FONDUS */}
+                {/* On décale l'image de TOP_HEADER_SPACE pour qu'elle s'aligne avec le début du carousel */}
                 {backgroundCloud && (
                     <MaskedDayImage 
                         uri={optimizedBackground || backgroundCloud}
                         width={screenWidth}
                         height={IMAGE_HEIGHT}
-                        top={0} // Ajusté pour le MaskedDayImage qui est maintenant relatif au conteneur avec padding
+                        top={TOP_HEADER_SPACE} // CORRECTION ICI: Alignement avec le padding du contenu
                     />
                 )}
 
