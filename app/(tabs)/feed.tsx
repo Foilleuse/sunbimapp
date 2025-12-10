@@ -27,7 +27,7 @@ const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color, count }: an
     const handlePress = () => {
         // Animation de rebond intensifiée (1.6 pour un effet "gros rebond")
         scale.value = withSequence(
-            withSpring(1.6, { damping: 10, stiffness: 200 }), // Rebond important
+            withSpring(1.6, { damping: 10, stiffness: 200 }), 
             withSpring(1, { damping: 10, stiffness: 200 })
         );
         onPress();
@@ -120,9 +120,11 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
         } 
         // Si on change de réaction ou qu'on en ajoute une nouvelle
         else {
+            // Si on avait déjà une réaction différente, on décrémente l'ancienne
             if (previousReaction) {
                 newCounts[previousReaction] = Math.max(0, newCounts[previousReaction] - 1);
             }
+            // On incrémente la nouvelle
             newCounts[type]++;
         }
 
@@ -153,6 +155,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
             }
         } catch (e) {
             console.error("Erreur mise à jour réaction:", e);
+            // Rollback en cas d'erreur
             setUserReaction(previousReaction);
             setReactionCounts(previousCounts);
             Alert.alert("Oups", "Impossible d'enregistrer la réaction.");
@@ -207,6 +210,8 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
             ]
         );
     };
+
+    const optimizedAvatar = author?.avatar_url ? getOptimizedImageUrl(author.avatar_url, 50) : null;
 
     return (
         <View style={styles.cardContainer}>
@@ -380,26 +385,15 @@ export default function FeedPage() {
 
     return (
         <View style={styles.container}>
-            <SunbimHeader showCloseButton={false} />
+            {/* Header transparent */}
+            <SunbimHeader showCloseButton={false} transparent={true} />
             
             <View 
                 style={{ flex: 1, position: 'relative' }} 
                 onLayout={(e) => setLayout(e.nativeEvent.layout)}
             >
-                {backgroundCloud && (
-                    <Image 
-                        source={{ uri: optimizedBackground || backgroundCloud }}
-                        style={{ 
-                            position: 'absolute', 
-                            top: 0, 
-                            left: 0,
-                            width: screenWidth, 
-                            aspectRatio: 3/4,
-                            zIndex: 0 
-                        }}
-                        resizeMode="cover"
-                    />
-                )}
+                {/* On ne remet pas l'image de fond ici car on veut le fond bleu de la page */}
+                {/* backgroundCloud && (...) <- SUPPRIMÉ pour laisser le fond bleu */}
 
                 {drawings.length > 0 && layout ? (
                     <Carousel
@@ -420,6 +414,8 @@ export default function FeedPage() {
                                 isHolding={isGlobalHolding && index === currentIndex}
                             />
                         )}
+                        // On ajoute un padding top pour compenser le header transparent flottant
+                        style={{ paddingTop: 100 }} 
                     />
                 ) : (
                     !loading && drawings.length === 0 ? (
@@ -427,11 +423,12 @@ export default function FeedPage() {
                     ) : null
                 )}
 
+                {/* BOUTON OEIL STATIQUE */}
                 {drawings.length > 0 && (
                     <TouchableOpacity 
                         style={[
                             styles.staticEyeBtn, 
-                            { top: eyeButtonTop } 
+                            { top: eyeButtonTop + 100 } // +100 pour compenser le padding du carousel
                         ]}
                         activeOpacity={0.8}
                         onPressIn={() => setIsGlobalHolding(true)}
@@ -463,14 +460,14 @@ const styles = StyleSheet.create({
     cardContainer: { flex: 1, justifyContent: 'flex-start' }, 
     cardInfo: {
         flex: 1, 
-        backgroundColor: 'transparent', // Fond transparent
+        backgroundColor: 'transparent', 
         marginTop: 0, 
         paddingHorizontal: 20, 
         paddingTop: 10,
         shadowColor: "transparent", 
         elevation: 0,
     },
-    headerInfo: { marginBottom: 5, alignItems: 'center' }, // Marge inférieure réduite
+    headerInfo: { marginBottom: 5, alignItems: 'center' }, 
     
     titleRow: { 
         width: '100%',
@@ -483,7 +480,7 @@ const styles = StyleSheet.create({
     drawingTitle: { 
         fontSize: 26, 
         fontWeight: '900', 
-        color: '#FFF', // Titre blanc
+        color: '#FFF', 
         letterSpacing: -0.5, 
         textAlign: 'center',
         maxWidth: '80%' 
@@ -514,12 +511,12 @@ const styles = StyleSheet.create({
     },
     
     authorContainer: {
-        marginTop: 0 // Marge supérieure réduite
+        marginTop: 0 
     },
     userName: { 
         fontSize: 13, 
         fontWeight: '600', 
-        color: 'rgba(255,255,255,0.8)', // Auteur en blanc transparent
+        color: 'rgba(255,255,255,0.8)', 
         marginBottom: 10
     },
 
@@ -529,7 +526,7 @@ const styles = StyleSheet.create({
         alignItems: 'center', 
         width: '100%',
         paddingHorizontal: 10,
-        paddingBottom: 25 // Padding inférieur augmenté pour remonter le contenu visuellement
+        paddingBottom: 40 // Padding augmenté pour remonter le contenu
     },
     reactionBtn: { 
         alignItems: 'center', 
@@ -539,7 +536,7 @@ const styles = StyleSheet.create({
     reactionText: { 
         fontSize: 12, 
         fontWeight: '700', 
-        color: 'rgba(255,255,255,0.9)', // Compteurs en blanc transparent
+        color: 'rgba(255,255,255,0.9)', 
         marginTop: 4 
     },
     activeText: {
