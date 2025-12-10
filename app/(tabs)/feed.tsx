@@ -10,6 +10,7 @@ import { useRouter } from 'expo-router';
 import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer';
 import Carousel from 'react-native-reanimated-carousel';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withSequence } from 'react-native-reanimated';
+import { LinearGradient } from 'expo-linear-gradient';
 
 // Types de réactions possibles
 type ReactionType = 'like' | 'smart' | 'beautiful' | 'crazy' | null;
@@ -364,7 +365,6 @@ export default function FeedPage() {
 
     return (
         <View style={styles.container}>
-            
             {/* 1. BACKGROUND FLOU PLEIN ÉCRAN */}
             {backgroundCloud && (
                 <Image 
@@ -381,20 +381,34 @@ export default function FeedPage() {
                 style={[styles.mainContent, { paddingTop: TOP_HEADER_SPACE }]} 
                 onLayout={(e) => setLayout(e.nativeEvent.layout)}
             >
-                {/* 2. Photo du jour NETTE, positionnée précisément sous le carousel pour s'aligner aux dessins */}
+                {/* 2. Photo du jour NETTE */}
                 {backgroundCloud && (
-                    <Image 
-                        source={{ uri: optimizedBackground || backgroundCloud }}
-                        style={{
-                            position: 'absolute',
-                            top: TOP_HEADER_SPACE,
-                            left: 0,
-                            width: screenWidth,
-                            height: IMAGE_HEIGHT,
-                            zIndex: 0
-                        }}
-                        resizeMode="cover"
-                    />
+                    <View style={{
+                        position: 'absolute',
+                        top: TOP_HEADER_SPACE,
+                        left: 0,
+                        width: screenWidth,
+                        height: IMAGE_HEIGHT,
+                        zIndex: 0
+                    }}>
+                        <Image 
+                            source={{ uri: optimizedBackground || backgroundCloud }}
+                            style={StyleSheet.absoluteFillObject}
+                            resizeMode="cover"
+                        />
+                        {/* Dégradé HAUT pour fondre l'image dans le flou */}
+                        <LinearGradient
+                            colors={['rgba(255,255,255,0.6)', 'transparent']}
+                            style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 80 }}
+                            pointerEvents="none"
+                        />
+                         {/* Dégradé BAS pour fondre l'image vers le bas */}
+                        <LinearGradient
+                            colors={['transparent', 'rgba(255,255,255,0.6)']}
+                            style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 80 }}
+                            pointerEvents="none"
+                        />
+                    </View>
                 )}
 
                 {drawings.length > 0 && layout ? (
@@ -453,7 +467,7 @@ export default function FeedPage() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#87CEEB' }, // Fallback
+    container: { flex: 1, backgroundColor: '#87CEEB' }, 
     loadingContainer: { flex: 1, backgroundColor: '#87CEEB', justifyContent: 'center', alignItems: 'center' },
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     text: { color: '#FFF', fontSize: 16 }, 
