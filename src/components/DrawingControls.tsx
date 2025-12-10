@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, TouchableOpacity, StyleSheet, Platform } from 'react-native';
-import { Eraser, Undo2, Redo2, Share2, User, Eye, EyeOff } from 'lucide-react-native';
+import { Eraser, Undo2, Redo2, Share2, User, Eye } from 'lucide-react-native';
 
 interface DrawingControlsProps {
   onUndo: () => void;
@@ -14,9 +14,7 @@ interface DrawingControlsProps {
   onShare: () => void;
   onClear?: () => void;
   isAuthenticated: boolean;
-  // NOUVEAU : Props pour la vision de l'image originale
-  showOriginal: boolean;
-  onToggleOriginal: () => void;
+  onShowOriginal: () => void; // Nouvelle prop simple
 }
 
 const COLORS = ['#FFFFFF', '#808080', '#000000'];
@@ -28,8 +26,7 @@ export const DrawingControls: React.FC<DrawingControlsProps> = ({
   isEraserMode, toggleEraser,
   onShare,
   isAuthenticated,
-  showOriginal,
-  onToggleOriginal
+  onShowOriginal
 }) => {
   
   const [showColorMenu, setShowColorMenu] = useState(false);
@@ -62,7 +59,7 @@ export const DrawingControls: React.FC<DrawingControlsProps> = ({
         </View>
       )}
 
-      {/* BARRE D'OUTILS - EFFET LIQUID GLASS PLUS TRANSPARENT */}
+      {/* BARRE D'OUTILS */}
       <View style={styles.toolbar}>
         
         {/* GAUCHE : Undo / Redo */}
@@ -96,18 +93,13 @@ export const DrawingControls: React.FC<DrawingControlsProps> = ({
 
         {/* DROITE : Slider & Share/User & OEIL */}
         <View style={styles.group}>
-            {/* NOUVEAU BOUTON OEIL */}
+            {/* BOUTON OEIL SIMPLE */}
             <TouchableOpacity 
-                onPressIn={onToggleOriginal} // On appuie pour voir
-                onPressOut={onToggleOriginal} // On relâche pour revenir au dessin
+                onPress={onShowOriginal}
                 style={styles.iconBtn}
                 hitSlop={10}
             >
-                {showOriginal ? (
-                    <Eye color="#000" size={22} /> // Ou EyeOff si vous préférez la logique inverse
-                ) : (
-                    <Eye color="#000" size={22} style={{ opacity: 0.5 }} /> // Opacité réduite quand inactif
-                )}
+                <Eye color="#000" size={22} />
             </TouchableOpacity>
 
             <View style={styles.sliderContainer}
@@ -168,7 +160,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.3)', 
   },
-  group: { flexDirection: 'row', alignItems: 'center', gap: 12 }, // Gap ajusté pour faire place au bouton
+  group: { flexDirection: 'row', alignItems: 'center', gap: 12 }, 
   separator: { width: 1, height: 20, backgroundColor: 'rgba(0,0,0,0.1)', marginHorizontal: 5 },
   iconBtn: { padding: 4 },
   toolBtn: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.4)' }, 
@@ -187,7 +179,6 @@ const styles = StyleSheet.create({
     borderStyle: 'solid', backgroundColor: 'transparent',
     borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: 'rgba(255,255,255,0.9)',
   },
-  // Largeur slider réduite un peu pour faire de la place
   sliderContainer: { width: 60, height: 40, justifyContent: 'center' }, 
   sliderTrack: { width: '100%', height: 20, justifyContent: 'center' },
   trackLine: { backgroundColor: 'rgba(0,0,0,0.1)', width: '100%' }, 

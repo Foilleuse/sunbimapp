@@ -8,9 +8,10 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '../src/contexts/AuthContext';
 import * as Updates from 'expo-updates';
 import React from 'react';
-// Ajout des imports pour l'auth sociale
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
+// Import de l'icône croix
+import { X } from 'lucide-react-native';
 
 interface Cloud {
   id: string;
@@ -40,7 +41,7 @@ export default function DrawPage() {
   const [strokeWidth, setStrokeWidth] = useState(2);
   const [isEraserMode, setIsEraserMode] = useState(false);
   
-  // NOUVEL ÉTAT POUR L'IMAGE ORIGINALE
+  // ÉTAT POUR L'IMAGE ORIGINALE
   const [showOriginalImage, setShowOriginalImage] = useState(false);
   
   const [modalVisible, setModalVisible] = useState(false);
@@ -63,7 +64,6 @@ export default function DrawPage() {
   const updateLabel = (Updates && Updates.updateId) ? `v.${Updates.updateId.substring(0, 6)}` : '';
   const [isGoogleConfigured, setIsGoogleConfigured] = useState(false);
   
-  // Anti-rebond
   const [hasOpenedShareAfterLogin, setHasOpenedShareAfterLogin] = useState(false);
 
   // --- CONFIGURATION GOOGLE SIGNIN ---
@@ -79,16 +79,14 @@ export default function DrawPage() {
     }
   }, []);
 
-  // --- GESTION POST-CONNEXION (UNIQUE MAITRE DE LA MODALE) ---
+  // --- GESTION POST-CONNEXION ---
   useEffect(() => {
     if (user) {
-        // 1. SI UTILISATEUR CONNECTÉ : ON FERME IMPÉRATIVEMENT LA MODALE D'AUTH
         if (authModalVisible) {
             setAuthModalVisible(false);
             setAuthLoading(false); 
         }
 
-        // 2. Si on a un dessin en attente et qu'on n'a pas encore ouvert le partage
         if (canvasRef.current?.getPaths().length > 0 && !modalVisible && !replayPaths && !hasOpenedShareAfterLogin) {
              const timer = setTimeout(() => {
                  setModalVisible(true);
@@ -97,10 +95,9 @@ export default function DrawPage() {
              return () => clearTimeout(timer);
         }
     } else {
-        // Si déconnecté, on reset le flag
         setHasOpenedShareAfterLogin(false);
     }
-  }, [user, authModalVisible]); // Ajout de authModalVisible aux dépendances pour être réactif
+  }, [user, authModalVisible]);
 
   // --- FONCTIONS SOCIAL LOGIN ---
   const handleGoogleLogin = async () => {
@@ -129,7 +126,6 @@ export default function DrawPage() {
            Alert.alert("Erreur Supabase", error.message);
            setAuthLoading(false);
         }
-        // Pas de fermeture manuelle ici, le useEffect[user] s'en charge
       } else {
         setAuthLoading(false);
       }
@@ -161,7 +157,6 @@ export default function DrawPage() {
             setAuthLoading(false);
             throw error;
         }
-        // Succès : le useEffect[user] fermera la modale
       } else {
         setAuthLoading(false);
       }
@@ -269,8 +264,9 @@ export default function DrawPage() {
   const handleRedo = () => canvasRef.current?.redo();
   const toggleEraser = () => setIsEraserMode((prev) => !prev);
   
-  const toggleOriginalImage = () => {
-      setShowOriginalImage(prev => !prev);
+  // Fonction pour ouvrir la vue originale
+  const showOriginal = () => {
+      setShowOriginalImage(true);
   };
 
   const handleSharePress = () => {
@@ -315,7 +311,6 @@ export default function DrawPage() {
              setAuthModalVisible(false); // On ferme pour qu'il aille voir ses mails
              return;
         }
-        // Si connexion réussie, le useEffect[user] fermera la modale
     } catch (e: any) {
         console.error("Auth Error:", e);
         Alert.alert("Erreur", e.message || "Une erreur est survenue lors de la connexion.");
@@ -366,16 +361,13 @@ export default function DrawPage() {
   return (
     <View style={styles.container}>
       
-      {/* HEADER TOUJOURS VISIBLE (zIndex > Splash) */}
       <View style={styles.header}>
         <Text style={styles.headerText}>sunbim</Text>
         {updateLabel ? <Text style={styles.versionText}>{updateLabel}</Text> : null}
       </View>
 
       <View style={styles.canvasContainer}>
-        {/* Le DrawingCanvas est TOUJOURS rendu ici pour ne pas perdre son état */}
-        {/* Si replayPaths est présent, on affiche le Viewer, sinon le Canvas */}
-        
+        {/* LE CANVAS TOUJOURS LÀ */}
         {replayPaths ? (
             <DrawingViewer 
                 imageUri={cloud.image_url}
@@ -399,19 +391,29 @@ export default function DrawPage() {
             />
         )}
         
-        {/* Image originale SUPERPOSÉE (Overlay) */}
-        {showOriginalImage && !replayPaths && (
-             <View style={[StyleSheet.absoluteFill, { zIndex: 999 }]}>
+        {/* OVERLAY IMAGE ORIGINALE */}
+        {showOriginalImage && (
+             <View style={[StyleSheet.absoluteFill, { zIndex: 9999, backgroundColor: 'black' }]}>
+                 {/* Image originale en plein écran */}
                  <Image 
                     source={{ uri: cloud.image_url }} 
                     style={StyleSheet.absoluteFill} 
-                    resizeMode="cover" // Assurez-vous que le mode correspond à celui du canvas
+                    resizeMode="contain" // Contain pour voir toute l'image
                  />
+                 
+                 {/* Bouton Fermer */}
+                 <TouchableOpacity 
+                    style={styles.closeOriginalBtn} 
+                    onPress={() => setShowOriginalImage(false)}
+                    hitSlop={20}
+                 >
+                     <X color="#FFF" size={32} />
+                 </TouchableOpacity>
              </View>
         )}
       </View>
       
-      {!replayPaths && (
+      {!replayPaths && !showOriginalImage && ( // Masquer les contrôles si on voit l'image originale
           <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
             <View style={{flex: 1}} pointerEvents="none" /> 
             <DrawingControls
@@ -420,15 +422,14 @@ export default function DrawPage() {
                 strokeWidth={strokeWidth} onStrokeWidthChange={setStrokeWidth}
                 isEraserMode={isEraserMode} toggleEraser={toggleEraser}
                 onShare={handleSharePress}
-                isAuthenticated={!!user} // Passage de l'état connecté/déconnecté
+                isAuthenticated={!!user} 
                 showOriginal={showOriginalImage}
-                onToggleOriginal={toggleOriginalImage}
+                onShowOriginal={showOriginal} // Nouvelle fonction d'ouverture
              />
           </View>
       )}
 
-      {/* MODALES... */}
-      {/* On empêche la modale d'auth de s'afficher si user est connecté */}
+      {/* MODALES (Connexion, Partage...) */}
       <Modal animationType="slide" transparent={true} visible={authModalVisible && !user} onRequestClose={() => {
           if (!authLoading) setAuthModalVisible(false);
       }}>
@@ -437,7 +438,6 @@ export default function DrawPage() {
                 <Text style={styles.modalTitle}>{isSignUp ? "Créer un compte" : "Se connecter"}</Text>
                 <Text style={styles.modalSubtitle}>Sauvegardez votre dessin pour le publier</Text>
                 
-                {/* BOUTONS SOCIAUX */}
                 <View style={styles.socialContainer}>
                     {Platform.OS === 'ios' && (
                         <AppleAuthentication.AppleAuthenticationButton
@@ -560,7 +560,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
   canvasContainer: { width: '100%', height: '100%', backgroundColor: '#000' },
   
-  // Header toujours au-dessus (zIndex 10)
   header: { position: 'absolute', top: 0, left: 0, right: 0, paddingTop: 60, paddingBottom: 15, alignItems: 'center', zIndex: 10, pointerEvents: 'none' },
   headerText: { fontSize: 32, fontWeight: '900', color: '#FFFFFF', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 0 },
   versionText: { fontSize: 10, color: 'rgba(255,255,255,0.5)', marginTop: 2, textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 1 },
@@ -601,7 +600,6 @@ const styles = StyleSheet.create({
       textShadowRadius: 5
   },
 
-  // Styles pour les boutons sociaux
   socialContainer: {
       width: '100%',
       marginBottom: 10,
@@ -619,5 +617,15 @@ const styles = StyleSheet.create({
       color: '#FFF',
       fontWeight: 'bold',
       fontSize: 16,
+  },
+
+  // Bouton de fermeture de l'image originale
+  closeOriginalBtn: {
+      position: 'absolute',
+      top: 50,
+      right: 20,
+      padding: 10,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      borderRadius: 30,
   }
 });
