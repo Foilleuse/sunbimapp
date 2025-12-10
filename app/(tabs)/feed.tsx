@@ -1,84 +1,129 @@
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform, Image, Pressable, Alert } from 'react-native';
 import { useEffect, useState, memo } from 'react';
-import { Heart, MessageCircle, User, Share2, Eye, MoreHorizontal } from 'lucide-react-native';
+import { User, Eye, MoreHorizontal, Lightbulb, Palette, Zap, Heart } from 'lucide-react-native';
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
 import { useAuth } from '../../src/contexts/AuthContext';
-import { CommentsModal } from '../../src/components/CommentsModal'; 
 import { UserProfileModal } from '../../src/components/UserProfileModal'; 
 import { useRouter } from 'expo-router'; 
 import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer';
 import Carousel from 'react-native-reanimated-carousel';
 
-// FeedCard : Affiche le dessin/photo. Ne contient plus le bouton Oeil.
+// Types de réactions possibles
+type ReactionType = 'like' | 'smart' | 'beautiful' | 'crazy' | null;
+
 const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, isHolding }: { drawing: any, canvasSize: number, index: number, currentIndex: number, onUserPress: (user: any) => void, isHolding: boolean }) => {
     const { user } = useAuth();
     
-    const initialLikesCount = drawing.likes?.[0]?.count || 0;
-
-    const [isLiked, setIsLiked] = useState(false);
-    const [likesCount, setLikesCount] = useState(initialLikesCount);
-    const [showComments, setShowComments] = useState(false); 
+    // État local pour la réaction de l'utilisateur
+    const [userReaction, setUserReaction] = useState<ReactionType>(null);
     
-    const commentsCount = drawing.comments?.[0]?.count || 0;
+    // Compteurs locaux pour l'affichage immédiat
+    const [reactionCounts, setReactionCounts] = useState({
+        like: 0,
+        smart: 0,
+        beautiful: 0,
+        crazy: 0
+    });
     
     const author = drawing.users;
     const isActive = index === currentIndex; 
     const shouldRenderDrawing = isActive;
 
+    // Chargement initial des réactions
     useEffect(() => {
-        setLikesCount(drawing.likes?.[0]?.count || 0);
-    }, [drawing]);
+        if (!drawing.reactions) return;
 
-    useEffect(() => {
-        if (!user) return;
-        const checkLikeStatus = async () => {
-            const { count } = await supabase
-                .from('likes')
-                .select('*', { count: 'exact', head: true })
-                .eq('user_id', user.id)
-                .eq('drawing_id', drawing.id);
-            
-            if (count && count > 0) setIsLiked(true);
-            else setIsLiked(false);
-        };
-        checkLikeStatus();
-    }, [user, drawing.id]);
+        // Calculer les totaux à partir des données brutes (si jointes) ou initialiser à 0
+        // Pour simplifier ici, on suppose que 'drawing' contient déjà les counts ou on les fetchera
+        // Dans une implémentation réelle optimisée, on utiliserait une vue SQL ou une fonction RPC.
+        // Ici, on va faire une requête pour charger l'état initial si nécessaire.
+        fetchReactionsState();
+    }, [drawing.id]);
 
-    const handleLike = async () => {
-        if (!user) return;
-
-        const previousLiked = isLiked;
-        const previousCount = likesCount;
-
-        const newLikedState = !previousLiked;
-        const newCount = newLikedState ? previousCount + 1 : Math.max(0, previousCount - 1);
-
-        setIsLiked(newLikedState);
-        setLikesCount(newCount);
-
+    const fetchReactionsState = async () => {
         try {
-            if (previousLiked) {
-                const { error } = await supabase
-                    .from('likes')
-                    .delete()
-                    .eq('user_id', user.id)
-                    .eq('drawing_id', drawing.id);
-                if (error) throw error;
-            } else {
-                const { error } = await supabase
-                    .from('likes')
-                    .insert({
-                        user_id: user.id,
-                        drawing_id: drawing.id
-                    });
-                if (error) throw error;
+            // 1. Récupérer toutes les réactions pour ce dessin pour compter
+            const { data: allReactions, error } = await supabase
+                .from('reactions')
+                .select('reaction_type, user_id')
+                .eq('drawing_id', drawing.id);
+
+            if (error) throw error;
+
+            const counts = { like: 0, smart: 0, beautiful: 0, crazy: 0 };
+            let myReaction: ReactionType = null;
+
+            allReactions?.forEach((r: any) => {
+                if (counts.hasOwnProperty(r.reaction_type)) {
+                    counts[r.reaction_type as keyof typeof counts]++;
+                }
+                if (user && r.user_id === user.id) {
+                    myReaction = r.reaction_type as ReactionType;
+                }
+            });
+
+            setReactionCounts(counts);
+            setUserReaction(myReaction);
+
+        } catch (e) {
+            console.error("Erreur chargement réactions:", e);
+        }
+    };
+
+    const handleReaction = async (type: ReactionType) => {
+        if (!user || !type) return;
+
+        // Optimistic UI Update
+        const previousReaction = userReaction;
+        const previousCounts = { ...reactionCounts };
+
+        // Si on clique sur la même réaction, on l'enlève (toggle off)
+        if (userReaction === type) {
+            setUserReaction(null);
+            setReactionCounts(prev => ({
+                ...prev,
+                [type]: Math.max(0, prev[type] - 1)
+            }));
+            
+            try {
+                await supabase.from('reactions').delete().eq('user_id', user.id).eq('drawing_id', drawing.id);
+            } catch (e) {
+                // Rollback
+                setUserReaction(previousReaction);
+                setReactionCounts(previousCounts);
             }
-        } catch (error) {
-            console.error("Erreur like:", error);
-            setIsLiked(previousLiked);
-            setLikesCount(previousCount);
+        } 
+        // Si on change de réaction ou qu'on en ajoute une nouvelle
+        else {
+            setUserReaction(type);
+            setReactionCounts(prev => {
+                const newCounts = { ...prev };
+                if (previousReaction) {
+                    newCounts[previousReaction] = Math.max(0, newCounts[previousReaction] - 1);
+                }
+                newCounts[type]++;
+                return newCounts;
+            });
+
+            try {
+                // Upsert permet de gérer l'insert ou l'update en une seule requête grâce à la contrainte unique (user_id, drawing_id)
+                const { error } = await supabase
+                    .from('reactions')
+                    .upsert({
+                        user_id: user.id,
+                        drawing_id: drawing.id,
+                        reaction_type: type
+                    }, { onConflict: 'user_id, drawing_id' });
+                
+                if (error) throw error;
+            } catch (e) {
+                console.error(e);
+                // Rollback
+                setUserReaction(previousReaction);
+                setReactionCounts(previousCounts);
+            }
         }
     };
 
@@ -137,7 +182,6 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
         <View style={styles.cardContainer}>
             
             <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent', position: 'relative' }}>
-                {/* On utilise la prop isHolding passée par le parent */}
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
                         <DrawingViewer
@@ -160,11 +204,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
                             {drawing.label || "Sans titre"}
                         </Text>
                         
-                        <TouchableOpacity 
-                            onPress={handleReport} 
-                            style={styles.moreBtn}
-                            hitSlop={15}
-                        >
+                        <TouchableOpacity onPress={handleReport} style={styles.moreBtn} hitSlop={15}>
                             <MoreHorizontal color="#999" size={24} />
                         </TouchableOpacity>
                     </View>
@@ -186,36 +226,56 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
                     </TouchableOpacity>
                 </View>
 
-                <View style={styles.actionBar}>
-                    <View style={styles.leftActions}>
-                        <TouchableOpacity style={styles.actionBtn} onPress={handleLike}>
-                            <Heart 
-                                color={isLiked ? "#FF3B30" : "#000"} 
-                                fill={isLiked ? "#FF3B30" : "transparent"} 
-                                size={28} 
-                            />
-                            <Text style={styles.actionText}>{likesCount}</Text>
-                        </TouchableOpacity>
+                {/* --- BARRE DE RÉACTIONS --- */}
+                <View style={styles.reactionBar}>
+                    
+                    <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('like')}>
+                        <Heart 
+                            color={userReaction === 'like' ? "#FF3B30" : "#000"} 
+                            fill={userReaction === 'like' ? "#FF3B30" : "transparent"} 
+                            size={24} 
+                        />
+                        <Text style={[styles.reactionText, userReaction === 'like' && styles.activeText]}>
+                            {reactionCounts.like || 0}
+                        </Text>
+                    </TouchableOpacity>
 
-                        <TouchableOpacity style={styles.actionBtn} onPress={() => setShowComments(true)}>
-                            <MessageCircle color="#000" size={28} />
-                            <Text style={styles.actionText}>{commentsCount}</Text>
-                        </TouchableOpacity>
-                    </View>
+                    <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('smart')}>
+                        <Lightbulb 
+                            color={userReaction === 'smart' ? "#FFCC00" : "#000"} 
+                            fill={userReaction === 'smart' ? "#FFCC00" : "transparent"} 
+                            size={24} 
+                        />
+                        <Text style={[styles.reactionText, userReaction === 'smart' && styles.activeText]}>
+                            {reactionCounts.smart || 0}
+                        </Text>
+                    </TouchableOpacity>
 
-                    <View style={styles.rightActions}>
-                        <TouchableOpacity style={styles.iconBtn}>
-                            <Share2 color="#000" size={24} />
-                        </TouchableOpacity>
-                    </View>
+                    <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('beautiful')}>
+                        <Palette 
+                            color={userReaction === 'beautiful' ? "#5856D6" : "#000"} 
+                            fill={userReaction === 'beautiful' ? "#5856D6" : "transparent"} 
+                            size={24} 
+                        />
+                        <Text style={[styles.reactionText, userReaction === 'beautiful' && styles.activeText]}>
+                            {reactionCounts.beautiful || 0}
+                        </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('crazy')}>
+                        {/* Pour "Dingue", on utilise une icône Zap (éclair) ou une autre icône disponible dans Lucide car "tête qui explose" n'y est pas en standard vectoriel, ou on pourrait utiliser un emoji Text */}
+                        <Zap 
+                            color={userReaction === 'crazy' ? "#FF2D55" : "#000"} 
+                            fill={userReaction === 'crazy' ? "#FF2D55" : "transparent"} 
+                            size={24} 
+                        />
+                        <Text style={[styles.reactionText, userReaction === 'crazy' && styles.activeText]}>
+                            {reactionCounts.crazy || 0}
+                        </Text>
+                    </TouchableOpacity>
+
                 </View>
             </View>
-
-            <CommentsModal 
-                visible={showComments} 
-                onClose={() => setShowComments(false)} 
-                drawingId={drawing.id} 
-            />
         </View>
     );
 }, (prev, next) => {
@@ -234,7 +294,6 @@ export default function FeedPage() {
     const [backgroundCloud, setBackgroundCloud] = useState<string | null>(null);
     const { width: screenWidth } = Dimensions.get('window');
     
-    // État global pour le maintien du bouton Oeil
     const [isGlobalHolding, setIsGlobalHolding] = useState(false);
     
     const [layout, setLayout] = useState<{ width: number; height: number } | null>(null);
@@ -242,16 +301,11 @@ export default function FeedPage() {
     const [selectedUser, setSelectedUser] = useState<any>(null);
     const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
 
-    // --- CALCUL DE LA POSITION DU BOUTON OEIL ---
-    // Hauteur totale de l'image (ratio 3:4)
     const IMAGE_HEIGHT = screenWidth * (4/3);
     const EYE_BUTTON_SIZE = 44;
-    // La carte blanche remonte de 40px sur la photo.
     const CARD_OVERLAP = 40; 
-    // On ajoute une marge pour que le bouton soit visuellement au-dessus de la carte blanche
     const MARGIN_BOTTOM = 15;
     
-    // Position Top absolue = Hauteur Image - Zone cachée par la carte - Marge - Taille Bouton
     const eyeButtonTop = IMAGE_HEIGHT - CARD_OVERLAP - MARGIN_BOTTOM - EYE_BUTTON_SIZE;
 
     useEffect(() => { fetchTodaysFeed(); }, [user]); 
@@ -278,7 +332,7 @@ export default function FeedPage() {
 
                 let query = supabase
                     .from('drawings')
-                    .select('*, users(id, display_name, avatar_url), likes(count), comments(count)') 
+                    .select('*, users(id, display_name, avatar_url)') 
                     .eq('cloud_id', cloudData.id)
                     .eq('is_hidden', false) 
                     .order('created_at', { ascending: false })
@@ -350,7 +404,6 @@ export default function FeedPage() {
                                 index={index}
                                 currentIndex={currentIndex}
                                 onUserPress={handleUserPress}
-                                // On passe l'état holding uniquement à la carte active
                                 isHolding={isGlobalHolding && index === currentIndex}
                             />
                         )}
@@ -361,8 +414,6 @@ export default function FeedPage() {
                     ) : null
                 )}
 
-                {/* BOUTON OEIL STATIQUE (Overlay sur le Carousel) */}
-                {/* Positionné précisément au-dessus de la carte blanche, sur le coin bas-droit de la photo */}
                 {drawings.length > 0 && (
                     <TouchableOpacity 
                         style={[
@@ -412,10 +463,9 @@ const styles = StyleSheet.create({
     
     moreBtn: { padding: 5, marginTop: 5 }, 
     
-    // Style du bouton Oeil Statique
     staticEyeBtn: {
         position: 'absolute',
-        right: 15, // Marge droite par rapport à l'écran
+        right: 15,
         width: 44,
         height: 44,
         borderRadius: 22,
@@ -434,11 +484,28 @@ const styles = StyleSheet.create({
     avatar: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#F0F0F0', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
     userName: { fontSize: 14, fontWeight: '600', color: '#333' },
     dateText: { fontSize: 14, color: '#999' },
-    actionBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 5 },
-    leftActions: { flexDirection: 'row', alignItems: 'center', gap: 20 },
-    rightActions: { flexDirection: 'row', alignItems: 'center', gap: 15 },
-    actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    iconBtn: { padding: 5 },
-    iconBtnActive: { opacity: 0.3 },
-    actionText: { fontSize: 16, fontWeight: '600', color: '#000' },
+
+    // Nouvelle barre de réactions
+    reactionBar: { 
+        flexDirection: 'row', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        marginTop: 5,
+        paddingHorizontal: 10
+    },
+    reactionBtn: { 
+        alignItems: 'center', 
+        justifyContent: 'center',
+        padding: 5
+    },
+    reactionText: { 
+        fontSize: 12, 
+        fontWeight: '600', 
+        color: '#666',
+        marginTop: 4 
+    },
+    activeText: {
+        color: '#000',
+        fontWeight: '700'
+    }
 });
