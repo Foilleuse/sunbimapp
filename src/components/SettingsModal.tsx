@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabaseClient';
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
 import { getOptimizedImageUrl } from '../utils/imageOptimizer';
+import { useRouter } from 'expo-router'; // Import du router
 
 interface SettingsModalProps {
   visible: boolean;
@@ -14,6 +15,7 @@ interface SettingsModalProps {
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }) => {
   const { user, profile, signOut } = useAuth();
+  const router = useRouter(); // Hook de navigation
   const [loading, setLoading] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   
@@ -157,20 +159,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
       if (!user) return;
       setLoading(true);
       try {
-          // 1. Supprimer les données publiques (la cascade SQL devrait gérer le reste si configurée, sinon on supprime le row user)
           const { error } = await supabase.from('users').delete().eq('id', user.id);
           
           if (error) {
-              // Si RLS empêche la suppression directe, on peut essayer de vider les champs ou marquer comme supprimé
               console.error("Erreur suppression data:", error);
               throw new Error("Impossible de supprimer les données. Contactez le support.");
           }
 
-          // 2. Déconnexion (l'utilisateur ne pourra plus se connecter si on avait une fonction admin pour delete auth)
-          // Note: Supabase client ne permet pas deleteUser() sans clé service_role. 
-          // On supprime donc les données et on déconnecte.
           await signOut();
-          onClose();
+          onClose(); // Fermer la modale
+          
+          // Redirection vers l'index après suppression
+          router.replace('/');
+          
           Alert.alert("Compte supprimé", "Vos données ont été effacées. Au revoir.");
       } catch (error: any) {
           Alert.alert("Erreur", error.message);
@@ -179,13 +180,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
       }
   };
 
-  const handleLogout = async () => {
+  const handleLogout = () => {
       Alert.alert(
           "Déconnexion",
           "Êtes-vous sûr de vouloir vous déconnecter ?",
           [
               { text: "Annuler", style: "cancel" },
-              { text: "Se déconnecter", style: "destructive", onPress: async () => { await signOut(); onClose(); } }
+              { 
+                  text: "Se déconnecter", 
+                  style: "destructive", 
+                  onPress: async () => { 
+                      await signOut(); 
+                      onClose(); // Fermer la modale
+                      
+                      // Redirection immédiate vers l'index (page de dessin/connexion)
+                      router.replace('/'); 
+                  } 
+              }
           ]
       );
   };
