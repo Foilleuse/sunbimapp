@@ -8,8 +8,8 @@ interface SunbimHeaderProps {
   showCloseButton?: boolean;
   onClose?: () => void;
   showNotificationButton?: boolean; 
-  showProfileButton?: boolean; // Pour afficher le bouton profil à droite
-  transparent?: boolean; // Nouvelle prop pour le fond transparent
+  showProfileButton?: boolean; 
+  transparent?: boolean; 
 }
 
 export const SunbimHeader: React.FC<SunbimHeaderProps> = ({ 
@@ -17,12 +17,11 @@ export const SunbimHeader: React.FC<SunbimHeaderProps> = ({
   onClose,
   showNotificationButton = false,
   showProfileButton = false,
-  transparent = false // Par défaut opaque
+  transparent = false 
 }) => {
   const router = useRouter();
 
-  // Récupération de l'ID de mise à jour (ou 'Dev' si en local)
-  const updateLabel = Updates.updateId ? `v.${Updates.updateId.substring(0, 6)}` : 'Dev Mode';
+  const updateLabel = (Updates && Updates.updateId) ? `v.${Updates.updateId.substring(0, 6)}` : '';
 
   const handleClose = () => {
     if (onClose) onClose();
@@ -40,11 +39,11 @@ export const SunbimHeader: React.FC<SunbimHeaderProps> = ({
   return (
     <View style={[
         styles.headerBar, 
-        transparent && styles.transparentHeader // Application du style transparent conditionnel
+        transparent && styles.transparentHeader 
     ]}>
-      {/* Conteneur Titre + Version */}
       <View style={styles.titleContainer}>
-          <Text style={[styles.headerText, transparent && styles.whiteText]}>nyola</Text>
+          {/* Titre avec le style Index (Blanc + Ombre portée) */}
+          <Text style={styles.headerText}>nyola</Text>
           <Text style={[styles.versionText, transparent && styles.whiteSubText]}>{updateLabel}</Text>
       </View>
       
@@ -88,7 +87,7 @@ const styles = StyleSheet.create({
   transparentHeader: {
       backgroundColor: 'transparent',
       borderBottomWidth: 0,
-      position: 'absolute', // Pour flotter au-dessus du contenu
+      position: 'absolute', 
       top: 0,
       left: 0,
       right: 0,
@@ -96,22 +95,31 @@ const styles = StyleSheet.create({
   titleContainer: {
       alignItems: 'center',
   },
+  // Style mis à jour pour correspondre à l'index (Blanc avec Ombre)
   headerText: {
     fontSize: 32,
     fontWeight: '900',
-    color: '#000000', 
+    color: '#FFFFFF', // Toujours blanc
     lineHeight: 34,
+    // Ombre portée pour l'effet de contour/relief
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 2, height: 2 },
+    textShadowRadius: 0, // Radius 0 pour un effet net "hard shadow" comme sur l'index
   },
+  // whiteText n'est plus nécessaire car headerText est blanc par défaut maintenant
   whiteText: {
-      color: '#FFFFFF', // Texte blanc sur fond transparent (supposé sur fond bleu)
+      color: '#FFFFFF', 
   },
   versionText: {
       fontSize: 10,
       color: '#999', 
-      marginTop: -2,
+      marginTop: 2, // Légèrement décalé pour ne pas coller
   },
   whiteSubText: {
       color: 'rgba(255,255,255,0.7)',
+      textShadowColor: 'rgba(0,0,0,0.8)', 
+      textShadowOffset: { width: 1, height: 1 }, 
+      textShadowRadius: 1 
   },
   leftBtn: {
     position: 'absolute',
