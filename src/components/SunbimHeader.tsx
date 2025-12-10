@@ -16,7 +16,7 @@ export const SunbimHeader: React.FC<SunbimHeaderProps> = ({
   showCloseButton, 
   onClose,
   showNotificationButton = false,
-  showProfileButton = false,
+  showProfileButton = false, // Par défaut à false
   transparent = false 
 }) => {
   const router = useRouter();
@@ -60,6 +60,7 @@ export const SunbimHeader: React.FC<SunbimHeaderProps> = ({
               </TouchableOpacity>
           )}
           
+          {/* Bouton Profil supprimé ou conditionné */}
           {showProfileButton && (
               <TouchableOpacity onPress={handleProfile} hitSlop={10}>
                   <User color={transparent ? "#FFF" : "#000"} size={26} />

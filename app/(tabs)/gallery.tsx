@@ -289,7 +289,8 @@ export default function GalleryPage() {
 
     return (
         <View style={styles.container}>
-            <SunbimHeader showCloseButton={false} onClose={closeViewer} showProfileButton={true} />
+            {/* RETRAIT DE LA PROP showProfileButton */}
+            <SunbimHeader showCloseButton={false} onClose={closeViewer} /> 
             <View style={{flex: 1, position: 'relative'}}>
                 <View style={{flex: 1}}>
                     <View style={styles.toolsContainer}>
