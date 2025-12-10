@@ -62,8 +62,8 @@ export default function DrawPage() {
   // --- CONFIGURATION GOOGLE SIGNIN (Au montage) ---
   useEffect(() => {
     GoogleSignin.configure({
-      iosClientId: 'VOTRE_IOS_CLIENT_ID.apps.googleusercontent.com', // À REMPLACER
-      webClientId: 'VOTRE_WEB_CLIENT_ID.apps.googleusercontent.com', // À REMPLACER
+      iosClientId: '296503578118-pdqa6300t0r1l315e94nn07uuj8fdepq.apps.googleusercontent.com', // À REMPLACER
+      webClientId: '296503578118-9otrhg40mnenuvh1ir16o4qoujhvmb74.apps.googleusercontent.com', // À REMPLACER
       scopes: ['profile', 'email'],
     });
   }, []);
