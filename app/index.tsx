@@ -92,12 +92,15 @@ export default function DrawPage() {
         }
         // Si succès, le useEffect([user]) fermera la modale
       } else {
-        throw new Error('Pas de token ID Google reçu (Vérifiez webClientId)');
+        // En cas d'annulation ou d'échec silencieux, on ne bloque pas l'UI
+        setAuthLoading(false); 
       }
     } catch (error: any) {
       setAuthLoading(false);
       if (error.code !== statusCodes.SIGN_IN_CANCELLED && error.code !== statusCodes.IN_PROGRESS) {
         Alert.alert("Erreur Connexion Google", error.message || "Une erreur inconnue est survenue.");
+      } else {
+         console.log("Google Sign In Cancelled/In Progress");
       }
     }
   };
