@@ -264,7 +264,6 @@ export default function DrawPage() {
   const handleRedo = () => canvasRef.current?.redo();
   const toggleEraser = () => setIsEraserMode((prev) => !prev);
   
-  // Fonction pour ouvrir la vue originale
   const showOriginal = () => {
       setShowOriginalImage(true);
   };
@@ -361,6 +360,7 @@ export default function DrawPage() {
   return (
     <View style={styles.container}>
       
+      {/* HEADER TOUJOURS VISIBLE (zIndex > Splash) */}
       <View style={styles.header}>
         <Text style={styles.headerText}>sunbim</Text>
         {updateLabel ? <Text style={styles.versionText}>{updateLabel}</Text> : null}
@@ -390,30 +390,9 @@ export default function DrawPage() {
               blurRadius={showSplash ? canvasBlur : 0}
             />
         )}
-        
-        {/* OVERLAY IMAGE ORIGINALE */}
-        {showOriginalImage && (
-             <View style={[StyleSheet.absoluteFill, { zIndex: 9999, backgroundColor: 'black' }]}>
-                 {/* Image originale en plein écran */}
-                 <Image 
-                    source={{ uri: cloud.image_url }} 
-                    style={StyleSheet.absoluteFill} 
-                    resizeMode="contain" // Contain pour voir toute l'image
-                 />
-                 
-                 {/* Bouton Fermer */}
-                 <TouchableOpacity 
-                    style={styles.closeOriginalBtn} 
-                    onPress={() => setShowOriginalImage(false)}
-                    hitSlop={20}
-                 >
-                     <X color="#FFF" size={32} />
-                 </TouchableOpacity>
-             </View>
-        )}
       </View>
       
-      {!replayPaths && !showOriginalImage && ( // Masquer les contrôles si on voit l'image originale
+      {!replayPaths && (
           <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
             <View style={{flex: 1}} pointerEvents="none" /> 
             <DrawingControls
@@ -424,10 +403,36 @@ export default function DrawPage() {
                 onShare={handleSharePress}
                 isAuthenticated={!!user} 
                 showOriginal={showOriginalImage}
-                onShowOriginal={showOriginal} // Nouvelle fonction d'ouverture
+                onShowOriginal={showOriginal} 
              />
           </View>
       )}
+
+      {/* MODALE VISUALISATION IMAGE ORIGINALE */}
+      <Modal 
+          visible={showOriginalImage} 
+          animationType="fade" 
+          transparent={true} 
+          onRequestClose={() => setShowOriginalImage(false)}
+      >
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', alignItems: 'center' }]}>
+              {/* Image en plein écran, en mode contain pour voir toute l'image */}
+              <Image 
+                  source={{ uri: cloud.image_url }} 
+                  style={{ width: '100%', height: '100%' }} 
+                  resizeMode="contain" 
+              />
+              
+              {/* Bouton de fermeture */}
+              <TouchableOpacity 
+                  style={styles.closeOriginalBtn} 
+                  onPress={() => setShowOriginalImage(false)}
+                  hitSlop={20}
+              >
+                  <X color="#FFF" size={32} />
+              </TouchableOpacity>
+          </View>
+      </Modal>
 
       {/* MODALES (Connexion, Partage...) */}
       <Modal animationType="slide" transparent={true} visible={authModalVisible && !user} onRequestClose={() => {
@@ -438,6 +443,7 @@ export default function DrawPage() {
                 <Text style={styles.modalTitle}>{isSignUp ? "Créer un compte" : "Se connecter"}</Text>
                 <Text style={styles.modalSubtitle}>Sauvegardez votre dessin pour le publier</Text>
                 
+                {/* BOUTONS SOCIAUX */}
                 <View style={styles.socialContainer}>
                     {Platform.OS === 'ios' && (
                         <AppleAuthentication.AppleAuthenticationButton
@@ -560,6 +566,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
   canvasContainer: { width: '100%', height: '100%', backgroundColor: '#000' },
   
+  // Header toujours au-dessus (zIndex 10)
   header: { position: 'absolute', top: 0, left: 0, right: 0, paddingTop: 60, paddingBottom: 15, alignItems: 'center', zIndex: 10, pointerEvents: 'none' },
   headerText: { fontSize: 32, fontWeight: '900', color: '#FFFFFF', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 0 },
   versionText: { fontSize: 10, color: 'rgba(255,255,255,0.5)', marginTop: 2, textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 1 },
