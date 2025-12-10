@@ -59,7 +59,7 @@ export default function DrawPage() {
   const updateLabel = (Updates && Updates.updateId) ? `v.${Updates.updateId.substring(0, 6)}` : '';
   const [isGoogleConfigured, setIsGoogleConfigured] = useState(false);
   
-  // Anti-rebond pour l'ouverture automatique de la modale de partage après login
+  // Anti-rebond
   const [hasOpenedShareAfterLogin, setHasOpenedShareAfterLogin] = useState(false);
 
   // --- CONFIGURATION GOOGLE SIGNIN ---
@@ -78,28 +78,29 @@ export default function DrawPage() {
   // --- GESTION POST-CONNEXION (UNIQUE MAITRE DE LA MODALE) ---
   useEffect(() => {
     if (user) {
-        // 1. L'utilisateur est connecté : on force la fermeture de la modale d'auth
-        setAuthModalVisible(false);
-        setAuthLoading(false); // On arrête le chargement si ce n'était pas fait
+        // 1. SI UTILISATEUR CONNECTÉ : ON FERME IMPÉRATIVEMENT LA MODALE D'AUTH
+        if (authModalVisible) {
+            setAuthModalVisible(false);
+            setAuthLoading(false); 
+        }
 
         // 2. Si on a un dessin en attente et qu'on n'a pas encore ouvert le partage
         if (canvasRef.current?.getPaths().length > 0 && !modalVisible && !replayPaths && !hasOpenedShareAfterLogin) {
-             // Petit délai pour laisser l'animation de fermeture de la modale auth se terminer proprement
-             setTimeout(() => {
+             const timer = setTimeout(() => {
                  setModalVisible(true);
-                 setHasOpenedShareAfterLogin(true); // On marque comme fait pour ne pas boucler
+                 setHasOpenedShareAfterLogin(true); 
              }, 600);
+             return () => clearTimeout(timer);
         }
     } else {
-        // Si l'utilisateur se déconnecte, on reset le flag pour la prochaine fois
+        // Si déconnecté, on reset le flag
         setHasOpenedShareAfterLogin(false);
     }
-  }, [user]); // Ne dépend que de 'user'
+  }, [user, authModalVisible]); // Ajout de authModalVisible aux dépendances pour être réactif
 
   // --- FONCTIONS SOCIAL LOGIN ---
   const handleGoogleLogin = async () => {
-    if (authLoading) return; // Anti-spam clic
-
+    if (authLoading) return;
     if (!isGoogleConfigured) {
         Alert.alert("Erreur", "Google n'est pas encore prêt.");
         return;
@@ -124,7 +125,7 @@ export default function DrawPage() {
            Alert.alert("Erreur Supabase", error.message);
            setAuthLoading(false);
         }
-        // Pas de setAuthModalVisible(false) ici, c'est le useEffect[user] qui le fera
+        // Pas de fermeture manuelle ici, le useEffect[user] s'en charge
       } else {
         setAuthLoading(false);
       }
@@ -267,7 +268,6 @@ export default function DrawPage() {
   const handleSharePress = () => {
     if (!canvasRef.current) return;
     
-    // Si déjà connecté (cas rare ici car géré par le useEffect, mais sécurité)
     if (user) {
         const paths = canvasRef.current.getPaths();
         if (!paths || paths.length === 0) {
@@ -278,7 +278,6 @@ export default function DrawPage() {
         return;
     }
 
-    // Si pas connecté
     const paths = canvasRef.current.getPaths();
     if (!paths || paths.length === 0) {
         Alert.alert("Oups...", "Dessine quelque chose !");
@@ -398,14 +397,14 @@ export default function DrawPage() {
                 strokeWidth={strokeWidth} onStrokeWidthChange={setStrokeWidth}
                 isEraserMode={isEraserMode} toggleEraser={toggleEraser}
                 onShare={handleSharePress}
-                isAuthenticated={!!user} 
+                isAuthenticated={!!user} // Passage de l'état connecté/déconnecté
              />
           </View>
       )}
 
       {/* MODALES... */}
-      <Modal animationType="slide" transparent={true} visible={authModalVisible} onRequestClose={() => {
-          // Empêcher la fermeture si chargement, sinon fermer
+      {/* On empêche la modale d'auth de s'afficher si user est connecté */}
+      <Modal animationType="slide" transparent={true} visible={authModalVisible && !user} onRequestClose={() => {
           if (!authLoading) setAuthModalVisible(false);
       }}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
@@ -413,7 +412,6 @@ export default function DrawPage() {
                 <Text style={styles.modalTitle}>{isSignUp ? "Créer un compte" : "Se connecter"}</Text>
                 <Text style={styles.modalSubtitle}>Sauvegardez votre dessin pour le publier</Text>
                 
-                {/* BOUTONS SOCIAUX */}
                 <View style={styles.socialContainer}>
                     {Platform.OS === 'ios' && (
                         <AppleAuthentication.AppleAuthenticationButton
