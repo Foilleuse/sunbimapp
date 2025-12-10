@@ -28,7 +28,7 @@ const MaskedDayImage = ({ uri, width, height, top }: { uri: string, width: numbe
                     start={vec(0, 0)}
                     end={vec(0, height)}
                     colors={["transparent", "white", "white", "transparent"]}
-                    positions={[0, 0.10, 0.90, 1]}
+                    positions={[0, 0.05, 0.95, 1]}
                 />
             </Rect>
             <SkiaImage
@@ -326,12 +326,9 @@ export default function FeedPage() {
     // Calculs de position
     const IMAGE_HEIGHT = screenWidth * (4/3);
     const EYE_BUTTON_SIZE = 44;
+    const MARGIN_BOTTOM = 25; 
     
-    // Modification: on réduit la marge pour que le bouton descende
-    // Avant: 25, Maintenant: 5. 
-    // Plus le chiffre est petit, plus le bouton est bas (proche du bas de l'image)
-    const MARGIN_BOTTOM = 5; 
-    
+    // Position du bouton Oeil ajustée
     const eyeButtonTop = IMAGE_HEIGHT - EYE_BUTTON_SIZE - MARGIN_BOTTOM;
 
     useFocusEffect(
@@ -416,21 +413,34 @@ export default function FeedPage() {
 
     return (
         <View style={styles.container}>
+             {/* 1. BACKGROUND FLOU PLEIN ÉCRAN */}
+             {backgroundCloud && (
+                <Image 
+                    source={{ uri: optimizedBackground || backgroundCloud }}
+                    style={StyleSheet.absoluteFillObject}
+                    resizeMode="cover"
+                    blurRadius={20} // Flou gaussien
+                />
+            )}
+
+            {/* 2. IMAGE DU JOUR NETTE (MASQUÉE) */}
+            {/* Positionnée en ABSOLU au niveau racine, avec le bon décalage TOP_HEADER_SPACE */}
+            {backgroundCloud && (
+                <MaskedDayImage 
+                    uri={optimizedBackground || backgroundCloud}
+                    width={screenWidth}
+                    height={IMAGE_HEIGHT}
+                    top={TOP_HEADER_SPACE} // Alignement exact
+                />
+            )}
+
             <SunbimHeader showCloseButton={false} transparent={true} />
             
             <View 
                 style={[styles.mainContent, { paddingTop: TOP_HEADER_SPACE }]} 
                 onLayout={(e) => setLayout(e.nativeEvent.layout)}
             >
-                {backgroundCloud && (
-                    <MaskedDayImage 
-                        uri={optimizedBackground || backgroundCloud}
-                        width={screenWidth}
-                        height={IMAGE_HEIGHT}
-                        top={TOP_HEADER_SPACE}
-                    />
-                )}
-
+                {/* 3. CARROUSEL DES DESSINS */}
                 {drawings.length > 0 && layout ? (
                     <Carousel
                         loop={true}
@@ -457,13 +467,17 @@ export default function FeedPage() {
                     ) : null
                 )}
 
-                {/* BOUTON OEIL STATIQUE */}
+                {/* 4. BOUTON OEIL STATIQUE */}
                 {drawings.length > 0 && (
                     <TouchableOpacity 
                         style={[
                             styles.staticEyeBtn, 
-                            // On ajoute un décalage supplémentaire pour descendre le bouton dans le coin
-                            { top: eyeButtonTop + 100 } 
+                            // Le bouton doit être positionné par rapport au haut du conteneur (qui a déjà le padding)
+                            // Donc on n'ajoute pas +100 si on utilise un top relatif au conteneur parent
+                            // Mais ici 'staticEyeBtn' est absolu dans 'mainContent', donc le top: 0 est le haut de mainContent.
+                            // Comme mainContent a paddingTop: 120, le contenu (carousel) commence à 120.
+                            // Donc eyeButtonTop (calculé sur l'image) est correct SI on le décale de 0.
+                            { top: eyeButtonTop } 
                         ]}
                         activeOpacity={0.8}
                         onPressIn={() => setIsGlobalHolding(true)}
@@ -540,7 +554,6 @@ const styles = StyleSheet.create({
         width: 44,
         height: 44,
         borderRadius: 22,
-        // Modification: Fond blanc plus transparent (0.5)
         backgroundColor: 'rgba(255,255,255,0.5)', 
         justifyContent: 'center',
         alignItems: 'center',
