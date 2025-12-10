@@ -58,6 +58,8 @@ export default function DrawPage() {
 
   const canvasRef = useRef<DrawingCanvasRef>(null);
   const updateLabel = (Updates && Updates.updateId) ? `v.${Updates.updateId.substring(0, 6)}` : '';
+  const [isGoogleConfigured, setIsGoogleConfigured] = useState(false);
+
 
   // --- CONFIGURATION GOOGLE SIGNIN (Au montage) ---
   useEffect(() => {
@@ -72,6 +74,7 @@ export default function DrawPage() {
         
         scopes: ['profile', 'email'],
       });
+      setIsGoogleConfigured(true);
     } catch (e) {
       console.error("Erreur config Google:", e);
     }
@@ -79,6 +82,10 @@ export default function DrawPage() {
 
   // --- FONCTIONS SOCIAL LOGIN ---
   const handleGoogleLogin = async () => {
+    if (!isGoogleConfigured) {
+        console.error('Google Signin not configured yet');
+        return;
+    }
     setAuthLoading(true);
     try {
       // CORRECTION : Pas besoin de hasPlayServices sur iOS, et ajout d'options explicites
