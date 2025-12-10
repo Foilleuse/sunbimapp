@@ -8,6 +8,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '../src/contexts/AuthContext';
 import * as Updates from 'expo-updates';
 import React from 'react';
+// Ajout des imports pour l'auth sociale
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 
@@ -38,6 +39,9 @@ export default function DrawPage() {
   const [strokeColor, setStrokeColor] = useState('#000000');
   const [strokeWidth, setStrokeWidth] = useState(2);
   const [isEraserMode, setIsEraserMode] = useState(false);
+  
+  // NOUVEL ÉTAT POUR L'IMAGE ORIGINALE
+  const [showOriginalImage, setShowOriginalImage] = useState(false);
   
   const [modalVisible, setModalVisible] = useState(false);
   const [tagText, setTagText] = useState('');
@@ -264,6 +268,10 @@ export default function DrawPage() {
   const handleUndo = () => canvasRef.current?.undo();
   const handleRedo = () => canvasRef.current?.redo();
   const toggleEraser = () => setIsEraserMode((prev) => !prev);
+  
+  const toggleOriginalImage = () => {
+      setShowOriginalImage(prev => !prev);
+  };
 
   const handleSharePress = () => {
     if (!canvasRef.current) return;
@@ -358,6 +366,7 @@ export default function DrawPage() {
   return (
     <View style={styles.container}>
       
+      {/* HEADER TOUJOURS VISIBLE (zIndex > Splash) */}
       <View style={styles.header}>
         <Text style={styles.headerText}>sunbim</Text>
         {updateLabel ? <Text style={styles.versionText}>{updateLabel}</Text> : null}
@@ -376,15 +385,38 @@ export default function DrawPage() {
                 autoCenter={true}
             />
         ) : (
-            <DrawingCanvas
-              ref={canvasRef}
-              imageUri={cloud.image_url}
-              strokeColor={strokeColor}
-              strokeWidth={strokeWidth}
-              isEraserMode={isEraserMode}
-              onClear={handleClear}
-              blurRadius={showSplash ? canvasBlur : 0}
-            />
+           /* Affichage conditionnel de l'image originale */
+           showOriginalImage ? (
+                <View style={[StyleSheet.absoluteFill, { backgroundColor: 'black', justifyContent: 'center' }]}>
+                     <Image 
+                        source={{ uri: cloud.image_url }} 
+                        style={StyleSheet.absoluteFill} 
+                        resizeMode="cover" // Important: doit correspondre au mode du DrawingCanvas
+                     />
+                     {/* On garde le DrawingCanvas monté mais invisible pour ne pas perdre l'état du dessin */}
+                     <View style={{ opacity: 0, flex: 1 }}>
+                        <DrawingCanvas
+                            ref={canvasRef}
+                            imageUri={cloud.image_url}
+                            strokeColor={strokeColor}
+                            strokeWidth={strokeWidth}
+                            isEraserMode={isEraserMode}
+                            onClear={handleClear}
+                            blurRadius={showSplash ? canvasBlur : 0}
+                        />
+                     </View>
+                </View>
+           ) : (
+                <DrawingCanvas
+                    ref={canvasRef}
+                    imageUri={cloud.image_url}
+                    strokeColor={strokeColor}
+                    strokeWidth={strokeWidth}
+                    isEraserMode={isEraserMode}
+                    onClear={handleClear}
+                    blurRadius={showSplash ? canvasBlur : 0}
+                />
+           )
         )}
       </View>
       
@@ -398,6 +430,8 @@ export default function DrawPage() {
                 isEraserMode={isEraserMode} toggleEraser={toggleEraser}
                 onShare={handleSharePress}
                 isAuthenticated={!!user} // Passage de l'état connecté/déconnecté
+                showOriginal={showOriginalImage}
+                onToggleOriginal={toggleOriginalImage}
              />
           </View>
       )}
@@ -412,6 +446,7 @@ export default function DrawPage() {
                 <Text style={styles.modalTitle}>{isSignUp ? "Créer un compte" : "Se connecter"}</Text>
                 <Text style={styles.modalSubtitle}>Sauvegardez votre dessin pour le publier</Text>
                 
+                {/* BOUTONS SOCIAUX */}
                 <View style={styles.socialContainer}>
                     {Platform.OS === 'ios' && (
                         <AppleAuthentication.AppleAuthenticationButton

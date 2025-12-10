@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, TouchableOpacity, StyleSheet, Platform } from 'react-native';
-import { Eraser, Undo2, Redo2, Share2, User } from 'lucide-react-native';
+import { Eraser, Undo2, Redo2, Share2, User, Eye, EyeOff } from 'lucide-react-native';
 
 interface DrawingControlsProps {
   onUndo: () => void;
@@ -13,7 +13,10 @@ interface DrawingControlsProps {
   toggleEraser: () => void;
   onShare: () => void;
   onClear?: () => void;
-  isAuthenticated: boolean; 
+  isAuthenticated: boolean;
+  // NOUVEAU : Props pour la vision de l'image originale
+  showOriginal: boolean;
+  onToggleOriginal: () => void;
 }
 
 const COLORS = ['#FFFFFF', '#808080', '#000000'];
@@ -24,7 +27,9 @@ export const DrawingControls: React.FC<DrawingControlsProps> = ({
   strokeWidth, onStrokeWidthChange,
   isEraserMode, toggleEraser,
   onShare,
-  isAuthenticated 
+  isAuthenticated,
+  showOriginal,
+  onToggleOriginal
 }) => {
   
   const [showColorMenu, setShowColorMenu] = useState(false);
@@ -89,10 +94,23 @@ export const DrawingControls: React.FC<DrawingControlsProps> = ({
 
         <View style={styles.separator} />
 
-        {/* DROITE : Slider & Share/User */}
+        {/* DROITE : Slider & Share/User & OEIL */}
         <View style={styles.group}>
-            <View 
-                style={styles.sliderContainer}
+            {/* NOUVEAU BOUTON OEIL */}
+            <TouchableOpacity 
+                onPressIn={onToggleOriginal} // On appuie pour voir
+                onPressOut={onToggleOriginal} // On relâche pour revenir au dessin
+                style={styles.iconBtn}
+                hitSlop={10}
+            >
+                {showOriginal ? (
+                    <Eye color="#000" size={22} /> // Ou EyeOff si vous préférez la logique inverse
+                ) : (
+                    <Eye color="#000" size={22} style={{ opacity: 0.5 }} /> // Opacité réduite quand inactif
+                )}
+            </TouchableOpacity>
+
+            <View style={styles.sliderContainer}
                 onTouchStart={handleSliderTouch}
                 onTouchMove={handleSliderTouch}
             >
@@ -135,7 +153,6 @@ const styles = StyleSheet.create({
   },
   toolbar: {
     flexDirection: 'row', 
-    // Fond beaucoup plus transparent (0.5 au lieu de 0.85)
     backgroundColor: 'rgba(255, 255, 255, 0.5)', 
     paddingVertical: 15, 
     paddingHorizontal: 20,
@@ -143,19 +160,17 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between', 
     width: '100%',
     borderRadius: 30, 
-    // Ombres ajustées pour garder de la lisibilité malgré la transparence
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 10,
     elevation: 5,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)', // Bordure encore plus subtile
+    borderColor: 'rgba(255,255,255,0.3)', 
   },
-  group: { flexDirection: 'row', alignItems: 'center', gap: 15 },
+  group: { flexDirection: 'row', alignItems: 'center', gap: 12 }, // Gap ajusté pour faire place au bouton
   separator: { width: 1, height: 20, backgroundColor: 'rgba(0,0,0,0.1)', marginHorizontal: 5 },
   iconBtn: { padding: 4 },
-  // Fond des boutons ajusté pour la lisibilité sur fond transparent
   toolBtn: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.4)' }, 
   activeTool: { backgroundColor: '#000' },
   colorTrigger: { width: 30, height: 30, borderRadius: 15, borderWidth: 1, borderColor: 'rgba(0,0,0,0.1)' },
@@ -172,7 +187,8 @@ const styles = StyleSheet.create({
     borderStyle: 'solid', backgroundColor: 'transparent',
     borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: 'rgba(255,255,255,0.9)',
   },
-  sliderContainer: { width: 80, height: 40, justifyContent: 'center' },
+  // Largeur slider réduite un peu pour faire de la place
+  sliderContainer: { width: 60, height: 40, justifyContent: 'center' }, 
   sliderTrack: { width: '100%', height: 20, justifyContent: 'center' },
   trackLine: { backgroundColor: 'rgba(0,0,0,0.1)', width: '100%' }, 
   sliderCursor: { position: 'absolute', borderWidth: 1, borderColor: 'rgba(0,0,0,0.2)' }
