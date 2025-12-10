@@ -34,17 +34,11 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
     // Chargement initial des réactions
     useEffect(() => {
         if (!drawing.reactions) return;
-
-        // Calculer les totaux à partir des données brutes (si jointes) ou initialiser à 0
-        // Pour simplifier ici, on suppose que 'drawing' contient déjà les counts ou on les fetchera
-        // Dans une implémentation réelle optimisée, on utiliserait une vue SQL ou une fonction RPC.
-        // Ici, on va faire une requête pour charger l'état initial si nécessaire.
         fetchReactionsState();
     }, [drawing.id]);
 
     const fetchReactionsState = async () => {
         try {
-            // 1. Récupérer toutes les réactions pour ce dessin pour compter
             const { data: allReactions, error } = await supabase
                 .from('reactions')
                 .select('reaction_type, user_id')
@@ -75,11 +69,9 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
     const handleReaction = async (type: ReactionType) => {
         if (!user || !type) return;
 
-        // Optimistic UI Update
         const previousReaction = userReaction;
         const previousCounts = { ...reactionCounts };
 
-        // Si on clique sur la même réaction, on l'enlève (toggle off)
         if (userReaction === type) {
             setUserReaction(null);
             setReactionCounts(prev => ({
@@ -90,12 +82,10 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
             try {
                 await supabase.from('reactions').delete().eq('user_id', user.id).eq('drawing_id', drawing.id);
             } catch (e) {
-                // Rollback
                 setUserReaction(previousReaction);
                 setReactionCounts(previousCounts);
             }
         } 
-        // Si on change de réaction ou qu'on en ajoute une nouvelle
         else {
             setUserReaction(type);
             setReactionCounts(prev => {
@@ -108,7 +98,6 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
             });
 
             try {
-                // Upsert permet de gérer l'insert ou l'update en une seule requête grâce à la contrainte unique (user_id, drawing_id)
                 const { error } = await supabase
                     .from('reactions')
                     .upsert({
@@ -120,7 +109,6 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
                 if (error) throw error;
             } catch (e) {
                 console.error(e);
-                // Rollback
                 setUserReaction(previousReaction);
                 setReactionCounts(previousCounts);
             }
@@ -176,8 +164,6 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
         );
     };
 
-    const optimizedAvatar = author?.avatar_url ? getOptimizedImageUrl(author.avatar_url, 50) : null;
-
     return (
         <View style={styles.cardContainer}>
             
@@ -199,30 +185,24 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
             
             <View style={styles.cardInfo}>
                 <View style={styles.headerInfo}>
+                    {/* Ligne Titre Centré + Bouton Options Absolu */}
                     <View style={styles.titleRow}>
                         <Text style={styles.drawingTitle} numberOfLines={1}>
                             {drawing.label || "Sans titre"}
                         </Text>
                         
-                        <TouchableOpacity onPress={handleReport} style={styles.moreBtn} hitSlop={15}>
-                            <MoreHorizontal color="#999" size={24} />
+                        <TouchableOpacity onPress={handleReport} style={styles.moreBtnAbsolute} hitSlop={15}>
+                            <MoreHorizontal color="#CCC" size={24} />
                         </TouchableOpacity>
                     </View>
 
+                    {/* Nom de l'auteur centré, petit, sans avatar */}
                     <TouchableOpacity 
-                        style={styles.userInfo} 
                         onPress={() => onUserPress(author)} 
                         activeOpacity={0.7}
+                        style={styles.authorContainer}
                     >
-                         <View style={styles.avatar}>
-                            {author?.avatar_url ? (
-                                <Image source={{uri: optimizedAvatar || author.avatar_url}} style={{width:24, height:24, borderRadius:12}} />
-                            ) : (
-                                <User size={14} color="#666"/>
-                            )}
-                         </View>
                          <Text style={styles.userName}>{author?.display_name || "Anonyme"}</Text>
-                         <Text style={styles.dateText}>• {new Date(drawing.created_at).toLocaleDateString()}</Text>
                     </TouchableOpacity>
                 </View>
 
@@ -263,7 +243,6 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
                     </TouchableOpacity>
 
                     <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('crazy')}>
-                        {/* Pour "Dingue", on utilise une icône Zap (éclair) ou une autre icône disponible dans Lucide car "tête qui explose" n'y est pas en standard vectoriel, ou on pourrait utiliser un emoji Text */}
                         <Zap 
                             color={userReaction === 'crazy' ? "#FF2D55" : "#000"} 
                             fill={userReaction === 'crazy' ? "#FF2D55" : "transparent"} 
@@ -453,15 +432,36 @@ const styles = StyleSheet.create({
         backgroundColor: '#FFFFFF', 
         marginTop: -40, 
         paddingHorizontal: 20, 
-        paddingTop: 25,
+        paddingTop: 20,
         shadowColor: "#000", shadowOffset: {width: 0, height: -4}, shadowOpacity: 0.05, shadowRadius: 4, elevation: 5,
     },
-    headerInfo: { marginBottom: 15 },
+    headerInfo: { marginBottom: 10, alignItems: 'center' },
     
-    titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
-    drawingTitle: { fontSize: 28, fontWeight: '900', color: '#000', letterSpacing: -0.5, flex: 1, marginRight: 10 },
+    // Titre Centré
+    titleRow: { 
+        width: '100%',
+        flexDirection: 'row', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        marginBottom: 2,
+        position: 'relative'
+    },
+    drawingTitle: { 
+        fontSize: 26, 
+        fontWeight: '900', 
+        color: '#000', 
+        letterSpacing: -0.5, 
+        textAlign: 'center',
+        maxWidth: '80%' // Pour laisser de la place au bouton options
+    },
     
-    moreBtn: { padding: 5, marginTop: 5 }, 
+    // Bouton Option Absolu à droite
+    moreBtnAbsolute: { 
+        position: 'absolute',
+        right: 0,
+        top: 5,
+        padding: 5 
+    }, 
     
     staticEyeBtn: {
         position: 'absolute',
@@ -480,32 +480,38 @@ const styles = StyleSheet.create({
         elevation: 4
     },
     
-    userInfo: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    avatar: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#F0F0F0', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
-    userName: { fontSize: 14, fontWeight: '600', color: '#333' },
-    dateText: { fontSize: 14, color: '#999' },
+    // Style Auteur Minimaliste
+    authorContainer: {
+        marginTop: 2
+    },
+    userName: { 
+        fontSize: 13, 
+        fontWeight: '500', 
+        color: '#888' 
+    },
 
     // Nouvelle barre de réactions
     reactionBar: { 
         flexDirection: 'row', 
-        justifyContent: 'space-between', 
+        justifyContent: 'space-around', // Espacement équilibré
         alignItems: 'center', 
-        marginTop: 5,
-        paddingHorizontal: 10
+        marginTop: 10,
+        paddingHorizontal: 10,
+        paddingBottom: 10
     },
     reactionBtn: { 
         alignItems: 'center', 
         justifyContent: 'center',
-        padding: 5
+        padding: 8
     },
     reactionText: { 
         fontSize: 12, 
         fontWeight: '600', 
-        color: '#666',
+        color: '#999',
         marginTop: 4 
     },
     activeText: {
         color: '#000',
-        fontWeight: '700'
+        fontWeight: '800'
     }
 });
