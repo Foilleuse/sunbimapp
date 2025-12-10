@@ -312,7 +312,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
 export default function FeedPage() {
     const { user } = useAuth();
     const router = useRouter();
-    const params = useLocalSearchParams(); // Pour récupérer 'justPosted'
+    const params = useLocalSearchParams(); 
     const [drawings, setDrawings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [currentIndex, setCurrentIndex] = useState(0);
@@ -344,21 +344,15 @@ export default function FeedPage() {
 
     const fetchTodaysFeed = async () => {
         try {
-            // Si on n'est pas connecté, on ne peut pas dessiner donc on peut voir le feed (mode invité)
-            // OU ALORS : Est-ce que tu veux bloquer le feed aux non-dessinateurs connectés uniquement ?
-            // La logique habituelle est : Si connecté, as-tu dessiné ? Si non -> Redirection.
-            
             const today = new Date().toISOString().split('T')[0];
             const { data: cloudData } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();
             
             if (!cloudData) {
-                // Pas de nuage aujourd'hui ?
                 setLoading(false);
                 return;
             }
 
-            // --- LOGIQUE DE REDIRECTION SI PAS DESSINÉ ---
-            if (user && !params.justPosted) { // Si on vient de poster, on ignore la vérification pour éviter une boucle ou un faux positif dû au délai
+            if (user && !params.justPosted) { 
                 const { data: myDrawing } = await supabase
                     .from('drawings')
                     .select('id')
@@ -367,13 +361,10 @@ export default function FeedPage() {
                     .maybeSingle();
                 
                 if (!myDrawing) {
-                    // Pas de dessin pour aujourd'hui -> Redirection vers l'accueil pour dessiner
-                    // On utilise router.replace pour ne pas pouvoir revenir en arrière
                     router.replace('/'); 
                     return; 
                 }
             }
-            // ---------------------------------------------
 
             if (cloudData) {
                 setBackgroundCloud(cloudData.image_url);
@@ -427,6 +418,16 @@ export default function FeedPage() {
 
     return (
         <View style={styles.container}>
+             {/* 1. BACKGROUND FLOU PLEIN ÉCRAN */}
+             {backgroundCloud && (
+                <Image 
+                    source={{ uri: optimizedBackground || backgroundCloud }}
+                    style={StyleSheet.absoluteFillObject}
+                    resizeMode="cover"
+                    blurRadius={20} // Flou gaussien
+                />
+            )}
+
             <SunbimHeader showCloseButton={false} transparent={true} />
             
             <View 
@@ -439,7 +440,7 @@ export default function FeedPage() {
                         uri={optimizedBackground || backgroundCloud}
                         width={screenWidth}
                         height={IMAGE_HEIGHT}
-                        top={TOP_HEADER_SPACE}
+                        top={0} // Ajusté pour le MaskedDayImage qui est maintenant relatif au conteneur avec padding
                     />
                 )}
 
