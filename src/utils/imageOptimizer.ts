@@ -11,27 +11,36 @@ export const getOptimizedImageUrl = (
   if (!url) return null;
 
   // 1. Vérification : Est-ce une URL qui peut être optimisée ?
-  // On vérifie si c'est une URL Supabase.
-  // Note: On peut aussi vérifier le domaine spécifique de votre projet si besoin.
-  const isSupabaseUrl = url.includes('supabase.co');
+  // On vérifie si c'est une URL Supabase. 
+  // On accepte 'supabase.co' (cloud) et 'supabase.in' (certaines régions).
+  const isSupabaseUrl = url.includes('supabase.co') || url.includes('supabase.in');
 
   // Si ce n'est pas une image Supabase, on la retourne telle quelle.
   if (!isSupabaseUrl) {
     return url;
   }
 
-  // 2. Gestion des URLs qui ont déjà des paramètres (ex: ?t=...)
+  // 2. Vérification : Est-ce une image gérée par le Storage ?
+  // Les URLs publiques sont généralement de la forme : .../storage/v1/object/public/...
+  // Les URLs signées sont de la forme : .../storage/v1/object/sign/...
+  if (!url.includes('/storage/v1/object/')) {
+       // Si l'URL ne semble pas pointer vers un objet, on ne touche pas.
+       return url;
+  }
+
+  // 3. Gestion des paramètres existants
+  // Si l'URL a déjà des paramètres (ex: token de signature), on ajoute avec '&', sinon avec '?'
   const separator = url.includes('?') ? '&' : '?';
 
-  // 3. Construction de l'URL transformée
-  // Supabase Image Transformation utilise les paramètres 'width', 'height', 'quality', 'format'.
-  // On utilise `toFixed(0)` pour s'assurer que width est un entier.
-  // On ajoute `resize=contain` pour s'assurer que l'image tient dans les dimensions demandées sans être rognée si le ratio est différent,
-  // ou `resize=cover` si vous voulez remplir le carré (plus fréquent pour des miniatures). Ici on laisse par défaut (souvent 'cover').
-  const optimizedUrl = `${url}${separator}width=${width.toFixed(0)}&quality=${quality}&format=origin`;
+  // 4. Construction de l'URL transformée
+  // width: largeur cible (entier)
+  // quality: compression (0-100)
+  // format: 'origin' garde le format source (jpg, png...), 'avif' ou 'webp' est souvent mieux mais 'origin' est plus sûr.
+  // resize: 'contain' (par défaut si omis) ou 'cover'. Pour des avatars/miniatures, 'cover' est souvent mieux pour remplir le cadre.
+  const optimizedUrl = `${url}${separator}width=${width.toFixed(0)}&quality=${quality}&format=origin&resize=cover`;
 
-  // Log pour débogage : permet de voir dans la console si l'URL est bien transformée
-  // console.log(`⚡ Optimisation Image : ${url} -> ${optimizedUrl}`);
+  // Log pour débogage (Visible dans le terminal Metro/Expo, pas dans les logs système iOS)
+  // console.log(`⚡ [ImageOptimizer] ${width}px :`, optimizedUrl);
 
   return optimizedUrl;
 };
