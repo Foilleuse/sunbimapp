@@ -293,7 +293,6 @@ export default function FeedPage() {
     const [selectedUser, setSelectedUser] = useState<any>(null);
     const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
 
-    // Espace réservé pour le header transparent (augmenté pour descendre le contenu)
     const TOP_HEADER_SPACE = 120;
 
     // Calculs de position
@@ -301,7 +300,6 @@ export default function FeedPage() {
     const EYE_BUTTON_SIZE = 44;
     const MARGIN_BOTTOM = 25; 
     
-    // Position du bouton Oeil ajustée
     const eyeButtonTop = IMAGE_HEIGHT - EYE_BUTTON_SIZE - MARGIN_BOTTOM;
 
     useEffect(() => { fetchTodaysFeed(); }, [user]); 
@@ -363,17 +361,28 @@ export default function FeedPage() {
 
     return (
         <View style={styles.container}>
-            {/* Image de fond (Nuage) positionnée en absolu, avec la taille exacte 3:4 */}
+            {/* 1. NOUVEAU BACKGROUND : Photo du jour plein écran FLOU */}
+            {backgroundCloud && (
+                <Image 
+                    source={{ uri: optimizedBackground || backgroundCloud }}
+                    style={StyleSheet.absoluteFillObject} // Prend tout l'écran
+                    resizeMode="cover"
+                    blurRadius={30} // Flou gaussien intense
+                />
+            )}
+
+            {/* 2. Photo du jour NETTE (pour le dessin) */}
+            {/* Elle est positionnée exactement sous le carrousel pour l'effet de transparence */}
             {backgroundCloud && (
                 <Image 
                     source={{ uri: optimizedBackground || backgroundCloud }}
                     style={{
                         position: 'absolute',
-                        top: TOP_HEADER_SPACE, // Alignement exact sous le header
+                        top: TOP_HEADER_SPACE,
                         left: 0,
                         width: screenWidth,
-                        height: IMAGE_HEIGHT, // Hauteur forcée 3:4 pour correspondre au dessin
-                        zIndex: 0
+                        height: IMAGE_HEIGHT,
+                        zIndex: 0 // Derrière le carrousel mais devant le fond flou
                     }}
                     resizeMode="cover"
                 />
@@ -441,7 +450,7 @@ export default function FeedPage() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#87CEEB' }, 
+    container: { flex: 1, backgroundColor: '#87CEEB' }, // Fallback couleur
     loadingContainer: { flex: 1, backgroundColor: '#87CEEB', justifyContent: 'center', alignItems: 'center' },
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     text: { color: '#FFF', fontSize: 16 }, 
