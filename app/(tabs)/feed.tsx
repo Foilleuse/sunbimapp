@@ -23,18 +23,14 @@ const MaskedDayImage = ({ uri, width, height, top }: { uri: string, width: numbe
 
     return (
         <Canvas style={{ position: 'absolute', top, left: 0, width, height, zIndex: 0 }} pointerEvents="none">
-             {/* 1. Le Masque (Dégradé d'opacité) */}
              <Rect x={0} y={0} width={width} height={height}>
                 <SkiaGradient
                     start={vec(0, 0)}
                     end={vec(0, height)}
-                    // Transparent aux extrémités, Opaque (blanc) au centre
                     colors={["transparent", "white", "white", "transparent"]}
-                    // Le fondu se fait sur les 10% du haut et du bas
                     positions={[0, 0.10, 0.90, 1]}
                 />
             </Rect>
-            {/* 2. L'Image (Source) - Affichée uniquement là où le masque est opaque */}
             <SkiaImage
                 image={image}
                 x={0} y={0} width={width} height={height}
@@ -330,7 +326,11 @@ export default function FeedPage() {
     // Calculs de position
     const IMAGE_HEIGHT = screenWidth * (4/3);
     const EYE_BUTTON_SIZE = 44;
-    const MARGIN_BOTTOM = 25; 
+    
+    // Modification: on réduit la marge pour que le bouton descende
+    // Avant: 25, Maintenant: 5. 
+    // Plus le chiffre est petit, plus le bouton est bas (proche du bas de l'image)
+    const MARGIN_BOTTOM = 5; 
     
     const eyeButtonTop = IMAGE_HEIGHT - EYE_BUTTON_SIZE - MARGIN_BOTTOM;
 
@@ -416,30 +416,18 @@ export default function FeedPage() {
 
     return (
         <View style={styles.container}>
-             {/* 1. BACKGROUND FLOU PLEIN ÉCRAN */}
-             {backgroundCloud && (
-                <Image 
-                    source={{ uri: optimizedBackground || backgroundCloud }}
-                    style={StyleSheet.absoluteFillObject}
-                    resizeMode="cover"
-                    blurRadius={20} // Flou gaussien
-                />
-            )}
-
             <SunbimHeader showCloseButton={false} transparent={true} />
             
             <View 
                 style={[styles.mainContent, { paddingTop: TOP_HEADER_SPACE }]} 
                 onLayout={(e) => setLayout(e.nativeEvent.layout)}
             >
-                {/* 2. Photo du jour NETTE AVEC BORDS FONDUS */}
-                {/* On décale l'image de TOP_HEADER_SPACE pour qu'elle s'aligne avec le début du carousel */}
                 {backgroundCloud && (
                     <MaskedDayImage 
                         uri={optimizedBackground || backgroundCloud}
                         width={screenWidth}
                         height={IMAGE_HEIGHT}
-                        top={TOP_HEADER_SPACE} // CORRECTION ICI: Alignement avec le padding du contenu
+                        top={TOP_HEADER_SPACE}
                     />
                 )}
 
@@ -474,7 +462,8 @@ export default function FeedPage() {
                     <TouchableOpacity 
                         style={[
                             styles.staticEyeBtn, 
-                            { top: eyeButtonTop } 
+                            // On ajoute un décalage supplémentaire pour descendre le bouton dans le coin
+                            { top: eyeButtonTop + 100 } 
                         ]}
                         activeOpacity={0.8}
                         onPressIn={() => setIsGlobalHolding(true)}
@@ -551,7 +540,8 @@ const styles = StyleSheet.create({
         width: 44,
         height: 44,
         borderRadius: 22,
-        backgroundColor: 'rgba(255,255,255,0.9)', 
+        // Modification: Fond blanc plus transparent (0.5)
+        backgroundColor: 'rgba(255,255,255,0.5)', 
         justifyContent: 'center',
         alignItems: 'center',
         zIndex: 100, 
