@@ -195,6 +195,34 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
         }
   };
 
+  const handleReport = () => {
+    if (!selectedDrawing) return;
+    Alert.alert(
+        "Options",
+        "Que souhaitez-vous faire ?",
+        [
+            { text: "Annuler", style: "cancel" },
+            { 
+                text: "Signaler le contenu", 
+                onPress: async () => {
+                    if (!currentUser) return Alert.alert("Erreur", "Vous devez être connecté pour signaler.");
+                    try {
+                        const { error } = await supabase
+                            .from('reports')
+                            .insert({ reporter_id: currentUser.id, drawing_id: selectedDrawing.id, reason: 'Contenu inapproprié' });
+                        
+                        if (error) throw error;
+                        Alert.alert("Signalement envoyé", "Nous allons examiner cette image. Merci de votre vigilance.");
+                    } catch (e) {
+                        console.error(e);
+                        Alert.alert("Erreur", "Impossible d'envoyer le signalement.");
+                    }
+                }
+            }
+        ]
+    );
+  };
+
   const checkFollowStatus = async () => {
       try {
           const { count } = await supabase
@@ -288,7 +316,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
 
         const { data: drawingsData, error: drawingsError } = await supabase
             .from('drawings')
-            .select('*') // Plus besoin de counts ici, on fetch les détails à l'ouverture
+            .select('*') 
             .eq('user_id', userId)
             .eq('is_hidden', false) 
             .order('created_at', { ascending: false });
@@ -475,9 +503,16 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                         {/* INFO CARD STYLE FEED */}
                          <View style={styles.infoCard}>
                             <View style={styles.infoContent}>
-                                <Text style={styles.drawingTitle} numberOfLines={1}>
-                                    {selectedDrawing.label || "Sans titre"}
-                                </Text>
+                                <View style={styles.titleRow}>
+                                    <Text style={styles.drawingTitle} numberOfLines={1}>
+                                        {selectedDrawing.label || "Sans titre"}
+                                    </Text>
+                                    
+                                    <TouchableOpacity onPress={handleReport} style={styles.moreBtnAbsolute} hitSlop={15}>
+                                        <MoreHorizontal color="#CCC" size={24} />
+                                    </TouchableOpacity>
+                                </View>
+                                
                                 <Text style={styles.userName}>{userProfile?.display_name || "Anonyme"}</Text>
 
                                 {/* BARRE DE RÉACTIONS */}
@@ -626,13 +661,27 @@ const styles = StyleSheet.create({
   infoContent: {
       alignItems: 'center'
   },
+  titleRow: { 
+      width: '100%',
+      flexDirection: 'row', 
+      justifyContent: 'center', 
+      alignItems: 'center', 
+      marginBottom: 2,
+      position: 'relative'
+  },
   drawingTitle: { 
       fontSize: 26, 
       fontWeight: '900', 
       color: '#000', 
       letterSpacing: -0.5, 
       textAlign: 'center',
-      marginBottom: 2
+      maxWidth: '80%' 
+  },
+  moreBtnAbsolute: { 
+      position: 'absolute',
+      right: 0,
+      top: 5,
+      padding: 5 
   },
   userName: { 
       fontSize: 13, 
