@@ -10,7 +10,6 @@ import { useRouter } from 'expo-router';
 import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer';
 import Carousel from 'react-native-reanimated-carousel';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withSequence } from 'react-native-reanimated';
-import { LinearGradient } from 'expo-linear-gradient'; // Import du dégradé
 
 // Types de réactions possibles
 type ReactionType = 'like' | 'smart' | 'beautiful' | 'crazy' | null;
@@ -26,6 +25,7 @@ const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color, count }: an
     });
 
     const handlePress = () => {
+        // Animation de rebond
         scale.value = withSequence(
             withSpring(1.6, { damping: 10, stiffness: 200 }), 
             withSpring(1, { damping: 10, stiffness: 200 })
@@ -197,6 +197,8 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
         );
     };
 
+    const optimizedAvatar = author?.avatar_url ? getOptimizedImageUrl(author.avatar_url, 50) : null;
+
     return (
         <View style={styles.cardContainer}>
             <View style={{ width: canvasSize, height: canvasSize * (4/3), backgroundColor: 'transparent', position: 'relative' }}>
@@ -215,22 +217,6 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
                         />
                     )}
                 </View>
-                
-                {/* DÉGRADÉS POUR ADOUCIR LES BORDS (HAUT ET BAS) */}
-                {/* Dégradé haut : couleur du thème ou blanc transparent vers transparent */}
-                <LinearGradient
-                    colors={['rgba(255,255,255,0.8)', 'transparent']}
-                    style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 40 }}
-                    pointerEvents="none"
-                />
-                
-                {/* Dégradé bas : transparent vers blanc transparent */}
-                <LinearGradient
-                    colors={['transparent', 'rgba(255,255,255,0.8)']}
-                    style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 40 }}
-                    pointerEvents="none"
-                />
-
             </View>
             
             <View style={styles.cardInfo}>
@@ -378,19 +364,14 @@ export default function FeedPage() {
 
     return (
         <View style={styles.container}>
-            {/* Image de fond (Nuage) positionnée en absolu, avec la taille exacte 3:4 */}
+            
+            {/* 1. BACKGROUND FLOU PLEIN ÉCRAN */}
             {backgroundCloud && (
                 <Image 
                     source={{ uri: optimizedBackground || backgroundCloud }}
-                    style={{
-                        position: 'absolute',
-                        top: TOP_HEADER_SPACE,
-                        left: 0,
-                        width: screenWidth,
-                        height: IMAGE_HEIGHT,
-                        zIndex: 0
-                    }}
+                    style={StyleSheet.absoluteFillObject}
                     resizeMode="cover"
+                    blurRadius={20} // Flou gaussien
                 />
             )}
 
@@ -400,6 +381,22 @@ export default function FeedPage() {
                 style={[styles.mainContent, { paddingTop: TOP_HEADER_SPACE }]} 
                 onLayout={(e) => setLayout(e.nativeEvent.layout)}
             >
+                {/* 2. Photo du jour NETTE, positionnée précisément sous le carousel pour s'aligner aux dessins */}
+                {backgroundCloud && (
+                    <Image 
+                        source={{ uri: optimizedBackground || backgroundCloud }}
+                        style={{
+                            position: 'absolute',
+                            top: TOP_HEADER_SPACE,
+                            left: 0,
+                            width: screenWidth,
+                            height: IMAGE_HEIGHT,
+                            zIndex: 0
+                        }}
+                        resizeMode="cover"
+                    />
+                )}
+
                 {drawings.length > 0 && layout ? (
                     <Carousel
                         loop={true}
@@ -419,7 +416,6 @@ export default function FeedPage() {
                                 isHolding={isGlobalHolding && index === currentIndex}
                             />
                         )}
-                        // Pas de marginTop ici, géré par le padding du conteneur
                     />
                 ) : (
                     !loading && drawings.length === 0 ? (
@@ -457,7 +453,7 @@ export default function FeedPage() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#87CEEB' }, 
+    container: { flex: 1, backgroundColor: '#87CEEB' }, // Fallback
     loadingContainer: { flex: 1, backgroundColor: '#87CEEB', justifyContent: 'center', alignItems: 'center' },
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     text: { color: '#FFF', fontSize: 16 }, 
