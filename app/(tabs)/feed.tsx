@@ -1,12 +1,12 @@
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform, Image, Pressable, Alert } from 'react-native';
-import { useEffect, useState, memo } from 'react';
+import { useEffect, useState, memo, useCallback } from 'react'; // Ajout de useCallback manquant
 import { User, Eye, MoreHorizontal, Lightbulb, Palette, Zap, Heart } from 'lucide-react-native';
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { UserProfileModal } from '../../src/components/UserProfileModal'; 
-import { useRouter } from 'expo-router'; 
+import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router'; // Ajout de useLocalSearchParams
 import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer';
 import Carousel from 'react-native-reanimated-carousel';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withSequence } from 'react-native-reanimated';
@@ -312,6 +312,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
 export default function FeedPage() {
     const { user } = useAuth();
     const router = useRouter();
+    const params = useLocalSearchParams(); // Pour récupérer 'justPosted'
     const [drawings, setDrawings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [currentIndex, setCurrentIndex] = useState(0);
@@ -334,13 +335,46 @@ export default function FeedPage() {
     
     const eyeButtonTop = IMAGE_HEIGHT - EYE_BUTTON_SIZE - MARGIN_BOTTOM;
 
-    useEffect(() => { fetchTodaysFeed(); }, [user]); 
+    // UseFocusEffect pour re-vérifier à chaque fois qu'on arrive sur la page
+    useFocusEffect(
+        useCallback(() => {
+            fetchTodaysFeed();
+        }, [user])
+    );
 
     const fetchTodaysFeed = async () => {
         try {
+            // Si on n'est pas connecté, on ne peut pas dessiner donc on peut voir le feed (mode invité)
+            // OU ALORS : Est-ce que tu veux bloquer le feed aux non-dessinateurs connectés uniquement ?
+            // La logique habituelle est : Si connecté, as-tu dessiné ? Si non -> Redirection.
+            
             const today = new Date().toISOString().split('T')[0];
             const { data: cloudData } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();
             
+            if (!cloudData) {
+                // Pas de nuage aujourd'hui ?
+                setLoading(false);
+                return;
+            }
+
+            // --- LOGIQUE DE REDIRECTION SI PAS DESSINÉ ---
+            if (user && !params.justPosted) { // Si on vient de poster, on ignore la vérification pour éviter une boucle ou un faux positif dû au délai
+                const { data: myDrawing } = await supabase
+                    .from('drawings')
+                    .select('id')
+                    .eq('user_id', user.id)
+                    .eq('cloud_id', cloudData.id)
+                    .maybeSingle();
+                
+                if (!myDrawing) {
+                    // Pas de dessin pour aujourd'hui -> Redirection vers l'accueil pour dessiner
+                    // On utilise router.replace pour ne pas pouvoir revenir en arrière
+                    router.replace('/'); 
+                    return; 
+                }
+            }
+            // ---------------------------------------------
+
             if (cloudData) {
                 setBackgroundCloud(cloudData.image_url);
 
@@ -393,16 +427,6 @@ export default function FeedPage() {
 
     return (
         <View style={styles.container}>
-            {/* 1. BACKGROUND FLOU PLEIN ÉCRAN */}
-            {backgroundCloud && (
-                <Image 
-                    source={{ uri: optimizedBackground || backgroundCloud }}
-                    style={StyleSheet.absoluteFillObject}
-                    resizeMode="cover"
-                    blurRadius={20} // Flou gaussien
-                />
-            )}
-
             <SunbimHeader showCloseButton={false} transparent={true} />
             
             <View 
