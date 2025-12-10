@@ -61,32 +61,37 @@ export default function DrawPage() {
 
   // --- CONFIGURATION GOOGLE SIGNIN (Au montage) ---
   useEffect(() => {
-    GoogleSignin.configure({
-      // L'ID iOS sert à ouvrir la fenêtre de connexion sur l'iPhone
-      iosClientId: '296503578118-pdqa6300t0r1l315e94nn07uuj8fdepq.apps.googleusercontent.com', 
-      // L'ID Web est OBLIGATOIRE pour obtenir l'idToken pour Supabase
-      webClientId: '296503578118-9otrhg40mnenuvh1ir16o4qoujhvmb74.apps.googleusercontent.com', 
-      scopes: ['profile', 'email'],
-    });
+    try {
+      GoogleSignin.configure({
+        // L'ID iOS sert à ouvrir la fenêtre de connexion sur l'iPhone
+        // Assurez-vous que cet ID correspond à celui dans votre console Google Cloud ET dans votre Info.plist (schéma inversé)
+        iosClientId: '296503578118-pdqa6300t0r1l315e94nn07uuj8fdepq.apps.googleusercontent.com', 
+        
+        // L'ID Web est OBLIGATOIRE pour obtenir l'idToken pour Supabase
+        webClientId: '296503578118-9otrhg40mnenuvh1ir16o4qoujhvmb74.apps.googleusercontent.com', 
+        
+        scopes: ['profile', 'email'],
+      });
+    } catch (e) {
+      console.error("Erreur config Google:", e);
+    }
   }, []);
 
   // --- FONCTIONS SOCIAL LOGIN ---
   const handleGoogleLogin = async () => {
+    setAuthLoading(true);
     try {
       // CORRECTION : Pas besoin de hasPlayServices sur iOS, et ajout d'options explicites
       if (Platform.OS === 'android') {
           await GoogleSignin.hasPlayServices();
       }
       
-      // IMPORTANT : Si vous êtes en mode développement avec Expo Go ou un Dev Client, 
-      // il faut parfois forcer le webview ou s'assurer que le scheme est bien passé.
-      // Cependant, la méthode standard est celle-ci :
       const userInfo = await GoogleSignin.signIn();
       
+      // Récupération du token (compatible anciennes/nouvelles versions de la lib)
       const token = userInfo.data?.idToken || userInfo.idToken;
 
       if (token) {
-        setAuthLoading(true);
         const { error } = await supabase.auth.signInWithIdToken({
           provider: 'google',
           token: token,
@@ -94,26 +99,29 @@ export default function DrawPage() {
         
         if (error) {
            Alert.alert("Erreur Supabase", error.message);
+           // Ne pas laisser le chargement infini en cas d'erreur Supabase
            setAuthLoading(false);
         }
+        // Si succès, le useEffect([user]) fermera la modale automatiquement
       } else {
-        // En cas d'annulation ou autre, on ne bloque pas
-        setAuthLoading(false); 
+        throw new Error('Pas de token ID Google reçu (Vérifiez webClientId)');
       }
     } catch (error: any) {
+      // Gestion spécifique des erreurs Google pour éviter les alertes inutiles
       setAuthLoading(false);
       if (error.code === statusCodes.SIGN_IN_CANCELLED) {
-        // L'utilisateur a annulé, on ne fait rien
+        console.log("Google Sign In Cancelled");
       } else if (error.code === statusCodes.IN_PROGRESS) {
-        // Déjà en cours
+        console.log("Google Sign In In Progress");
       } else {
-         Alert.alert("Erreur Connexion Google", error.message || "Une erreur est survenue.");
-         console.error(error);
+         Alert.alert("Erreur Connexion Google", error.message || "Une erreur inconnue est survenue.");
+         console.error("Google Error:", error);
       }
     }
   };
 
   const handleAppleLogin = async () => {
+    setAuthLoading(true);
     try {
       const credential = await AppleAuthentication.signInAsync({
         requestedScopes: [
@@ -122,12 +130,14 @@ export default function DrawPage() {
         ],
       });
       if (credential.identityToken) {
-        setAuthLoading(true);
         const { error } = await supabase.auth.signInWithIdToken({
           provider: 'apple',
           token: credential.identityToken,
         });
         if (error) throw error;
+        // Succès géré par le useEffect user
+      } else {
+        setAuthLoading(false);
       }
     } catch (e: any) {
       setAuthLoading(false);
