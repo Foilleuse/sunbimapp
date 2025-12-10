@@ -25,9 +25,9 @@ const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color, count }: an
     });
 
     const handlePress = () => {
-        // Animation de rebond
+        // Animation de rebond intensifiée (1.2 -> 1.6)
         scale.value = withSequence(
-            withSpring(1.2, { damping: 2, stiffness: 80 }),
+            withSpring(1.6, { damping: 2, stiffness: 80 }),
             withSpring(1, { damping: 2, stiffness: 80 })
         );
         onPress();
