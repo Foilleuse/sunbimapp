@@ -97,15 +97,17 @@ export default function DrawPage() {
       }
       
       console.log("Starting Google Signin...");
-      // C'est souvent ICI que ça freeze si le redirect échoue
-      const userInfo = await GoogleSignin.signIn();
-      console.log("Google Signin Success, UserInfo received");
-      
-      const token = userInfo.data?.idToken || userInfo.idToken;
+      const response = await GoogleSignin.signIn();
+      console.log("Google Signin Response:", JSON.stringify(response));
+
+      // Gestion compatible v12 et v13+
+      // v13+ retourne { data: { idToken, user }, type: 'success' }
+      // v12 retourne { idToken, user }
+      const token = response.data?.idToken || response.idToken;
 
       if (token) {
         console.log("Token received, calling Supabase...");
-        const { error } = await supabase.auth.signInWithIdToken({
+        const { data, error } = await supabase.auth.signInWithIdToken({
           provider: 'google',
           token: token,
         });
@@ -116,6 +118,7 @@ export default function DrawPage() {
            setAuthLoading(false);
         } else {
             console.log("Supabase Auth Success!");
+            // La redirection sera gérée par le useEffect sur 'user'
         }
       } else {
         throw new Error('Pas de token ID Google reçu (Vérifiez webClientId)');
