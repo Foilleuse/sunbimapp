@@ -460,22 +460,20 @@ export default function FeedPage() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#87CEEB' }, // Fond bleu ciel demandé
+    container: { flex: 1, backgroundColor: '#87CEEB' }, // Fond bleu ciel
     loadingContainer: { flex: 1, backgroundColor: '#87CEEB', justifyContent: 'center', alignItems: 'center' },
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    text: { color: '#FFF', fontSize: 16 }, // Texte en blanc pour contraster sur le bleu
+    text: { color: '#FFF', fontSize: 16 }, 
     cardContainer: { flex: 1, justifyContent: 'flex-start' }, 
     cardInfo: {
         flex: 1, 
-        backgroundColor: '#87CEEB', // Même fond bleu pour la carte
+        backgroundColor: 'transparent', // Fond transparent pour la FeedCard
         marginTop: -40, 
         paddingHorizontal: 20, 
         paddingTop: 20,
-        // Suppression des ombres pour un style flat/immersif avec le fond
+        // Pas d'ombre ni de bordure
         shadowColor: "transparent", 
         elevation: 0,
-        borderTopLeftRadius: 20, // Optionnel : arrondir un peu le haut de la carte info
-        borderTopRightRadius: 20,
     },
     headerInfo: { marginBottom: 10, alignItems: 'center' },
     
@@ -490,7 +488,7 @@ const styles = StyleSheet.create({
     drawingTitle: { 
         fontSize: 26, 
         fontWeight: '900', 
-        color: '#FFF', // Titre en blanc
+        color: '#FFF', // Titre blanc
         letterSpacing: -0.5, 
         textAlign: 'center',
         maxWidth: '80%' 
@@ -525,8 +523,8 @@ const styles = StyleSheet.create({
     },
     userName: { 
         fontSize: 13, 
-        fontWeight: '600', // Un peu plus gras pour lisibilité
-        color: 'rgba(255,255,255,0.8)', // Blanc légèrement transparent
+        fontWeight: '600', 
+        color: 'rgba(255,255,255,0.8)', // Auteur en blanc transparent
         marginBottom: 10
     },
 
@@ -546,7 +544,7 @@ const styles = StyleSheet.create({
     reactionText: { 
         fontSize: 12, 
         fontWeight: '700', 
-        color: 'rgba(255,255,255,0.9)', // Texte des compteurs en blanc
+        color: 'rgba(255,255,255,0.9)', // Compteurs en blanc transparent
         marginTop: 4 
     },
     activeText: {
