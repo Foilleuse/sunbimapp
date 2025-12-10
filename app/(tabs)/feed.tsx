@@ -470,7 +470,7 @@ const styles = StyleSheet.create({
         shadowColor: "transparent", 
         elevation: 0,
     },
-    headerInfo: { marginBottom: 10, alignItems: 'center' },
+    headerInfo: { marginBottom: 5, alignItems: 'center' }, // Marge inférieure réduite
     
     titleRow: { 
         width: '100%',
@@ -514,7 +514,7 @@ const styles = StyleSheet.create({
     },
     
     authorContainer: {
-        marginTop: 2
+        marginTop: 0 // Marge supérieure réduite
     },
     userName: { 
         fontSize: 13, 
@@ -529,7 +529,7 @@ const styles = StyleSheet.create({
         alignItems: 'center', 
         width: '100%',
         paddingHorizontal: 10,
-        paddingBottom: 10
+        paddingBottom: 25 // Padding inférieur augmenté pour remonter le contenu visuellement
     },
     reactionBtn: { 
         alignItems: 'center', 
