@@ -373,6 +373,9 @@ export default function DrawPage() {
       </View>
 
       <View style={styles.canvasContainer}>
+        {/* Le DrawingCanvas est TOUJOURS rendu ici pour ne pas perdre son état */}
+        {/* Si replayPaths est présent, on affiche le Viewer, sinon le Canvas */}
+        
         {replayPaths ? (
             <DrawingViewer 
                 imageUri={cloud.image_url}
@@ -385,38 +388,26 @@ export default function DrawPage() {
                 autoCenter={true}
             />
         ) : (
-           /* Affichage conditionnel de l'image originale */
-           showOriginalImage ? (
-                <View style={[StyleSheet.absoluteFill, { backgroundColor: 'black', justifyContent: 'center' }]}>
-                     <Image 
-                        source={{ uri: cloud.image_url }} 
-                        style={StyleSheet.absoluteFill} 
-                        resizeMode="cover" // Important: doit correspondre au mode du DrawingCanvas
-                     />
-                     {/* On garde le DrawingCanvas monté mais invisible pour ne pas perdre l'état du dessin */}
-                     <View style={{ opacity: 0, flex: 1 }}>
-                        <DrawingCanvas
-                            ref={canvasRef}
-                            imageUri={cloud.image_url}
-                            strokeColor={strokeColor}
-                            strokeWidth={strokeWidth}
-                            isEraserMode={isEraserMode}
-                            onClear={handleClear}
-                            blurRadius={showSplash ? canvasBlur : 0}
-                        />
-                     </View>
-                </View>
-           ) : (
-                <DrawingCanvas
-                    ref={canvasRef}
-                    imageUri={cloud.image_url}
-                    strokeColor={strokeColor}
-                    strokeWidth={strokeWidth}
-                    isEraserMode={isEraserMode}
-                    onClear={handleClear}
-                    blurRadius={showSplash ? canvasBlur : 0}
-                />
-           )
+            <DrawingCanvas
+              ref={canvasRef}
+              imageUri={cloud.image_url}
+              strokeColor={strokeColor}
+              strokeWidth={strokeWidth}
+              isEraserMode={isEraserMode}
+              onClear={handleClear}
+              blurRadius={showSplash ? canvasBlur : 0}
+            />
+        )}
+        
+        {/* Image originale SUPERPOSÉE (Overlay) */}
+        {showOriginalImage && !replayPaths && (
+             <View style={[StyleSheet.absoluteFill, { zIndex: 999 }]}>
+                 <Image 
+                    source={{ uri: cloud.image_url }} 
+                    style={StyleSheet.absoluteFill} 
+                    resizeMode="cover" // Assurez-vous que le mode correspond à celui du canvas
+                 />
+             </View>
         )}
       </View>
       
