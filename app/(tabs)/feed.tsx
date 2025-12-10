@@ -25,10 +25,10 @@ const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color, count }: an
     });
 
     const handlePress = () => {
-        // Animation de rebond intensifiée (1.2 -> 1.6)
+        // Animation de rebond intensifiée (1.6 pour un effet "gros rebond")
         scale.value = withSequence(
-            withSpring(1.6, { damping: 2, stiffness: 80 }),
-            withSpring(1, { damping: 2, stiffness: 80 })
+            withSpring(1.6, { damping: 10, stiffness: 200 }), // Rebond important
+            withSpring(1, { damping: 10, stiffness: 200 })
         );
         onPress();
     };
@@ -71,11 +71,10 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
     // Chargement initial des réactions
     useEffect(() => {
         fetchReactionsState();
-    }, [drawing.id]); // Dépendance sur l'ID du dessin pour recharger si la carte est recyclée
+    }, [drawing.id]); 
 
     const fetchReactionsState = async () => {
         try {
-            // Récupérer toutes les réactions pour ce dessin
             const { data: allReactions, error } = await supabase
                 .from('reactions')
                 .select('reaction_type, user_id')
@@ -121,11 +120,9 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
         } 
         // Si on change de réaction ou qu'on en ajoute une nouvelle
         else {
-            // Si on avait déjà une réaction différente, on décrémente l'ancienne
             if (previousReaction) {
                 newCounts[previousReaction] = Math.max(0, newCounts[previousReaction] - 1);
             }
-            // On incrémente la nouvelle
             newCounts[type]++;
         }
 
@@ -156,7 +153,6 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
             }
         } catch (e) {
             console.error("Erreur mise à jour réaction:", e);
-            // Rollback en cas d'erreur
             setUserReaction(previousReaction);
             setReactionCounts(previousCounts);
             Alert.alert("Oups", "Impossible d'enregistrer la réaction.");
@@ -244,7 +240,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
                         </TouchableOpacity>
                     </View>
 
-                    {/* Nom de l'auteur centré, petit, sans avatar */}
+                    {/* Nom de l'auteur centré */}
                     <TouchableOpacity 
                         onPress={() => onUserPress(author)} 
                         activeOpacity={0.7}
@@ -320,13 +316,10 @@ export default function FeedPage() {
     // Calcul de la hauteur de l'image (ratio 3:4)
     const IMAGE_HEIGHT = screenWidth * (4/3);
     const EYE_BUTTON_SIZE = 44;
-    // On retire le chevauchement (0) car la carte est maintenant dessous
     const CARD_OVERLAP = 0; 
-    // On ajuste la marge pour le bouton oeil
     const MARGIN_BOTTOM = 25; 
     
-    // Position Top absolue = Hauteur Image - Taille Bouton - Marge
-    const eyeButtonTop = IMAGE_HEIGHT - EYE_BUTTON_SIZE - MARGIN_BOTTOM;
+    const eyeButtonTop = IMAGE_HEIGHT - CARD_OVERLAP - MARGIN_BOTTOM - EYE_BUTTON_SIZE;
 
     useEffect(() => { fetchTodaysFeed(); }, [user]); 
 
@@ -470,8 +463,8 @@ const styles = StyleSheet.create({
     cardContainer: { flex: 1, justifyContent: 'flex-start' }, 
     cardInfo: {
         flex: 1, 
-        backgroundColor: 'transparent', 
-        marginTop: 0, // Suppression de la marge négative pour ne pas chevaucher
+        backgroundColor: 'transparent', // Fond transparent
+        marginTop: 0, 
         paddingHorizontal: 20, 
         paddingTop: 10,
         shadowColor: "transparent", 
