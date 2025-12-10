@@ -8,6 +8,9 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '../src/contexts/AuthContext';
 import * as Updates from 'expo-updates';
 import React from 'react';
+// Ajout des imports pour l'auth sociale
+import * as AppleAuthentication from 'expo-apple-authentication';
+import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 
 interface Cloud {
   id: string;
@@ -25,16 +28,11 @@ export default function DrawPage() {
   const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
   
   const [cloud, setCloud] = useState<Cloud | null>(null);
-  const [subPrompt, setSubPrompt] = useState<string>(''); // État pour la phrase sous-titre
+  const [subPrompt, setSubPrompt] = useState<string>(''); 
   const [loading, setLoading] = useState(true);
   
-  // --- SPLASH SCREEN INTERNE ---
   const [showSplash, setShowSplash] = useState(true);
-  
-  // Animation d'opacité pour le texte et le voile
   const splashOpacity = useRef(new Animated.Value(1)).current; 
-  
-  // Animation pour le flou du canvas
   const blurAnim = useRef(new Animated.Value(15)).current;
   const [canvasBlur, setCanvasBlur] = useState(15);
   
@@ -61,7 +59,62 @@ export default function DrawPage() {
   const canvasRef = useRef<DrawingCanvasRef>(null);
   const updateLabel = (Updates && Updates.updateId) ? `v.${Updates.updateId.substring(0, 6)}` : '';
 
-  // --- ANIMATION D'OUVERTURE (SPLASH) ---
+  // --- CONFIGURATION GOOGLE SIGNIN (Au montage) ---
+  useEffect(() => {
+    GoogleSignin.configure({
+      iosClientId: 'VOTRE_IOS_CLIENT_ID.apps.googleusercontent.com', // À REMPLACER
+      webClientId: 'VOTRE_WEB_CLIENT_ID.apps.googleusercontent.com', // À REMPLACER
+      scopes: ['profile', 'email'],
+    });
+  }, []);
+
+  // --- FONCTIONS SOCIAL LOGIN ---
+  const handleGoogleLogin = async () => {
+    try {
+      await GoogleSignin.hasPlayServices();
+      const userInfo = await GoogleSignin.signIn();
+      if (userInfo.idToken) {
+        setAuthLoading(true);
+        const { error } = await supabase.auth.signInWithIdToken({
+          provider: 'google',
+          token: userInfo.idToken,
+        });
+        if (error) throw error;
+        // La redirection ou la fermeture de modale sera gérée par le useEffect sur 'user'
+      }
+    } catch (error: any) {
+      if (error.code !== statusCodes.SIGN_IN_CANCELLED && error.code !== statusCodes.IN_PROGRESS) {
+        Alert.alert("Erreur Google", error.message);
+      }
+      setAuthLoading(false);
+    }
+  };
+
+  const handleAppleLogin = async () => {
+    try {
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+      if (credential.identityToken) {
+        setAuthLoading(true);
+        const { error } = await supabase.auth.signInWithIdToken({
+          provider: 'apple',
+          token: credential.identityToken,
+        });
+        if (error) throw error;
+      }
+    } catch (e: any) {
+      if (e.code !== 'ERR_REQUEST_CANCELED') {
+        Alert.alert("Erreur Apple", e.message);
+      }
+      setAuthLoading(false);
+    }
+  };
+
+
   useEffect(() => {
     const listener = blurAnim.addListener(({ value }) => {
         setCanvasBlur(value);
@@ -108,6 +161,10 @@ export default function DrawPage() {
   useEffect(() => {
     if (user) {
         setAuthModalVisible(false); 
+        // Si on a un dessin en attente, on ouvre la modale de partage
+        if (canvasRef.current?.getPaths().length > 0 && !modalVisible && !replayPaths) {
+             setModalVisible(true);
+        }
     }
   }, [user]);
 
@@ -120,16 +177,13 @@ export default function DrawPage() {
         if (!supabase) throw new Error("No Supabase");
         const today = new Date().toISOString().split('T')[0];
         
-        // Chargement parallèle : Nuage + Prompt
         const [cloudResponse, promptResponse] = await Promise.all([
             supabase.from('clouds').select('*').eq('published_for', today).maybeSingle(),
-            // On récupère tous les prompts actifs pour en choisir un aléatoire côté client (simple et efficace pour peu de données)
             supabase.from('daily_prompts').select('content').eq('is_active', true) 
         ]);
 
         const { data: cloudData, error: cloudError } = cloudResponse;
         
-        // Gestion du prompt aléatoire
         if (promptResponse.data && promptResponse.data.length > 0) {
             const randomIndex = Math.floor(Math.random() * promptResponse.data.length);
             setSubPrompt(promptResponse.data[randomIndex].content);
@@ -255,7 +309,6 @@ export default function DrawPage() {
   return (
     <View style={styles.container}>
       
-      {/* HEADER TOUJOURS VISIBLE (zIndex > Splash) */}
       <View style={styles.header}>
         <Text style={styles.headerText}>sunbim</Text>
         {updateLabel ? <Text style={styles.versionText}>{updateLabel}</Text> : null}
@@ -300,20 +353,54 @@ export default function DrawPage() {
           </View>
       )}
 
-      {/* MODALES... */}
+      {/* MODALE CONNEXION (Mise à jour avec boutons sociaux) */}
       <Modal animationType="slide" transparent={true} visible={authModalVisible} onRequestClose={() => setAuthModalVisible(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
             <View style={styles.modalContent}>
                 <Text style={styles.modalTitle}>{isSignUp ? "Créer un compte" : "Se connecter"}</Text>
                 <Text style={styles.modalSubtitle}>Sauvegardez votre dessin pour le publier</Text>
+                
+                {/* BOUTONS SOCIAUX */}
+                <View style={styles.socialContainer}>
+                    {Platform.OS === 'ios' && (
+                        <AppleAuthentication.AppleAuthenticationButton
+                            buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+                            buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                            cornerRadius={5}
+                            style={{ width: '100%', height: 44, marginBottom: 10 }}
+                            onPress={handleAppleLogin}
+                        />
+                    )}
+                    
+                    {/* Bouton Google Personnalisé (pour style cohérent) */}
+                    <TouchableOpacity style={styles.googleBtn} onPress={handleGoogleLogin}>
+                        <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'center'}}>
+                           {/* Cercle coloré pour simuler logo G */}
+                           <View style={{width:20, height:20, borderRadius:10, backgroundColor:'#FFF', justifyContent:'center', alignItems:'center', marginRight: 10}}>
+                                <Text style={{color:'#DB4437', fontWeight:'bold', fontSize:14}}>G</Text>
+                           </View>
+                           <Text style={styles.googleBtnText}>Continuer avec Google</Text>
+                        </View>
+                    </TouchableOpacity>
+                </View>
+
+                <View style={{flexDirection: 'row', alignItems: 'center', marginVertical: 15, width: '100%'}}>
+                    <View style={{flex: 1, height: 1, backgroundColor: '#EEE'}} />
+                    <Text style={{marginHorizontal: 10, color: '#999'}}>OU</Text>
+                    <View style={{flex: 1, height: 1, backgroundColor: '#EEE'}} />
+                </View>
+
                 <TextInput style={styles.input} placeholder="Email" placeholderTextColor="#999" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
                 <TextInput style={styles.input} placeholder="Mot de passe" placeholderTextColor="#999" value={password} onChangeText={setPassword} secureTextEntry />
+                
                 <TouchableOpacity style={styles.validateBtn} onPress={handleAuthAction} disabled={authLoading}>
-                    {authLoading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.validateText}>{isSignUp ? "S'inscrire" : "Se connecter"}</Text>}
+                    {authLoading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.validateText}>{isSignUp ? "S'inscrire par email" : "Se connecter par email"}</Text>}
                 </TouchableOpacity>
+                
                 <TouchableOpacity onPress={() => setIsSignUp(!isSignUp)} style={{marginTop: 15, padding: 5}}>
                     <Text style={styles.switchText}>{isSignUp ? "J'ai déjà un compte" : "Pas encore de compte ?"}</Text>
                 </TouchableOpacity>
+                
                 <TouchableOpacity style={styles.cancelBtn} onPress={() => setAuthModalVisible(false)}>
                     <Text style={styles.cancelText}>Fermer</Text>
                 </TouchableOpacity>
@@ -374,17 +461,11 @@ export default function DrawPage() {
                     zIndex: 5, 
                     justifyContent: 'center', 
                     alignItems: 'center',
-                    // On garde le paddingTop pour ne pas que le texte soit caché par le header si besoin, 
-                    // mais dans un contexte centré, flex:1 et justifyContent: 'center' font le gros du travail.
-                    // Pour centrer parfaitement, on peut retirer ou réduire le paddingTop
-                    paddingTop: 0 
+                    paddingTop: 100 
                 }
             ]}
             pointerEvents={showSplash ? "auto" : "none"}
         >
-            {/* RETRAIT DU TITRE "Dessine ce que tu vois" */}
-            
-            {/* Affichage du sous-texte s'il existe (qui devient le texte principal) */}
             {subPrompt ? (
                 <Text style={[styles.splashSubText, styles.splashTextShadow]}>{subPrompt}</Text>
             ) : null}
@@ -409,7 +490,7 @@ const styles = StyleSheet.create({
   modalContent: { width: '85%', backgroundColor: '#FFF', borderRadius: 20, padding: 25, alignItems: 'center' },
   modalTitle: { fontSize: 22, fontWeight: '800', color: '#000', marginBottom: 5 },
   modalSubtitle: { fontSize: 14, color: '#666', marginBottom: 20 },
-  input: { width: '100%', height: 50, borderWidth: 1, borderColor: '#EEE', borderRadius: 12, paddingHorizontal: 15, fontSize: 16, marginBottom: 20, backgroundColor: '#F9F9F9' },
+  input: { width: '100%', height: 50, borderWidth: 1, borderColor: '#EEE', borderRadius: 12, paddingHorizontal: 15, fontSize: 16, marginBottom: 15, backgroundColor: '#F9F9F9' },
   validateBtn: { width: '100%', height: 50, backgroundColor: '#000', borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
   validateText: { color: '#FFF', fontWeight: '700', fontSize: 16 },
   cancelBtn: { padding: 10, marginTop: 5 },
@@ -424,19 +505,38 @@ const styles = StyleSheet.create({
       letterSpacing: 1,
       textAlign: 'center'
   },
-  // Style pour le sous-titre (maintenant mis en valeur comme texte principal)
   splashSubText: {
-      fontSize: 22, // Augmenté pour être le texte principal
+      fontSize: 22, 
       fontWeight: '700',
       color: '#FFFFFF', 
       marginTop: 10,
       textAlign: 'center',
-      paddingHorizontal: 30, // Pour éviter que le texte ne touche les bords
-      lineHeight: 30 // Meilleure lisibilité
+      paddingHorizontal: 30, 
+      lineHeight: 30 
   },
   splashTextShadow: {
       textShadowColor: 'rgba(0,0,0,0.7)', 
       textShadowOffset: { width: 1, height: 1 }, 
       textShadowRadius: 5
+  },
+
+  // Styles pour les boutons sociaux
+  socialContainer: {
+      width: '100%',
+      marginBottom: 10,
+  },
+  googleBtn: {
+      width: '100%',
+      height: 44,
+      backgroundColor: '#DB4437',
+      borderRadius: 5,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: 10,
+  },
+  googleBtnText: {
+      color: '#FFF',
+      fontWeight: 'bold',
+      fontSize: 16,
   }
 });

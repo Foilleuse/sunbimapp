@@ -1,12 +1,14 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, Image, Alert, ActivityIndicator, Switch, ScrollView, TextInput } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, Image, Alert, ActivityIndicator, Switch, ScrollView, TextInput, Platform } from 'react-native';
 import { X, LogOut, Camera, User, ChevronRight, Bell, Shield, CircleHelp, Trash2, Lock, Save } from 'lucide-react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabaseClient';
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
 import { getOptimizedImageUrl } from '../utils/imageOptimizer';
-import { useRouter } from 'expo-router'; // Import du router
+import { useRouter } from 'expo-router';
+import * as AppleAuthentication from 'expo-apple-authentication';
+import { GoogleSignin, statusCodes, GoogleSigninButton } from '@react-native-google-signin/google-signin';
 
 interface SettingsModalProps {
   visible: boolean;
@@ -15,15 +17,24 @@ interface SettingsModalProps {
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }) => {
   const { user, profile, signOut } = useAuth();
-  const router = useRouter(); // Hook de navigation
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   
-  // États pour le changement de mot de passe
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [newPassword, setNewPassword] = useState('');
 
-  // --- GESTION PHOTO DE PROFIL (GALERIE & CAMERA) ---
+  // --- CONFIGURATION GOOGLE SIGNIN ---
+  useEffect(() => {
+    GoogleSignin.configure({
+      // Remplacez par vos IDs clients réels depuis la console Google Cloud
+      iosClientId: 'VOTRE_IOS_CLIENT_ID_GOOGLE.apps.googleusercontent.com',
+      webClientId: 'VOTRE_WEB_CLIENT_ID_GOOGLE.apps.googleusercontent.com', // Pour Android
+      scopes: ['profile', 'email'],
+    });
+  }, []);
+
+  // --- GESTION PHOTO DE PROFIL ---
   const handleAvatarPress = () => {
       Alert.alert(
           "Modifier la photo",
@@ -118,6 +129,60 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
     }
   };
 
+  // --- SOCIAL LOGIN (POUR LINKER UN COMPTE) ---
+  // Note: Si l'utilisateur est déjà connecté, cela lie le compte.
+  // Si c'est pour se connecter depuis l'écran de login, la logique serait similaire.
+  
+  const linkGoogle = async () => {
+    try {
+      await GoogleSignin.hasPlayServices();
+      const userInfo = await GoogleSignin.signIn();
+      if (userInfo.idToken) {
+        const { data, error } = await supabase.auth.signInWithIdToken({
+          provider: 'google',
+          token: userInfo.idToken,
+        });
+        if (error) throw error;
+        Alert.alert("Succès", "Compte Google lié !");
+      }
+    } catch (error: any) {
+      if (error.code === statusCodes.SIGN_IN_CANCELLED) {
+        // user cancelled the login flow
+      } else if (error.code === statusCodes.IN_PROGRESS) {
+        // operation (e.g. sign in) is in progress already
+      } else {
+        Alert.alert("Erreur Google", error.message);
+      }
+    }
+  };
+
+  const linkApple = async () => {
+    try {
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+      // Sign in via Supabase with the identity token.
+      if (credential.identityToken) {
+        const { error } = await supabase.auth.signInWithIdToken({
+          provider: 'apple',
+          token: credential.identityToken,
+        });
+        if (error) throw error;
+        Alert.alert("Succès", "Compte Apple lié !");
+      }
+    } catch (e: any) {
+      if (e.code === 'ERR_REQUEST_CANCELED') {
+        // handle that the user canceled the sign-in flow
+      } else {
+        Alert.alert("Erreur Apple", e.message);
+      }
+    }
+  };
+
+
   // --- GESTION MOT DE PASSE ---
   const handleUpdatePassword = async () => {
       if (newPassword.length < 6) {
@@ -167,11 +232,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
           }
 
           await signOut();
-          onClose(); // Fermer la modale
-          
-          // Redirection vers l'index après suppression
+          onClose(); 
           router.replace('/');
-          
           Alert.alert("Compte supprimé", "Vos données ont été effacées. Au revoir.");
       } catch (error: any) {
           Alert.alert("Erreur", error.message);
@@ -191,9 +253,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
                   style: "destructive", 
                   onPress: async () => { 
                       await signOut(); 
-                      onClose(); // Fermer la modale
-                      
-                      // Redirection immédiate vers l'index (page de dessin/connexion)
+                      onClose(); 
                       router.replace('/'); 
                   } 
               }
@@ -237,6 +297,37 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
                             <Text style={styles.email}>{user?.email}</Text>
                         </View>
                     </View>
+                </View>
+
+                {/* SECTION COMPTES LIÉS */}
+                {/* Permet de lier un compte social à un compte existant */}
+                <View style={styles.sectionTitleContainer}>
+                    <Text style={styles.sectionTitle}>COMPTES LIÉS</Text>
+                </View>
+                <View style={styles.menuContainer}>
+                    <TouchableOpacity style={styles.menuItem} onPress={linkGoogle}>
+                        <View style={styles.menuIconContainer}>
+                           {/* Ici on mettrait un logo Google, simulé par un cercle coloré pour l'instant */}
+                            <View style={{width:20, height:20, borderRadius:10, backgroundColor:'#DB4437', justifyContent:'center', alignItems:'center'}}>
+                                <Text style={{color:'#FFF', fontWeight:'bold', fontSize:10}}>G</Text>
+                            </View>
+                        </View>
+                        <Text style={styles.menuText}>Google</Text>
+                        <ChevronRight size={20} color="#CCC" />
+                    </TouchableOpacity>
+
+                    {Platform.OS === 'ios' && (
+                        <TouchableOpacity style={styles.menuItem} onPress={linkApple}>
+                            <View style={styles.menuIconContainer}>
+                                {/* Logo Apple simulé */}
+                                <View style={{width:20, height:20, borderRadius:10, backgroundColor:'#000', justifyContent:'center', alignItems:'center'}}>
+                                    <Text style={{color:'#FFF', fontWeight:'bold', fontSize:10}}></Text>
+                                </View>
+                            </View>
+                            <Text style={styles.menuText}>Apple</Text>
+                            <ChevronRight size={20} color="#CCC" />
+                        </TouchableOpacity>
+                    )}
                 </View>
 
                 {/* SECTION SECURITE */}
