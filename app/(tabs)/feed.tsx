@@ -9,9 +9,45 @@ import { UserProfileModal } from '../../src/components/UserProfileModal';
 import { useRouter } from 'expo-router'; 
 import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer';
 import Carousel from 'react-native-reanimated-carousel';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring, withSequence } from 'react-native-reanimated';
 
 // Types de réactions possibles
 type ReactionType = 'like' | 'smart' | 'beautiful' | 'crazy' | null;
+
+// --- COMPOSANT BOUTON DE RÉACTION ANIMÉ ---
+const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color, count }: any) => {
+    const scale = useSharedValue(1);
+
+    const animatedStyle = useAnimatedStyle(() => {
+        return {
+            transform: [{ scale: scale.value }],
+        };
+    });
+
+    const handlePress = () => {
+        // Animation de rebond
+        scale.value = withSequence(
+            withSpring(1.2, { damping: 2, stiffness: 80 }),
+            withSpring(1, { damping: 2, stiffness: 80 })
+        );
+        onPress();
+    };
+
+    return (
+        <Pressable onPress={handlePress} style={styles.reactionBtn}>
+            <Animated.View style={animatedStyle}>
+                <Icon 
+                    color={isActive ? color : "#000"} 
+                    fill={isActive ? color : "transparent"} 
+                    size={24} 
+                />
+            </Animated.View>
+            <Text style={[styles.reactionText, isActive && styles.activeText]}>
+                {count || 0}
+            </Text>
+        </Pressable>
+    );
+};
 
 // FeedCard ne gère plus le bouton Oeil
 const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, isHolding }: { drawing: any, canvasSize: number, index: number, currentIndex: number, onUserPress: (user: any) => void, isHolding: boolean }) => {
@@ -222,52 +258,40 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
                     </TouchableOpacity>
                 </View>
 
-                {/* --- BARRE DE RÉACTIONS --- */}
+                {/* --- BARRE DE RÉACTIONS ANIMÉE --- */}
                 <View style={styles.reactionBar}>
                     
-                    <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('like')}>
-                        <Heart 
-                            color={userReaction === 'like' ? "#FF3B30" : "#000"} 
-                            fill={userReaction === 'like' ? "#FF3B30" : "transparent"} 
-                            size={24} 
-                        />
-                        <Text style={[styles.reactionText, userReaction === 'like' && styles.activeText]}>
-                            {reactionCounts.like || 0}
-                        </Text>
-                    </TouchableOpacity>
+                    <AnimatedReactionBtn 
+                        icon={Heart} 
+                        color="#FF3B30" 
+                        isActive={userReaction === 'like'} 
+                        count={reactionCounts.like} 
+                        onPress={() => handleReaction('like')}
+                    />
 
-                    <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('smart')}>
-                        <Lightbulb 
-                            color={userReaction === 'smart' ? "#FFCC00" : "#000"} 
-                            fill={userReaction === 'smart' ? "#FFCC00" : "transparent"} 
-                            size={24} 
-                        />
-                        <Text style={[styles.reactionText, userReaction === 'smart' && styles.activeText]}>
-                            {reactionCounts.smart || 0}
-                        </Text>
-                    </TouchableOpacity>
+                    <AnimatedReactionBtn 
+                        icon={Lightbulb} 
+                        color="#FFCC00" 
+                        isActive={userReaction === 'smart'} 
+                        count={reactionCounts.smart} 
+                        onPress={() => handleReaction('smart')}
+                    />
 
-                    <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('beautiful')}>
-                        <Palette 
-                            color={userReaction === 'beautiful' ? "#5856D6" : "#000"} 
-                            fill={userReaction === 'beautiful' ? "#5856D6" : "transparent"} 
-                            size={24} 
-                        />
-                        <Text style={[styles.reactionText, userReaction === 'beautiful' && styles.activeText]}>
-                            {reactionCounts.beautiful || 0}
-                        </Text>
-                    </TouchableOpacity>
+                    <AnimatedReactionBtn 
+                        icon={Palette} 
+                        color="#5856D6" 
+                        isActive={userReaction === 'beautiful'} 
+                        count={reactionCounts.beautiful} 
+                        onPress={() => handleReaction('beautiful')}
+                    />
 
-                    <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('crazy')}>
-                        <Zap 
-                            color={userReaction === 'crazy' ? "#FF2D55" : "#000"} 
-                            fill={userReaction === 'crazy' ? "#FF2D55" : "transparent"} 
-                            size={24} 
-                        />
-                        <Text style={[styles.reactionText, userReaction === 'crazy' && styles.activeText]}>
-                            {reactionCounts.crazy || 0}
-                        </Text>
-                    </TouchableOpacity>
+                    <AnimatedReactionBtn 
+                        icon={Zap} 
+                        color="#FF2D55" 
+                        isActive={userReaction === 'crazy'} 
+                        count={reactionCounts.crazy} 
+                        onPress={() => handleReaction('crazy')}
+                    />
 
                 </View>
             </View>
