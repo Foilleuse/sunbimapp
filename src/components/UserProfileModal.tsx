@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useCallback, memo } from 'react';
 import { View, Text, StyleSheet, Modal, Image, TouchableOpacity, FlatList, ActivityIndicator, Dimensions, Alert, Pressable, Platform, SafeAreaView } from 'react-native';
-import { X, User, UserPlus, UserCheck, Heart, MessageCircle, Lock, AlertCircle, Unlock } from 'lucide-react-native';
+import { X, User, UserPlus, UserCheck, Heart, MessageCircle, Lock, AlertCircle, Unlock, Lightbulb, Palette, Zap, MoreHorizontal } from 'lucide-react-native';
 import { supabase } from '../lib/supabaseClient';
 import { DrawingViewer } from './DrawingViewer';
 import { useAuth } from '../contexts/AuthContext';
-import { CommentsModal } from './CommentsModal';
 import { getOptimizedImageUrl } from '../utils/imageOptimizer';
 
 interface UserProfileModalProps {
@@ -13,6 +12,9 @@ interface UserProfileModalProps {
   userId: string;
   initialUser?: any; 
 }
+
+// Types de réactions possibles
+type ReactionType = 'like' | 'smart' | 'beautiful' | 'crazy' | null;
 
 // --- COMPOSANT MÉMORISÉ POUR LA GRILLE ---
 const DrawingGridItem = memo(({ item, size, isUnlocked, onPress, spacing }: any) => {
@@ -50,19 +52,23 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
   const [drawings, setDrawings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
-  const [canViewContent, setCanViewContent] = useState(false);
   const [unlockedCloudIds, setUnlockedCloudIds] = useState<string[]>([]);
 
   const [isFollowing, setIsFollowing] = useState(false);
-  const [isBlocked, setIsBlocked] = useState(false); // État pour le blocage
+  const [isBlocked, setIsBlocked] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
 
   const [selectedDrawing, setSelectedDrawing] = useState<any | null>(null);
   const [isHolding, setIsHolding] = useState(false);
-  const [showComments, setShowComments] = useState(false);
   
-  const [isLiked, setIsLiked] = useState(false);
-  const [likesCount, setLikesCount] = useState(0);
+  // États pour les réactions du dessin sélectionné
+  const [userReaction, setUserReaction] = useState<ReactionType>(null);
+  const [reactionCounts, setReactionCounts] = useState({
+      like: 0,
+      smart: 0,
+      beautiful: 0,
+      crazy: 0
+  });
 
   const { width: screenWidth } = Dimensions.get('window');
   const SPACING = 1; 
@@ -76,7 +82,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
         if (visible && userId) {
             if (isMounted) {
                 setLoading(true);
-                setCanViewContent(false); 
                 setDrawings([]);
                 setUnlockedCloudIds([]);
                 setIsBlocked(false);
@@ -84,7 +89,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
 
             if (currentUser && currentUser.id !== userId) {
                 checkFollowStatus();
-                checkBlockStatus(); // Vérification du blocage
+                checkBlockStatus();
             }
             await fetchData(isMounted);
         } else {
@@ -94,7 +99,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                 setIsFollowing(false);
                 setIsBlocked(false);
                 setSelectedDrawing(null); 
-                setCanViewContent(false);
                 setUnlockedCloudIds([]);
             }
         }
@@ -105,22 +109,91 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
     return () => { isMounted = false; };
   }, [visible, userId, currentUser]);
 
+  // Chargement des réactions quand un dessin est ouvert
   useEffect(() => {
-    if (selectedDrawing && currentUser) {
-        setLikesCount(selectedDrawing.likes?.[0]?.count || selectedDrawing.likes_count || 0);
-        
-        const checkLikeStatus = async () => {
-            const { count } = await supabase
-                .from('likes')
-                .select('*', { count: 'exact', head: true })
-                .eq('user_id', currentUser.id)
-                .eq('drawing_id', selectedDrawing.id);
-            
-            setIsLiked(count !== null && count > 0);
-        };
-        checkLikeStatus();
+    if (selectedDrawing) {
+        fetchReactionsState();
     }
-  }, [selectedDrawing, currentUser]);
+  }, [selectedDrawing]);
+
+  const fetchReactionsState = async () => {
+        if (!selectedDrawing) return;
+        try {
+            const { data: allReactions, error } = await supabase
+                .from('reactions')
+                .select('reaction_type, user_id')
+                .eq('drawing_id', selectedDrawing.id);
+
+            if (error) throw error;
+
+            const counts = { like: 0, smart: 0, beautiful: 0, crazy: 0 };
+            let myReaction: ReactionType = null;
+
+            allReactions?.forEach((r: any) => {
+                if (counts.hasOwnProperty(r.reaction_type)) {
+                    counts[r.reaction_type as keyof typeof counts]++;
+                }
+                if (currentUser && r.user_id === currentUser.id) {
+                    myReaction = r.reaction_type as ReactionType;
+                }
+            });
+
+            setReactionCounts(counts);
+            setUserReaction(myReaction);
+
+        } catch (e) {
+            console.error("Erreur chargement réactions:", e);
+        }
+  };
+
+  const handleReaction = async (type: ReactionType) => {
+        if (!currentUser || !type || !selectedDrawing) return;
+
+        const previousReaction = userReaction;
+        const previousCounts = { ...reactionCounts };
+
+        if (userReaction === type) {
+            setUserReaction(null);
+            setReactionCounts(prev => ({
+                ...prev,
+                [type]: Math.max(0, prev[type] - 1)
+            }));
+            
+            try {
+                await supabase.from('reactions').delete().eq('user_id', currentUser.id).eq('drawing_id', selectedDrawing.id);
+            } catch (e) {
+                setUserReaction(previousReaction);
+                setReactionCounts(previousCounts);
+            }
+        } 
+        else {
+            setUserReaction(type);
+            setReactionCounts(prev => {
+                const newCounts = { ...prev };
+                if (previousReaction) {
+                    newCounts[previousReaction] = Math.max(0, newCounts[previousReaction] - 1);
+                }
+                newCounts[type]++;
+                return newCounts;
+            });
+
+            try {
+                const { error } = await supabase
+                    .from('reactions')
+                    .upsert({
+                        user_id: currentUser.id,
+                        drawing_id: selectedDrawing.id,
+                        reaction_type: type
+                    }, { onConflict: 'user_id, drawing_id' });
+                
+                if (error) throw error;
+            } catch (e) {
+                console.error(e);
+                setUserReaction(previousReaction);
+                setReactionCounts(previousCounts);
+            }
+        }
+  };
 
   const checkFollowStatus = async () => {
       try {
@@ -194,49 +267,13 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
           
           setIsBlocked(false);
           Alert.alert("Utilisateur débloqué", "Vous pouvez maintenant voir son contenu.");
-          fetchData(true); // Recharger les données pour afficher les dessins
+          fetchData(true);
       } catch (e: any) {
           Alert.alert("Erreur", "Impossible de débloquer.");
           console.error(e);
       } finally {
           setFollowLoading(false);
       }
-  };
-
-  const handleLike = async () => {
-    if (!currentUser || !selectedDrawing) return;
-
-    const previousLiked = isLiked;
-    const previousCount = likesCount;
-
-    const newLikedState = !previousLiked;
-    const newCount = newLikedState ? previousCount + 1 : Math.max(0, previousCount - 1);
-
-    setIsLiked(newLikedState);
-    setLikesCount(newCount);
-
-    try {
-        if (previousLiked) {
-            const { error } = await supabase
-                .from('likes')
-                .delete()
-                .eq('user_id', currentUser.id)
-                .eq('drawing_id', selectedDrawing.id);
-            if (error) throw error;
-        } else {
-            const { error } = await supabase
-                .from('likes')
-                .insert({
-                    user_id: currentUser.id,
-                    drawing_id: selectedDrawing.id
-                });
-            if (error) throw error;
-        }
-    } catch (error) {
-        console.error("Erreur like:", error);
-        setIsLiked(previousLiked);
-        setLikesCount(previousCount);
-    }
   };
 
   const fetchData = async (isMounted: boolean) => {
@@ -251,9 +288,9 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
 
         const { data: drawingsData, error: drawingsError } = await supabase
             .from('drawings')
-            .select('*, likes(count), comments(count)')
+            .select('*') // Plus besoin de counts ici, on fetch les détails à l'ouverture
             .eq('user_id', userId)
-            .eq('is_hidden', false) // Respecter la censure
+            .eq('is_hidden', false) 
             .order('created_at', { ascending: false });
 
         if (drawingsError) throw drawingsError;
@@ -282,8 +319,9 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
   
   const closeDrawing = () => {
       setSelectedDrawing(null);
-      setIsLiked(false);
-      setShowComments(false);
+      // Reset reactions local state
+      setUserReaction(null);
+      setReactionCounts({ like: 0, smart: 0, beautiful: 0, crazy: 0 });
   };
 
   const profileAvatarOptimized = userProfile?.avatar_url ? getOptimizedImageUrl(userProfile.avatar_url, 100) : null;
@@ -302,8 +340,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
         />
     );
   }, [currentUser, userId, unlockedCloudIds, ITEM_SIZE, SPACING, openDrawing]);
-
-  const commentsCount = selectedDrawing?.comments?.[0]?.count || selectedDrawing?.comments_count || 0;
   
   const isSelectedUnlocked = selectedDrawing && (
       (currentUser?.id === userId) || unlockedCloudIds.includes(selectedDrawing.cloud_id)
@@ -340,7 +376,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
 
                     {currentUser && currentUser.id !== userId && (
                         <View style={{ marginLeft: 10 }}>
-                             {/* Affichage conditionnel du bouton Débloquer / Suivre */}
                              {isBlocked ? (
                                 <TouchableOpacity 
                                     style={[styles.iconOnlyBtn, styles.unblockBtn]} 
@@ -371,7 +406,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                 </View>
             </View>
 
-            {/* CONTENU PRINCIPAL : Message bloqué ou Liste */}
             {isBlocked ? (
                 <View style={styles.blockedState}>
                     <Lock color="#CCC" size={40} />
@@ -401,7 +435,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                 )
             )}
 
-            {/* MODALE D'AGRANDISSEMENT */}
+            {/* MODALE D'AGRANDISSEMENT (STYLE FEED CARD) */}
             <Modal visible={!!selectedDrawing} animationType="slide" presentationStyle="pageSheet" onRequestClose={closeDrawing}>
                 {selectedDrawing && (
                     <SafeAreaView style={styles.safeAreaContainer}>
@@ -438,46 +472,39 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                             </Pressable>
                         </View>
 
-                         <View style={styles.overlayFooter}>
-                            <View style={styles.userInfoRow}>
-                                <View style={styles.profilePlaceholder}>
-                                    {userProfile?.avatar_url ? (
-                                        <Image 
-                                            source={{ uri: getOptimizedImageUrl(userProfile.avatar_url, 50) || userProfile.avatar_url }} 
-                                            style={{width:40, height:40, borderRadius:20}} 
-                                        />
-                                    ) : (
-                                        <User color="#FFF" size={20} />
-                                    )}
-                                </View>
-                                <View>
-                                    <Text style={styles.userName}>{userProfile?.display_name || "Anonyme"}</Text>
-                                    {selectedDrawing.label && <Text style={styles.drawingLabel}>{selectedDrawing.label}</Text>}
-                                </View>
-                            </View>
+                        {/* INFO CARD STYLE FEED */}
+                         <View style={styles.infoCard}>
+                            <View style={styles.infoContent}>
+                                <Text style={styles.drawingTitle} numberOfLines={1}>
+                                    {selectedDrawing.label || "Sans titre"}
+                                </Text>
+                                <Text style={styles.userName}>{userProfile?.display_name || "Anonyme"}</Text>
 
-                            <View style={styles.statsRow}>
-                                <TouchableOpacity style={styles.statItem} onPress={handleLike}>
-                                    <Heart 
-                                        color={isLiked ? "#FF3B30" : "#000"} 
-                                        fill={isLiked ? "#FF3B30" : "transparent"} 
-                                        size={24} 
-                                    />
-                                    <Text style={styles.statText}>{likesCount}</Text>
-                                </TouchableOpacity>
-                                
-                                <TouchableOpacity style={styles.statItem} onPress={() => setShowComments(true)}>
-                                    <MessageCircle color="#000" size={24} />
-                                    <Text style={styles.statText}>{commentsCount}</Text>
-                                </TouchableOpacity>
+                                {/* BARRE DE RÉACTIONS */}
+                                <View style={styles.reactionBar}>
+                                    <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('like')}>
+                                        <Heart color={userReaction === 'like' ? "#FF3B30" : "#000"} fill={userReaction === 'like' ? "#FF3B30" : "transparent"} size={24} />
+                                        <Text style={[styles.reactionText, userReaction === 'like' && styles.activeText]}>{reactionCounts.like}</Text>
+                                    </TouchableOpacity>
+
+                                    <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('smart')}>
+                                        <Lightbulb color={userReaction === 'smart' ? "#FFCC00" : "#000"} fill={userReaction === 'smart' ? "#FFCC00" : "transparent"} size={24} />
+                                        <Text style={[styles.reactionText, userReaction === 'smart' && styles.activeText]}>{reactionCounts.smart}</Text>
+                                    </TouchableOpacity>
+
+                                    <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('beautiful')}>
+                                        <Palette color={userReaction === 'beautiful' ? "#5856D6" : "#000"} fill={userReaction === 'beautiful' ? "#5856D6" : "transparent"} size={24} />
+                                        <Text style={[styles.reactionText, userReaction === 'beautiful' && styles.activeText]}>{reactionCounts.beautiful}</Text>
+                                    </TouchableOpacity>
+
+                                    <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('crazy')}>
+                                        <Zap color={userReaction === 'crazy' ? "#FF2D55" : "#000"} fill={userReaction === 'crazy' ? "#FF2D55" : "transparent"} size={24} />
+                                        <Text style={[styles.reactionText, userReaction === 'crazy' && styles.activeText]}>{reactionCounts.crazy}</Text>
+                                    </TouchableOpacity>
+                                </View>
                             </View>
                          </View>
 
-                         <CommentsModal 
-                            visible={showComments} 
-                            onClose={() => setShowComments(false)} 
-                            drawingId={selectedDrawing.id} 
-                        />
                     </SafeAreaView>
                 )}
             </Modal>
@@ -545,20 +572,19 @@ const styles = StyleSheet.create({
       borderColor: '#000'
   },
   unblockBtn: {
-      backgroundColor: '#FF3B30', // Rouge pour l'action de déblocage
+      backgroundColor: '#FF3B30', 
   },
 
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   emptyState: { alignItems: 'center', marginTop: 50, gap: 10 },
   emptyText: { color: '#999', fontSize: 16 },
   
-  // Style spécifique pour l'état bloqué
   blockedState: {
       flex: 1,
       alignItems: 'center',
       justifyContent: 'center',
       gap: 10,
-      marginTop: -50 // Pour remonter un peu visuellement
+      marginTop: -50 
   },
   blockedSubText: {
       color: '#666',
@@ -588,22 +614,52 @@ const styles = StyleSheet.create({
 
   hintText: { position: 'absolute', bottom: 10, alignSelf: 'center', color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width:1, height:1}, textShadowRadius: 1 },
   
-  overlayFooter: { 
+  // Styles copiés et adaptés de FeedCard pour l'uniformité
+  infoCard: {
       width: '100%',
       padding: 20, 
-      flexDirection: 'row', 
-      justifyContent: 'space-between', 
-      alignItems: 'center', 
+      backgroundColor: '#FFF',
       borderTopWidth: 1, 
-      borderTopColor: '#F0F0F0', 
+      borderTopColor: '#F0F0F0',
       marginTop: 10, 
-      backgroundColor: '#FFF'
   },
-  userInfoRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  profilePlaceholder: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#CCC', justifyContent: 'center', alignItems: 'center', overflow:'hidden' },
-  userName: { fontWeight: '700', fontSize: 14, color: '#000' },
-  drawingLabel: { color: '#666', fontSize: 12, marginTop: 2 },
-  statsRow: { flexDirection: 'row', gap: 15 },
-  statItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  statText: { fontWeight: '600', fontSize: 16, color: '#000' },
+  infoContent: {
+      alignItems: 'center'
+  },
+  drawingTitle: { 
+      fontSize: 26, 
+      fontWeight: '900', 
+      color: '#000', 
+      letterSpacing: -0.5, 
+      textAlign: 'center',
+      marginBottom: 2
+  },
+  userName: { 
+      fontSize: 13, 
+      fontWeight: '500', 
+      color: '#888',
+      marginBottom: 10
+  },
+  reactionBar: { 
+      flexDirection: 'row', 
+      justifyContent: 'space-around', 
+      alignItems: 'center', 
+      width: '100%',
+      paddingHorizontal: 10
+  },
+  reactionBtn: { 
+      alignItems: 'center', 
+      justifyContent: 'center',
+      padding: 8
+  },
+  reactionText: { 
+      fontSize: 12, 
+      fontWeight: '600', 
+      color: '#999',
+      marginTop: 4 
+  },
+  activeText: {
+      color: '#000',
+      fontWeight: '800'
+  }
 });
