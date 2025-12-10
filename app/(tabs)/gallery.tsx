@@ -1,13 +1,15 @@
-import { View, Text, StyleSheet, FlatList, Dimensions, TouchableOpacity, ActivityIndicator, RefreshControl, TextInput, Keyboard, Pressable, Image, Platform, Modal } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Dimensions, TouchableOpacity, ActivityIndicator, RefreshControl, TextInput, Keyboard, Pressable, Image, Platform, Modal, Alert } from 'react-native';
 import { useEffect, useState, useCallback, memo } from 'react';
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
 import { useFocusEffect } from 'expo-router';
-import { Search, Heart, Cloud, CloudOff, XCircle, User, MessageCircle, X } from 'lucide-react-native';
+import { Search, Heart, Cloud, CloudOff, XCircle, User, MessageCircle, X, MoreHorizontal, Lightbulb, Palette, Zap } from 'lucide-react-native';
 import { useAuth } from '../../src/contexts/AuthContext';
-import { CommentsModal } from '../../src/components/CommentsModal';
 import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer';
+
+// Types de réactions possibles
+type ReactionType = 'like' | 'smart' | 'beautiful' | 'crazy' | null;
 
 // Composant mémorisé pour éviter les re-rendus inutiles
 const GalleryItem = memo(({ item, itemSize, showClouds, onPress }: any) => {
@@ -27,7 +29,6 @@ const GalleryItem = memo(({ item, itemSize, showClouds, onPress }: any) => {
         </TouchableOpacity>
     );
 }, (prev, next) => {
-    // Comparaison stricte pour la performance
     return prev.item.id === next.item.id && prev.showClouds === next.showClouds;
 });
 
@@ -43,9 +44,14 @@ export default function GalleryPage() {
     const [selectedDrawing, setSelectedDrawing] = useState<any | null>(null);
     const [isHolding, setIsHolding] = useState(false);
     
-    const [isLiked, setIsLiked] = useState(false);
-    const [likesCount, setLikesCount] = useState(0);
-    const [showComments, setShowComments] = useState(false);
+    // États pour les réactions du dessin sélectionné
+    const [userReaction, setUserReaction] = useState<ReactionType>(null);
+    const [reactionCounts, setReactionCounts] = useState({
+        like: 0,
+        smart: 0,
+        beautiful: 0,
+        crazy: 0
+    });
 
     const { width: screenWidth } = Dimensions.get('window');
     const SPACING = 1; 
@@ -56,7 +62,6 @@ export default function GalleryPage() {
             if (!refreshing) setLoading(true);
             const today = new Date().toISOString().split('T')[0];
             
-            // 1. On récupère l'image du jour en plus de l'ID
             const { data: cloudData } = await supabase
                 .from('clouds')
                 .select('id, image_url')
@@ -69,17 +74,13 @@ export default function GalleryPage() {
                 return;
             }
 
-            // --- OPTIMISATION CLEF ---
-            // On précharge l'image du fond en cache (taille x2 pour la netteté, comme DrawingViewer)
             if (cloudData.image_url) {
                 const prefetchUrl = getOptimizedImageUrl(cloudData.image_url, ITEM_SIZE * 2);
                 if (prefetchUrl) {
                     Image.prefetch(prefetchUrl).catch(e => console.log("Prefetch error (ignorable):", e));
                 }
             }
-            // ------------------------
 
-            // --- LOGIQUE DE FILTRAGE (BLOCAGES) ---
             let blockedUserIds: string[] = [];
             if (user) {
                 const { data: blocks } = await supabase
@@ -91,7 +92,6 @@ export default function GalleryPage() {
                     blockedUserIds = blocks.map(b => b.blocked_id);
                 }
             }
-            // --------------------------------------
 
             let likedIds: string[] = [];
             if (onlyLiked && user) {
@@ -110,12 +110,11 @@ export default function GalleryPage() {
 
             let query = supabase
                 .from('drawings')
-                .select('*, users(display_name, avatar_url), likes(count), comments(count)')
+                .select('*, users(display_name, avatar_url)') // Plus besoin de counts ici
                 .eq('cloud_id', cloudData.id)
-                .eq('is_hidden', false) // Filtrer les dessins censurés
+                .eq('is_hidden', false) 
                 .order('created_at', { ascending: false });
 
-            // Application du filtre si des utilisateurs sont bloqués
             if (blockedUserIds.length > 0) {
                 query = query.not('user_id', 'in', `(${blockedUserIds.join(',')})`);
             }
@@ -137,85 +136,148 @@ export default function GalleryPage() {
         }
     };
 
-    useEffect(() => { fetchGallery(); }, [onlyLiked, user]); // Ajout de `user` aux dépendances pour recharger si on bloque qqn
+    useEffect(() => { fetchGallery(); }, [onlyLiked, user]); 
     
     useFocusEffect(useCallback(() => { 
         fetchGallery(); 
-        
         return () => {
             setSelectedDrawing(null);
-            setIsLiked(false);
-            setShowComments(false);
+            setUserReaction(null);
+            setReactionCounts({ like: 0, smart: 0, beautiful: 0, crazy: 0 });
         };
     }, []));
 
+    // Chargement des réactions quand un dessin est ouvert
     useEffect(() => {
-        if (selectedDrawing && user) {
-            setLikesCount(selectedDrawing.likes?.[0]?.count || 0);
-            
-            const checkLikeStatus = async () => {
-                const { count } = await supabase
-                    .from('likes')
-                    .select('*', { count: 'exact', head: true })
-                    .eq('user_id', user.id)
-                    .eq('drawing_id', selectedDrawing.id);
-                
-                setIsLiked(count !== null && count > 0);
-            };
-            checkLikeStatus();
+        if (selectedDrawing) {
+            fetchReactionsState();
         }
-    }, [selectedDrawing, user]);
+    }, [selectedDrawing]);
 
     const onRefresh = () => { setRefreshing(true); fetchGallery(); };
     const handleSearchSubmit = () => { setLoading(true); fetchGallery(); Keyboard.dismiss(); };
     const clearSearch = () => { setSearchText(''); setLoading(true); fetchGallery(''); Keyboard.dismiss(); };
 
     const openViewer = useCallback((drawing: any) => setSelectedDrawing(drawing), []);
-    const closeViewer = () => { setSelectedDrawing(null); setIsLiked(false); };
+    
+    const closeViewer = () => { 
+        setSelectedDrawing(null); 
+        setUserReaction(null);
+        setReactionCounts({ like: 0, smart: 0, beautiful: 0, crazy: 0 });
+    };
 
-    const handleLike = async () => {
-        if (!user || !selectedDrawing) return;
-
-        const previousLiked = isLiked;
-        const previousCount = likesCount;
-
-        const newLikedState = !previousLiked;
-        const newCount = newLikedState ? previousCount + 1 : Math.max(0, previousCount - 1);
-
-        setIsLiked(newLikedState);
-        setLikesCount(newCount);
-
+    const fetchReactionsState = async () => {
+        if (!selectedDrawing) return;
         try {
-            if (previousLiked) {
-                const { error } = await supabase
-                    .from('likes')
-                    .delete()
-                    .eq('user_id', user.id)
-                    .eq('drawing_id', selectedDrawing.id);
-                if (error) throw error;
-            } else {
-                const { error } = await supabase
-                    .from('likes')
-                    .insert({
-                        user_id: user.id,
-                        drawing_id: selectedDrawing.id
-                    });
-                if (error) throw error;
-            }
-        } catch (error) {
-            console.error("Erreur like:", error);
-            setIsLiked(previousLiked);
-            setLikesCount(previousCount);
+            const { data: allReactions, error } = await supabase
+                .from('reactions')
+                .select('reaction_type, user_id')
+                .eq('drawing_id', selectedDrawing.id);
+
+            if (error) throw error;
+
+            const counts = { like: 0, smart: 0, beautiful: 0, crazy: 0 };
+            let myReaction: ReactionType = null;
+
+            allReactions?.forEach((r: any) => {
+                if (counts.hasOwnProperty(r.reaction_type)) {
+                    counts[r.reaction_type as keyof typeof counts]++;
+                }
+                if (user && r.user_id === user.id) {
+                    myReaction = r.reaction_type as ReactionType;
+                }
+            });
+
+            setReactionCounts(counts);
+            setUserReaction(myReaction);
+
+        } catch (e) {
+            console.error("Erreur chargement réactions:", e);
         }
     };
 
-    const author = selectedDrawing?.users;
-    const commentsCount = selectedDrawing?.comments?.[0]?.count || 0;
+    const handleReaction = async (type: ReactionType) => {
+        if (!user || !type || !selectedDrawing) return;
 
+        const previousReaction = userReaction;
+        const previousCounts = { ...reactionCounts };
+
+        if (userReaction === type) {
+            setUserReaction(null);
+            setReactionCounts(prev => ({
+                ...prev,
+                [type]: Math.max(0, prev[type] - 1)
+            }));
+            
+            try {
+                await supabase.from('reactions').delete().eq('user_id', user.id).eq('drawing_id', selectedDrawing.id);
+            } catch (e) {
+                setUserReaction(previousReaction);
+                setReactionCounts(previousCounts);
+            }
+        } 
+        else {
+            setUserReaction(type);
+            setReactionCounts(prev => {
+                const newCounts = { ...prev };
+                if (previousReaction) {
+                    newCounts[previousReaction] = Math.max(0, newCounts[previousReaction] - 1);
+                }
+                newCounts[type]++;
+                return newCounts;
+            });
+
+            try {
+                const { error } = await supabase
+                    .from('reactions')
+                    .upsert({
+                        user_id: user.id,
+                        drawing_id: selectedDrawing.id,
+                        reaction_type: type
+                    }, { onConflict: 'user_id, drawing_id' });
+                
+                if (error) throw error;
+            } catch (e) {
+                console.error(e);
+                setUserReaction(previousReaction);
+                setReactionCounts(previousCounts);
+            }
+        }
+    };
+
+    const handleReport = () => {
+        if (!selectedDrawing) return;
+        Alert.alert(
+            "Options",
+            "Que souhaitez-vous faire ?",
+            [
+                { text: "Annuler", style: "cancel" },
+                { 
+                    text: "Signaler le contenu", 
+                    onPress: async () => {
+                        if (!user) return Alert.alert("Erreur", "Vous devez être connecté pour signaler.");
+                        try {
+                            const { error } = await supabase
+                                .from('reports')
+                                .insert({ reporter_id: user.id, drawing_id: selectedDrawing.id, reason: 'Contenu inapproprié' });
+                            
+                            if (error) throw error;
+                            Alert.alert("Signalement envoyé", "Nous allons examiner cette image. Merci de votre vigilance.");
+                        } catch (e) {
+                            console.error(e);
+                            Alert.alert("Erreur", "Impossible d'envoyer le signalement.");
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
+    const author = selectedDrawing?.users;
+    
     // OPTIMISATION DES IMAGES MODALE
     const optimizedFullImage = selectedDrawing ? getOptimizedImageUrl(selectedDrawing.cloud_image_url, screenWidth) : null;
-    const optimizedAvatar = author?.avatar_url ? getOptimizedImageUrl(author.avatar_url, 50) : null;
-
+    
     const renderItem = useCallback(({ item }: { item: any }) => (
         <GalleryItem 
             item={item} 
@@ -286,43 +348,46 @@ export default function GalleryPage() {
                                 <Text style={styles.hintText}>Maintenir pour voir l'original</Text>
                             </Pressable>
 
-                            <View style={styles.modalFooter}>
-                                <View style={styles.userInfoRow}>
-                                    <View style={styles.profilePlaceholder}>
-                                        {author?.avatar_url ? (
-                                            <Image source={{uri: optimizedAvatar || author.avatar_url}} style={{width:40, height:40, borderRadius:20}} />
-                                        ) : (
-                                            <User color="#FFF" size={20} />
-                                        )}
+                            {/* --- NOUVEAU FOOTER STYLE FEED --- */}
+                            <View style={styles.infoCard}>
+                                <View style={styles.infoContent}>
+                                    <View style={styles.titleRow}>
+                                        <Text style={styles.drawingTitle} numberOfLines={1}>
+                                            {selectedDrawing.label || "Sans titre"}
+                                        </Text>
+                                        
+                                        <TouchableOpacity onPress={handleReport} style={styles.moreBtnAbsolute} hitSlop={15}>
+                                            <MoreHorizontal color="#CCC" size={24} />
+                                        </TouchableOpacity>
                                     </View>
-                                    <View>
-                                        <Text style={styles.userName}>{author?.display_name || "Anonyme"}</Text>
-                                        {selectedDrawing.label && <Text style={styles.drawingLabel}>{selectedDrawing.label}</Text>}
-                                    </View>
-                                </View>
-
-                                <View style={styles.statsRow}>
-                                    <TouchableOpacity style={styles.statItem} onPress={handleLike}>
-                                        <Heart 
-                                            color={isLiked ? "#FF3B30" : "#000"} 
-                                            fill={isLiked ? "#FF3B30" : "transparent"} 
-                                            size={24} 
-                                        />
-                                        <Text style={styles.statText}>{likesCount}</Text>
-                                    </TouchableOpacity>
                                     
-                                    <TouchableOpacity style={styles.statItem} onPress={() => setShowComments(true)}>
-                                        <MessageCircle color="#000" size={24} />
-                                        <Text style={styles.statText}>{commentsCount}</Text>
-                                    </TouchableOpacity>
+                                    <Text style={styles.userName}>{author?.display_name || "Anonyme"}</Text>
+
+                                    {/* BARRE DE RÉACTIONS */}
+                                    <View style={styles.reactionBar}>
+                                        <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('like')}>
+                                            <Heart color={userReaction === 'like' ? "#FF3B30" : "#000"} fill={userReaction === 'like' ? "#FF3B30" : "transparent"} size={24} />
+                                            <Text style={[styles.reactionText, userReaction === 'like' && styles.activeText]}>{reactionCounts.like}</Text>
+                                        </TouchableOpacity>
+
+                                        <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('smart')}>
+                                            <Lightbulb color={userReaction === 'smart' ? "#FFCC00" : "#000"} fill={userReaction === 'smart' ? "#FFCC00" : "transparent"} size={24} />
+                                            <Text style={[styles.reactionText, userReaction === 'smart' && styles.activeText]}>{reactionCounts.smart}</Text>
+                                        </TouchableOpacity>
+
+                                        <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('beautiful')}>
+                                            <Palette color={userReaction === 'beautiful' ? "#5856D6" : "#000"} fill={userReaction === 'beautiful' ? "#5856D6" : "transparent"} size={24} />
+                                            <Text style={[styles.reactionText, userReaction === 'beautiful' && styles.activeText]}>{reactionCounts.beautiful}</Text>
+                                        </TouchableOpacity>
+
+                                        <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('crazy')}>
+                                            <Zap color={userReaction === 'crazy' ? "#FF2D55" : "#000"} fill={userReaction === 'crazy' ? "#FF2D55" : "transparent"} size={24} />
+                                            <Text style={[styles.reactionText, userReaction === 'crazy' && styles.activeText]}>{reactionCounts.crazy}</Text>
+                                        </TouchableOpacity>
+                                    </View>
                                 </View>
                             </View>
 
-                            <CommentsModal 
-                                visible={showComments} 
-                                onClose={() => setShowComments(false)} 
-                                drawingId={selectedDrawing.id} 
-                            />
                         </View>
                     )}
                 </Modal>
@@ -342,18 +407,71 @@ const styles = StyleSheet.create({
     activeBtn: { backgroundColor: '#000', borderColor: '#000' },
     emptyState: { marginTop: 100, alignItems: 'center' },
     emptyText: { color: '#999' },
-    fullScreenOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#FFFFFF', zIndex: 50 },
     hintText: { position: 'absolute', bottom: 10, alignSelf: 'center', color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width:1, height:1}, textShadowRadius: 1 },
-    detailsFooter: { padding: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#F0F0F0', marginTop: 10 },
-    userInfoRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-    profilePlaceholder: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#CCC', justifyContent: 'center', alignItems: 'center', overflow:'hidden' },
-    userName: { fontWeight: '700', fontSize: 14 },
-    drawingLabel: { color: '#666', fontSize: 12, marginTop: 2 },
-    statsRow: { flexDirection: 'row', gap: 15 },
-    statItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-    statText: { fontWeight: '600', fontSize: 16 },
     modalContainer: { flex: 1, backgroundColor: '#FFF' },
     modalHeader: { width: '100%', height: 60, justifyContent: 'center', alignItems: 'flex-end', paddingRight: 20, paddingTop: 10, backgroundColor: '#FFF', zIndex: 20 },
     closeModalBtn: { padding: 5 },
-    modalFooter: { padding: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#F0F0F0', marginTop: 10 },
+    
+    // NOUVEAUX STYLES (Feed Card Style)
+    infoCard: {
+        width: '100%',
+        padding: 20, 
+        backgroundColor: '#FFF',
+        borderTopWidth: 1, 
+        borderTopColor: '#F0F0F0',
+        marginTop: 10, 
+    },
+    infoContent: {
+        alignItems: 'center'
+    },
+    titleRow: { 
+        width: '100%',
+        flexDirection: 'row', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        marginBottom: 2,
+        position: 'relative'
+    },
+    drawingTitle: { 
+        fontSize: 26, 
+        fontWeight: '900', 
+        color: '#000', 
+        letterSpacing: -0.5, 
+        textAlign: 'center',
+        maxWidth: '80%' 
+    },
+    moreBtnAbsolute: { 
+        position: 'absolute',
+        right: 0,
+        top: 5,
+        padding: 5 
+    },
+    userName: { 
+        fontSize: 13, 
+        fontWeight: '500', 
+        color: '#888',
+        marginBottom: 10
+    },
+    reactionBar: { 
+        flexDirection: 'row', 
+        justifyContent: 'space-around', 
+        alignItems: 'center', 
+        width: '100%',
+        paddingHorizontal: 10
+    },
+    reactionBtn: { 
+        alignItems: 'center', 
+        justifyContent: 'center',
+        padding: 8
+    },
+    reactionText: { 
+        fontSize: 12, 
+        fontWeight: '600', 
+        color: '#999',
+        marginTop: 4 
+    },
+    activeText: {
+        color: '#000',
+        fontWeight: '800'
+    }
 });

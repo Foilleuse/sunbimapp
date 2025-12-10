@@ -1,14 +1,16 @@
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ActivityIndicator, Alert, Image, FlatList, Dimensions, Modal, Pressable, KeyboardAvoidingView, Platform } from 'react-native';
-import { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ActivityIndicator, Alert, Image, FlatList, Dimensions, Modal, Pressable, KeyboardAvoidingView, Platform, SafeAreaView } from 'react-native';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'expo-router';
 import { supabase } from '../../src/lib/supabaseClient';
 import { useAuth } from '../../src/contexts/AuthContext';
-import { User, Mail, Lock, X, Heart, MessageCircle, AlertCircle, Settings } from 'lucide-react-native'; 
+import { User, Mail, Lock, X, Heart, MessageCircle, AlertCircle, Settings, Lightbulb, Palette, Zap, MoreHorizontal, Unlock } from 'lucide-react-native'; 
 import { DrawingViewer } from '../../src/components/DrawingViewer';
-import { CommentsModal } from '../../src/components/CommentsModal';
 import { SettingsModal } from '../../src/components/SettingsModal'; 
 import { SunbimHeader } from '../../src/components/SunbimHeader';
 import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer';
+
+// Types de réactions possibles
+type ReactionType = 'like' | 'smart' | 'beautiful' | 'crazy' | null;
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -19,11 +21,16 @@ export default function ProfilePage() {
   
   const [selectedDrawing, setSelectedDrawing] = useState<any | null>(null);
   const [isHolding, setIsHolding] = useState(false);
-  const [showComments, setShowComments] = useState(false);
   const [showSettings, setShowSettings] = useState(false); 
   
-  const [isLiked, setIsLiked] = useState(false);
-  const [likesCount, setLikesCount] = useState(0);
+  // États pour les réactions du dessin sélectionné
+  const [userReaction, setUserReaction] = useState<ReactionType>(null);
+  const [reactionCounts, setReactionCounts] = useState({
+      like: 0,
+      smart: 0,
+      beautiful: 0,
+      crazy: 0
+  });
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -39,22 +46,12 @@ export default function ProfilePage() {
     if (user) fetchHistory();
   }, [user]);
 
+  // Chargement des réactions quand un dessin est ouvert
   useEffect(() => {
-    if (selectedDrawing && user) {
-        setLikesCount(selectedDrawing.likes?.[0]?.count || selectedDrawing.likes_count || 0);
-        
-        const checkLikeStatus = async () => {
-            const { count } = await supabase
-                .from('likes')
-                .select('*', { count: 'exact', head: true })
-                .eq('user_id', user.id)
-                .eq('drawing_id', selectedDrawing.id);
-            
-            setIsLiked(count !== null && count > 0);
-        };
-        checkLikeStatus();
+    if (selectedDrawing) {
+        fetchReactionsState();
     }
-  }, [selectedDrawing, user]);
+  }, [selectedDrawing]);
 
   const fetchHistory = async () => {
     try {
@@ -70,8 +67,9 @@ export default function ProfilePage() {
 
         const { data: userDrawings, error: drawingsError } = await supabase
             .from('drawings')
-            .select('*, likes(count), comments(count)')
-            .eq('user_id', user?.id);
+            .select('*')
+            .eq('user_id', user?.id)
+            .eq('is_hidden', false);
 
         if (drawingsError) throw drawingsError;
 
@@ -114,58 +112,101 @@ export default function ProfilePage() {
   };
 
   const openDrawing = (drawing: any) => setSelectedDrawing(drawing);
+  
   const closeDrawing = () => {
       setSelectedDrawing(null);
-      setIsLiked(false);
-      setShowComments(false);
+      setUserReaction(null);
+      setReactionCounts({ like: 0, smart: 0, beautiful: 0, crazy: 0 });
   };
 
-  const handleLike = async () => {
-    if (!user || !selectedDrawing) return;
-
-    const previousLiked = isLiked;
-    const previousCount = likesCount;
-
-    const newLikedState = !previousLiked;
-    const newCount = newLikedState ? previousCount + 1 : Math.max(0, previousCount - 1);
-
-    setIsLiked(newLikedState);
-    setLikesCount(newCount);
-
-    try {
-        if (previousLiked) {
-            const { error } = await supabase
-                .from('likes')
-                .delete()
-                .eq('user_id', user.id)
+  const fetchReactionsState = async () => {
+        if (!selectedDrawing) return;
+        try {
+            const { data: allReactions, error } = await supabase
+                .from('reactions')
+                .select('reaction_type, user_id')
                 .eq('drawing_id', selectedDrawing.id);
+
             if (error) throw error;
-        } else {
-            const { error } = await supabase
-                .from('likes')
-                .insert({
-                    user_id: user.id,
-                    drawing_id: selectedDrawing.id
-                });
-            if (error) throw error;
+
+            const counts = { like: 0, smart: 0, beautiful: 0, crazy: 0 };
+            let myReaction: ReactionType = null;
+
+            allReactions?.forEach((r: any) => {
+                if (counts.hasOwnProperty(r.reaction_type)) {
+                    counts[r.reaction_type as keyof typeof counts]++;
+                }
+                if (user && r.user_id === user.id) {
+                    myReaction = r.reaction_type as ReactionType;
+                }
+            });
+
+            setReactionCounts(counts);
+            setUserReaction(myReaction);
+
+        } catch (e) {
+            console.error("Erreur chargement réactions:", e);
         }
-    } catch (error) {
-        console.error("Erreur like:", error);
-        setIsLiked(previousLiked);
-        setLikesCount(previousCount);
-    }
   };
 
-  const commentsCount = selectedDrawing?.comments?.[0]?.count || selectedDrawing?.comments_count || 0;
+  const handleReaction = async (type: ReactionType) => {
+        if (!user || !type || !selectedDrawing) return;
 
-  // Optimisation de l'avatar pour l'affichage principal (taille ~100px)
+        const previousReaction = userReaction;
+        const previousCounts = { ...reactionCounts };
+
+        if (userReaction === type) {
+            setUserReaction(null);
+            setReactionCounts(prev => ({
+                ...prev,
+                [type]: Math.max(0, prev[type] - 1)
+            }));
+            
+            try {
+                await supabase.from('reactions').delete().eq('user_id', user.id).eq('drawing_id', selectedDrawing.id);
+            } catch (e) {
+                setUserReaction(previousReaction);
+                setReactionCounts(previousCounts);
+            }
+        } 
+        else {
+            setUserReaction(type);
+            setReactionCounts(prev => {
+                const newCounts = { ...prev };
+                if (previousReaction) {
+                    newCounts[previousReaction] = Math.max(0, newCounts[previousReaction] - 1);
+                }
+                newCounts[type]++;
+                return newCounts;
+            });
+
+            try {
+                const { error } = await supabase
+                    .from('reactions')
+                    .upsert({
+                        user_id: user.id,
+                        drawing_id: selectedDrawing.id,
+                        reaction_type: type
+                    }, { onConflict: 'user_id, drawing_id' });
+                
+                if (error) throw error;
+            } catch (e) {
+                console.error(e);
+                setUserReaction(previousReaction);
+                setReactionCounts(previousCounts);
+            }
+        }
+  };
+
+  const handleReport = () => {
+    // Sur son propre profil, on ne se signale pas soi-même, mais l'option pourrait servir pour supprimer (pas demandé ici)
+    Alert.alert("Info", "Ceci est votre propre dessin.");
+  };
+
   const profileAvatarOptimized = profile?.avatar_url ? getOptimizedImageUrl(profile.avatar_url, 100) : null;
-  
-  // Optimisation de l'image agrandie (pleine largeur)
   const selectedDrawingImageOptimized = selectedDrawing ? getOptimizedImageUrl(selectedDrawing.cloud_image_url, screenWidth) : null;
 
   const renderItem = ({ item }: { item: any }) => {
-      // Optimisation de la miniature (taille de la colonne)
       const thumbOptimized = getOptimizedImageUrl(item.cloud_image_url, ITEM_SIZE);
 
       if (item.type === 'missed') {
@@ -262,7 +303,6 @@ export default function ProfilePage() {
                   </Text>
               </View>
 
-              {/* BOUTON PARAMÈTRES (LOGO SEULEMENT) */}
               <View style={{ marginLeft: 10 }}>
                  <TouchableOpacity 
                     style={styles.iconOnlyBtn} 
@@ -295,12 +335,13 @@ export default function ProfilePage() {
           )}
       </View>
 
+      {/* MODALE D'AGRANDISSEMENT (STYLE FEED CARD) */}
       <Modal visible={!!selectedDrawing} animationType="slide" presentationStyle="pageSheet" onRequestClose={closeDrawing}>
           {selectedDrawing && (
-              <View style={styles.modalContainer}>
+              <SafeAreaView style={styles.safeAreaContainer}>
                   <View style={styles.modalHeader}>
-                      <TouchableOpacity onPress={closeDrawing} style={styles.closeModalBtn}>
-                          <X color="#000" size={30} />
+                      <TouchableOpacity onPress={closeDrawing} style={styles.closeBtnTransparent} hitSlop={15}>
+                          <X color="#000" size={28} />
                       </TouchableOpacity>
                   </View>
                   
@@ -327,44 +368,47 @@ export default function ProfilePage() {
                       <Text style={styles.hintText}>Maintenir pour voir l'original</Text>
                   </Pressable>
 
-                  <View style={styles.modalFooter}>
-                      <View style={styles.userInfoRow}>
-                        {/* Optimisation de l'avatar dans le footer (petit format) */}
-                        <View style={styles.profilePlaceholder}>
-                            {profile?.avatar_url ? (
-                                <Image 
-                                    source={{ uri: getOptimizedImageUrl(profile.avatar_url, 50) || profile.avatar_url }} 
-                                    style={{width:40, height:40, borderRadius:20}} 
-                                />
-                            ) : (
-                                <User color="#FFF" size={20} />
-                            )}
+                  {/* INFO CARD STYLE FEED */}
+                  <View style={styles.infoCard}>
+                    <View style={styles.infoContent}>
+                        <View style={styles.titleRow}>
+                            <Text style={styles.drawingTitle} numberOfLines={1}>
+                                {selectedDrawing.label || "Sans titre"}
+                            </Text>
+                            
+                            <TouchableOpacity onPress={handleReport} style={styles.moreBtnAbsolute} hitSlop={15}>
+                                <MoreHorizontal color="#CCC" size={24} />
+                            </TouchableOpacity>
                         </View>
-                        <View>
-                            <Text style={styles.userName}>{profile?.display_name || "Anonyme"}</Text>
-                            <Text style={styles.drawingLabel}>{selectedDrawing.label || "Sans titre"}</Text>
-                        </View>
-                      </View>
-                      
-                      <View style={styles.statsRowSmall}>
-                          <TouchableOpacity style={{flexDirection: 'row', alignItems: 'center', gap: 4}} onPress={handleLike}>
-                              <Heart color={isLiked ? "#FF3B30" : "#000"} fill={isLiked ? "#FF3B30" : "transparent"} size={28} />
-                              <Text style={{fontWeight: '600', fontSize: 16, color: '#000'}}>{likesCount}</Text>
-                          </TouchableOpacity>
+                        
+                        <Text style={styles.userName}>{profile?.display_name || "Anonyme"}</Text>
 
-                          <TouchableOpacity style={{flexDirection: 'row', alignItems: 'center', gap: 4}} onPress={() => setShowComments(true)}>
-                              <MessageCircle color="#000" size={28} />
-                              <Text style={{fontWeight: '600', fontSize: 16, color: '#000'}}>{commentsCount}</Text>
-                          </TouchableOpacity>
-                      </View>
+                        {/* BARRE DE RÉACTIONS */}
+                        <View style={styles.reactionBar}>
+                            <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('like')}>
+                                <Heart color={userReaction === 'like' ? "#FF3B30" : "#000"} fill={userReaction === 'like' ? "#FF3B30" : "transparent"} size={24} />
+                                <Text style={[styles.reactionText, userReaction === 'like' && styles.activeText]}>{reactionCounts.like}</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('smart')}>
+                                <Lightbulb color={userReaction === 'smart' ? "#FFCC00" : "#000"} fill={userReaction === 'smart' ? "#FFCC00" : "transparent"} size={24} />
+                                <Text style={[styles.reactionText, userReaction === 'smart' && styles.activeText]}>{reactionCounts.smart}</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('beautiful')}>
+                                <Palette color={userReaction === 'beautiful' ? "#5856D6" : "#000"} fill={userReaction === 'beautiful' ? "#5856D6" : "transparent"} size={24} />
+                                <Text style={[styles.reactionText, userReaction === 'beautiful' && styles.activeText]}>{reactionCounts.beautiful}</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('crazy')}>
+                                <Zap color={userReaction === 'crazy' ? "#FF2D55" : "#000"} fill={userReaction === 'crazy' ? "#FF2D55" : "transparent"} size={24} />
+                                <Text style={[styles.reactionText, userReaction === 'crazy' && styles.activeText]}>{reactionCounts.crazy}</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
                   </View>
 
-                  <CommentsModal 
-                    visible={showComments} 
-                    onClose={() => setShowComments(false)} 
-                    drawingId={selectedDrawing.id} 
-                  />
-              </View>
+              </SafeAreaView>
           )}
       </Modal>
 
@@ -378,6 +422,7 @@ export default function ProfilePage() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFF' },
+  safeAreaContainer: { flex: 1, backgroundColor: '#FFF' },
   
   profileBlock: { 
       paddingTop: 10, 
@@ -387,7 +432,7 @@ const styles = StyleSheet.create({
   },
   
   profileInfoContainer: {
-      flexDirection: 'row', 
+      flexDirection: 'row',
       alignItems: 'center',
       marginBottom: 20,
   },
@@ -445,16 +490,70 @@ const styles = StyleSheet.create({
   authBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
   switchText: { textAlign: 'center', marginTop: 20, color: '#666', fontSize: 14 },
 
-  modalContainer: { flex: 1, backgroundColor: '#FFF' },
   modalHeader: { width: '100%', height: 60, justifyContent: 'center', alignItems: 'flex-end', paddingRight: 20, paddingTop: 10, backgroundColor: '#FFF', zIndex: 20 },
-  closeModalBtn: { padding: 5 },
-  modalFooter: { padding: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#F0F0F0', marginTop: 10 },
-  drawingLabel: { fontSize: 16, color: '#666', marginTop: 2 },
-  dateText: { fontSize: 14, color: '#999' },
-  statsRowSmall: { flexDirection: 'row', alignItems: 'center', gap: 15 },
+  closeBtnTransparent: { padding: 5, backgroundColor: 'transparent' },
   hintText: { position: 'absolute', bottom: 10, alignSelf: 'center', color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width:1, height:1}, textShadowRadius: 1 },
-  
-  userInfoRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  profilePlaceholder: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#CCC', justifyContent: 'center', alignItems: 'center', overflow:'hidden' },
-  userName: { fontWeight: '700', fontSize: 14, color: '#000' },
+
+  // Styles Feed Card pour l'uniformité
+  infoCard: {
+      width: '100%',
+      padding: 20, 
+      backgroundColor: '#FFF',
+      borderTopWidth: 1, 
+      borderTopColor: '#F0F0F0',
+      marginTop: 10, 
+  },
+  infoContent: {
+      alignItems: 'center'
+  },
+  titleRow: { 
+      width: '100%',
+      flexDirection: 'row', 
+      justifyContent: 'center', 
+      alignItems: 'center', 
+      marginBottom: 2,
+      position: 'relative'
+  },
+  drawingTitle: { 
+      fontSize: 26, 
+      fontWeight: '900', 
+      color: '#000', 
+      letterSpacing: -0.5, 
+      textAlign: 'center',
+      maxWidth: '80%' 
+  },
+  moreBtnAbsolute: { 
+      position: 'absolute',
+      right: 0,
+      top: 5,
+      padding: 5 
+  },
+  userName: { 
+      fontSize: 13, 
+      fontWeight: '500', 
+      color: '#888',
+      marginBottom: 10
+  },
+  reactionBar: { 
+      flexDirection: 'row', 
+      justifyContent: 'space-around', 
+      alignItems: 'center', 
+      width: '100%',
+      paddingHorizontal: 10
+  },
+  reactionBtn: { 
+      alignItems: 'center', 
+      justifyContent: 'center',
+      padding: 8
+  },
+  reactionText: { 
+      fontSize: 12, 
+      fontWeight: '600', 
+      color: '#999',
+      marginTop: 4 
+  },
+  activeText: {
+      color: '#000',
+      fontWeight: '800'
+  }
 });
