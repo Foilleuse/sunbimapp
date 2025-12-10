@@ -10,13 +10,13 @@ export const getOptimizedImageUrl = (
 ): string | null => {
   if (!url) return null;
 
-  // 1. Vérification : Est-ce une URL Supabase Storage ?
-  // Les URLs Supabase ressemblent généralement à :
-  // https://[PROJECT_ID].supabase.co/storage/v1/object/public/[BUCKET]/[PATH]
-  const isSupabaseUrl = url.includes('supabase.co') && url.includes('/storage/v1/object/');
+  // 1. Vérification Assouplie : On vérifie juste si c'est une URL de stockage d'objets
+  // On retire le check 'supabase.co' qui peut échouer selon les régions (ex: .in, .net) ou domaines personnalisés.
+  const isStorageUrl = url.includes('/storage/v1/object/');
 
-  // Si ce n'est pas une image Supabase (ex: image externe, unsplash, etc.), on ne touche à rien.
-  if (!isSupabaseUrl) {
+  // Si ce n'est pas une image gérée par le storage (ex: image externe, unsplash), on ne touche à rien.
+  if (!isStorageUrl) {
+    // console.log("⚠️ Image externe non optimisée :", url);
     return url;
   }
 
@@ -24,8 +24,11 @@ export const getOptimizedImageUrl = (
   const separator = url.includes('?') ? '&' : '?';
 
   // 3. Construction de l'URL transformée
-  // Supabase Image Transformation utilise les paramètres 'width', 'height', 'quality', 'format'.
-  // 'resize=contain' ou 'cover' est implicite si width/height sont fournis.
-  // Note: On utilise `toFixed(0)` pour s'assurer que width est un entier (Supabase n'aime pas les décimales).
-  return `${url}${separator}width=${width.toFixed(0)}&quality=${quality}&format=origin`;
+  // On force des dimensions entières avec toFixed(0) car Supabase n'accepte pas les décimales
+  const optimizedUrl = `${url}${separator}width=${width.toFixed(0)}&quality=${quality}&format=origin`;
+
+  // Log pour débogage (à retirer en prod si trop verbeux)
+  // console.log(`⚡ Optimisation Supabase : ${width}px | ${url.split('/').pop()}`);
+
+  return optimizedUrl;
 };
