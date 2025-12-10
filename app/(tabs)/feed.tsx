@@ -23,18 +23,15 @@ const MaskedDayImage = ({ uri, width, height, top }: { uri: string, width: numbe
 
     return (
         <Canvas style={{ position: 'absolute', top, left: 0, width, height, zIndex: 0 }} pointerEvents="none">
-             {/* 1. Le Masque (Dégradé d'opacité) */}
              <Rect x={0} y={0} width={width} height={height}>
                 <SkiaGradient
                     start={vec(0, 0)}
                     end={vec(0, height)}
-                    // Transparent aux extrémités, Opaque (blanc) au centre
                     colors={["transparent", "white", "white", "transparent"]}
-                    // Le fondu se fait sur les 10% du haut et du bas
+                    // Ajustement des positions pour que le fondu soit plus doux sur les bords
                     positions={[0, 0.05, 0.95, 1]}
                 />
             </Rect>
-            {/* 2. L'Image (Source) - Affichée uniquement là où le masque est opaque */}
             <SkiaImage
                 image={image}
                 x={0} y={0} width={width} height={height}
@@ -56,7 +53,6 @@ const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color, count }: an
     });
 
     const handlePress = () => {
-        // Animation de rebond
         scale.value = withSequence(
             withSpring(1.6, { damping: 10, stiffness: 200 }), 
             withSpring(1, { damping: 10, stiffness: 200 })
@@ -334,7 +330,6 @@ export default function FeedPage() {
     const MARGIN_BOTTOM = 25; 
     
     // Position du bouton Oeil ajustée
-    // Ajout de TOP_HEADER_SPACE pour descendre le bouton au bon niveau
     const eyeButtonTop = TOP_HEADER_SPACE + IMAGE_HEIGHT - EYE_BUTTON_SIZE - MARGIN_BOTTOM;
 
     useFocusEffect(
@@ -419,6 +414,16 @@ export default function FeedPage() {
 
     return (
         <View style={styles.container}>
+             {/* 1. BACKGROUND FLOU PLEIN ÉCRAN */}
+             {backgroundCloud && (
+                <Image 
+                    source={{ uri: optimizedBackground || backgroundCloud }}
+                    style={StyleSheet.absoluteFillObject}
+                    resizeMode="cover"
+                    blurRadius={20} // Flou gaussien
+                />
+            )}
+
             <SunbimHeader showCloseButton={false} transparent={true} />
             
             <View 
@@ -426,12 +431,13 @@ export default function FeedPage() {
                 onLayout={(e) => setLayout(e.nativeEvent.layout)}
             >
                 {/* 2. Photo du jour NETTE AVEC BORDS FONDUS */}
+                {/* On décale l'image de TOP_HEADER_SPACE pour qu'elle s'aligne avec le début du carousel */}
                 {backgroundCloud && (
                     <MaskedDayImage 
                         uri={optimizedBackground || backgroundCloud}
                         width={screenWidth}
                         height={IMAGE_HEIGHT}
-                        top={TOP_HEADER_SPACE} // Alignement exact
+                        top={TOP_HEADER_SPACE} // Alignement exact avec le padding du contenu
                     />
                 )}
 
@@ -454,6 +460,7 @@ export default function FeedPage() {
                                 isHolding={isGlobalHolding && index === currentIndex}
                             />
                         )}
+                        // Pas de style margin/padding ici, c'est géré par le conteneur parent
                     />
                 ) : (
                     !loading && drawings.length === 0 ? (
