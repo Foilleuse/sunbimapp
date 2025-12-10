@@ -17,19 +17,13 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.foilleuse.sunbimapp",
       "buildNumber": "18",
+      "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSLocationWhenInUseUsageDescription": "This app does not use location data directly, but third-party libraries may require this permission.",
         "NSCameraUsageDescription": "Allow $(PRODUCT_NAME) to access your camera to capture clouds.",
         "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to access your microphone for video.",
-        "NSPhotoLibraryUsageDescription": "Allow $(PRODUCT_NAME) to access your photos to update your profile picture.",
-        "CFBundleURLTypes": [
-          {
-            "CFBundleURLSchemes": [
-              "com.googleusercontent.apps.296503578118-pdqa6300t0r1l315e94nn07uuj8fdepq"
-            ]
-          }
-        ]
+        "NSPhotoLibraryUsageDescription": "Allow $(PRODUCT_NAME) to access your photos to update your profile picture."
       }
     },
     "android": {

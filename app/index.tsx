@@ -8,7 +8,6 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '../src/contexts/AuthContext';
 import * as Updates from 'expo-updates';
 import React from 'react';
-// Ajout des imports pour l'auth sociale
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 
@@ -59,24 +58,19 @@ export default function DrawPage() {
   const canvasRef = useRef<DrawingCanvasRef>(null);
   const updateLabel = (Updates && Updates.updateId) ? `v.${Updates.updateId.substring(0, 6)}` : '';
   const [isGoogleConfigured, setIsGoogleConfigured] = useState(false);
+  
+  // Anti-rebond pour l'ouverture automatique de la modale de partage après login
+  const [hasOpenedShareAfterLogin, setHasOpenedShareAfterLogin] = useState(false);
 
-
-  // --- CONFIGURATION GOOGLE SIGNIN (Au montage) ---
+// --- CONFIGURATION GOOGLE SIGNIN ---
   useEffect(() => {
     try {
-      console.log("Configuring Google Signin...");
       GoogleSignin.configure({
-        // L'ID iOS sert à ouvrir la fenêtre de connexion sur l'iPhone
-        // Assurez-vous que cet ID correspond à celui dans votre console Google Cloud ET dans votre Info.plist (schéma inversé)
-        iosClientId: '296503578118-pdqa6300t0r1l315e94nn07uuj8fdepq.apps.googleusercontent.com', 
-        
-        // L'ID Web est OBLIGATOIRE pour obtenir l'idToken pour Supabase
+        // iosClientId est supprimé car géré par GoogleService-Info.plist
         webClientId: '296503578118-9otrhg40mnenuvh1ir16o4qoujhvmb74.apps.googleusercontent.com', 
-        
         scopes: ['profile', 'email'],
       });
       setIsGoogleConfigured(true);
-      console.log("Google Signin configured!");
     } catch (e) {
       console.error("Erreur config Google:", e);
     }
@@ -85,8 +79,7 @@ export default function DrawPage() {
   // --- FONCTIONS SOCIAL LOGIN ---
   const handleGoogleLogin = async () => {
     if (!isGoogleConfigured) {
-        console.error('Google Signin not configured yet');
-        Alert.alert("Erreur", "Google n'est pas encore prêt. Réessayez dans un instant.");
+        Alert.alert("Erreur", "Configuration Google non chargée.");
         return;
     }
     
@@ -96,43 +89,30 @@ export default function DrawPage() {
           await GoogleSignin.hasPlayServices();
       }
       
-      console.log("Starting Google Signin...");
-      const response = await GoogleSignin.signIn();
-      console.log("Google Signin Response:", JSON.stringify(response));
-
-      // Gestion compatible v12 et v13+
-      // v13+ retourne { data: { idToken, user }, type: 'success' }
-      // v12 retourne { idToken, user }
-      const token = response.data?.idToken || response.idToken;
+      const userInfo = await GoogleSignin.signIn();
+      const token = userInfo.data?.idToken || userInfo.idToken;
 
       if (token) {
-        console.log("Token received, calling Supabase...");
-        const { data, error } = await supabase.auth.signInWithIdToken({
+        const { error } = await supabase.auth.signInWithIdToken({
           provider: 'google',
           token: token,
         });
         
         if (error) {
-           console.error("Supabase Error:", error);
            Alert.alert("Erreur Supabase", error.message);
-           setAuthLoading(false);
         } else {
-            console.log("Supabase Auth Success!");
-            // La redirection ou la fermeture de modale sera gérée par le useEffect sur 'user'
+           // Succès : on ferme immédiatement la modale
+           setAuthModalVisible(false);
         }
       } else {
-        throw new Error('Pas de token ID Google reçu (Vérifiez webClientId)');
+        throw new Error('Token Google manquant');
       }
     } catch (error: any) {
-      setAuthLoading(false);
-      if (error.code === statusCodes.SIGN_IN_CANCELLED) {
-        console.log("Google Sign In Cancelled");
-      } else if (error.code === statusCodes.IN_PROGRESS) {
-        console.log("Google Sign In In Progress");
-      } else {
-         console.error("Google Error Details:", error);
-         Alert.alert("Erreur Connexion Google", error.message || "Une erreur inconnue est survenue.");
+      if (error.code !== statusCodes.SIGN_IN_CANCELLED && error.code !== statusCodes.IN_PROGRESS) {
+         Alert.alert("Erreur Google", error.message || "Une erreur est survenue.");
       }
+    } finally {
+        setAuthLoading(false);
     }
   };
 
@@ -151,18 +131,18 @@ export default function DrawPage() {
           token: credential.identityToken,
         });
         if (error) throw error;
-        // Succès géré par le useEffect user
-      } else {
-        setAuthLoading(false);
+        
+        // Succès : on ferme immédiatement
+        setAuthModalVisible(false);
       }
     } catch (e: any) {
-      setAuthLoading(false);
       if (e.code !== 'ERR_REQUEST_CANCELED') {
         Alert.alert("Erreur Apple", e.message);
       }
+    } finally {
+        setAuthLoading(false);
     }
   };
-
 
   useEffect(() => {
     const listener = blurAnim.addListener(({ value }) => {
@@ -207,13 +187,24 @@ export default function DrawPage() {
       return () => subscription.remove();
   }, []);
 
+  // --- GESTION POST-CONNEXION ---
   useEffect(() => {
     if (user) {
-        setAuthModalVisible(false); 
-        // Si on a un dessin en attente, on ouvre la modale de partage
-        if (canvasRef.current?.getPaths().length > 0 && !modalVisible && !replayPaths) {
-             setModalVisible(true);
+        // S'assurer que la modale d'auth est fermée
+        setAuthModalVisible(false);
+        
+        // Si l'utilisateur a dessiné, on ouvre la modale de partage
+        // On utilise un flag hasOpenedShareAfterLogin pour éviter que ça ne boucle
+        if (canvasRef.current?.getPaths().length > 0 && !modalVisible && !replayPaths && !hasOpenedShareAfterLogin) {
+             // Petit délai pour laisser l'animation de fermeture de la modale auth se terminer
+             setTimeout(() => {
+                 setModalVisible(true);
+                 setHasOpenedShareAfterLogin(true);
+             }, 500);
         }
+    } else {
+        // Si déconnexion, on reset le flag
+        setHasOpenedShareAfterLogin(false);
     }
   }, [user]);
 
@@ -307,6 +298,8 @@ export default function DrawPage() {
              setAuthModalVisible(false); 
              return;
         }
+        // Succès : fermeture gérée par useEffect[user] ou immédiate ici
+        setAuthModalVisible(false);
     } catch (e: any) {
         console.error("Auth Error:", e);
         Alert.alert("Erreur", e.message || "Une erreur est survenue lors de la connexion.");
@@ -360,7 +353,7 @@ export default function DrawPage() {
       
       {/* HEADER TOUJOURS VISIBLE (zIndex > Splash) */}
       <View style={styles.header}>
-        <Text style={styles.headerText}>nyola</Text>
+        <Text style={styles.headerText}>sunbim</Text>
         {updateLabel ? <Text style={styles.versionText}>{updateLabel}</Text> : null}
       </View>
 
