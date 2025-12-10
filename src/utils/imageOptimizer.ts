@@ -10,9 +10,8 @@ export const getOptimizedImageUrl = (
 ): string | null => {
   if (!url) return null;
 
-  // 1. Vérification : Est-ce une URL qui peut être optimisée ?
-  // On vérifie si c'est une URL Supabase. 
-  // On accepte 'supabase.co' (cloud) et 'supabase.in' (certaines régions).
+  // 1. Vérification : Est-ce une URL Supabase ?
+  // On vérifie si c'est une URL Supabase standard.
   const isSupabaseUrl = url.includes('supabase.co') || url.includes('supabase.in');
 
   // Si ce n'est pas une image Supabase, on la retourne telle quelle.
@@ -23,8 +22,8 @@ export const getOptimizedImageUrl = (
   // 2. Vérification : Est-ce une image gérée par le Storage ?
   // Les URLs publiques sont généralement de la forme : .../storage/v1/object/public/...
   // Les URLs signées sont de la forme : .../storage/v1/object/sign/...
+  // On vérifie simplement la présence de "/storage/v1/object/" qui est commun.
   if (!url.includes('/storage/v1/object/')) {
-       // Si l'URL ne semble pas pointer vers un objet, on ne touche pas.
        return url;
   }
 
@@ -39,8 +38,9 @@ export const getOptimizedImageUrl = (
   // resize: 'contain' (par défaut si omis) ou 'cover'. Pour des avatars/miniatures, 'cover' est souvent mieux pour remplir le cadre.
   const optimizedUrl = `${url}${separator}width=${width.toFixed(0)}&quality=${quality}&format=origin&resize=cover`;
 
-  // Log pour débogage (Visible dans le terminal Metro/Expo, pas dans les logs système iOS)
-  // console.log(`⚡ [ImageOptimizer] ${width}px :`, optimizedUrl);
+  // Log pour débogage (Visible dans le terminal Metro/Expo)
+  // DÉCOMMENTEZ LA LIGNE CI-DESSOUS POUR VOIR LES URLS GÉNÉRÉES
+  console.log(`⚡ [ImageOptimizer] ${width}px :`, optimizedUrl);
 
   return optimizedUrl;
 };
