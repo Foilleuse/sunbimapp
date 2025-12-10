@@ -212,8 +212,6 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
         );
     };
 
-    const optimizedAvatar = author?.avatar_url ? getOptimizedImageUrl(author.avatar_url, 50) : null;
-
     return (
         <View style={styles.cardContainer}>
             
@@ -235,24 +233,22 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
             
             <View style={styles.cardInfo}>
                 <View style={styles.headerInfo}>
+                    {/* Ligne Titre Centré + Bouton Options Absolu */}
                     <View style={styles.titleRow}>
                         <Text style={styles.drawingTitle} numberOfLines={1}>
                             {drawing.label || "Sans titre"}
                         </Text>
                         
-                        <TouchableOpacity 
-                            onPress={handleReport} 
-                            style={styles.moreBtnAbsolute}
-                            hitSlop={15}
-                        >
+                        <TouchableOpacity onPress={handleReport} style={styles.moreBtnAbsolute} hitSlop={15}>
                             <MoreHorizontal color="#CCC" size={24} />
                         </TouchableOpacity>
                     </View>
 
+                    {/* Nom de l'auteur centré, petit, sans avatar */}
                     <TouchableOpacity 
-                        style={styles.authorContainer}
                         onPress={() => onUserPress(author)} 
                         activeOpacity={0.7}
+                        style={styles.authorContainer}
                     >
                          <Text style={styles.userName}>{author?.display_name || "Anonyme"}</Text>
                     </TouchableOpacity>
@@ -464,18 +460,22 @@ export default function FeedPage() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#FFFFFF' },
-    loadingContainer: { flex: 1, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
+    container: { flex: 1, backgroundColor: '#87CEEB' }, // Fond bleu ciel demandé
+    loadingContainer: { flex: 1, backgroundColor: '#87CEEB', justifyContent: 'center', alignItems: 'center' },
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    text: { color: '#666', fontSize: 16 },
+    text: { color: '#FFF', fontSize: 16 }, // Texte en blanc pour contraster sur le bleu
     cardContainer: { flex: 1, justifyContent: 'flex-start' }, 
     cardInfo: {
         flex: 1, 
-        backgroundColor: '#FFFFFF', 
+        backgroundColor: '#87CEEB', // Même fond bleu pour la carte
         marginTop: -40, 
         paddingHorizontal: 20, 
         paddingTop: 20,
-        shadowColor: "#000", shadowOffset: {width: 0, height: -4}, shadowOpacity: 0.05, shadowRadius: 4, elevation: 5,
+        // Suppression des ombres pour un style flat/immersif avec le fond
+        shadowColor: "transparent", 
+        elevation: 0,
+        borderTopLeftRadius: 20, // Optionnel : arrondir un peu le haut de la carte info
+        borderTopRightRadius: 20,
     },
     headerInfo: { marginBottom: 10, alignItems: 'center' },
     
@@ -490,7 +490,7 @@ const styles = StyleSheet.create({
     drawingTitle: { 
         fontSize: 26, 
         fontWeight: '900', 
-        color: '#000', 
+        color: '#FFF', // Titre en blanc
         letterSpacing: -0.5, 
         textAlign: 'center',
         maxWidth: '80%' 
@@ -525,8 +525,9 @@ const styles = StyleSheet.create({
     },
     userName: { 
         fontSize: 13, 
-        fontWeight: '500', 
-        color: '#888' 
+        fontWeight: '600', // Un peu plus gras pour lisibilité
+        color: 'rgba(255,255,255,0.8)', // Blanc légèrement transparent
+        marginBottom: 10
     },
 
     reactionBar: { 
@@ -544,12 +545,12 @@ const styles = StyleSheet.create({
     },
     reactionText: { 
         fontSize: 12, 
-        fontWeight: '600', 
-        color: '#999',
+        fontWeight: '700', 
+        color: 'rgba(255,255,255,0.9)', // Texte des compteurs en blanc
         marginTop: 4 
     },
     activeText: {
-        color: '#000',
-        fontWeight: '800'
+        color: '#FFF',
+        fontWeight: '900'
     }
 });
