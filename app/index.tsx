@@ -10,7 +10,6 @@ import * as Updates from 'expo-updates';
 import React from 'react';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
-// Import de l'icône croix
 import { X } from 'lucide-react-native';
 
 interface Cloud {
@@ -41,6 +40,7 @@ export default function DrawPage() {
   const [strokeWidth, setStrokeWidth] = useState(2);
   const [isEraserMode, setIsEraserMode] = useState(false);
   
+  // ÉTAT POUR L'IMAGE ORIGINALE
   const [showOriginalImage, setShowOriginalImage] = useState(false);
   
   const [modalVisible, setModalVisible] = useState(false);
@@ -81,11 +81,11 @@ export default function DrawPage() {
   // --- GESTION POST-CONNEXION ---
   useEffect(() => {
     if (user) {
-        // Dès que l'utilisateur est détecté, on ferme la modale d'auth
-        setAuthModalVisible(false);
-        setAuthLoading(false);
+        if (authModalVisible) {
+            setAuthModalVisible(false);
+            setAuthLoading(false); 
+        }
 
-        // Ouverture automatique de la modale de partage si un dessin est en attente
         if (canvasRef.current?.getPaths().length > 0 && !modalVisible && !replayPaths && !hasOpenedShareAfterLogin) {
              const timer = setTimeout(() => {
                  setModalVisible(true);
@@ -96,8 +96,7 @@ export default function DrawPage() {
     } else {
         setHasOpenedShareAfterLogin(false);
     }
-    // Retrait de authModalVisible des dépendances pour éviter les boucles
-  }, [user]); 
+  }, [user, authModalVisible]);
 
   // --- FONCTIONS SOCIAL LOGIN ---
   const handleGoogleLogin = async () => {
@@ -122,17 +121,18 @@ export default function DrawPage() {
           token: token,
         });
         
-        if (error) throw error;
-        // Succès : le useEffect se chargera de fermer la modale quand 'user' changera
+        if (error) {
+           Alert.alert("Erreur Supabase", error.message);
+           setAuthLoading(false);
+        }
       } else {
-        throw new Error("Token Google manquant");
+        setAuthLoading(false);
       }
     } catch (error: any) {
+      setAuthLoading(false);
       if (error.code !== statusCodes.SIGN_IN_CANCELLED && error.code !== statusCodes.IN_PROGRESS) {
          Alert.alert("Erreur Google", error.message || "Une erreur est survenue.");
       }
-      // On arrête le chargement uniquement en cas d'erreur ou d'annulation
-      setAuthLoading(false);
     }
   };
 
@@ -152,7 +152,10 @@ export default function DrawPage() {
           provider: 'apple',
           token: credential.identityToken,
         });
-        if (error) throw error;
+        if (error) {
+            setAuthLoading(false);
+            throw error;
+        }
       } else {
         setAuthLoading(false);
       }
@@ -303,7 +306,7 @@ export default function DrawPage() {
         
         if (isSignUp && data?.user && !data.session) {
              Alert.alert("Inscription réussie", "Veuillez vérifier vos emails pour confirmer votre compte.");
-             setAuthModalVisible(false); 
+             setAuthModalVisible(false); // On ferme pour qu'il aille voir ses mails
              return;
         }
     } catch (e: any) {
@@ -362,6 +365,7 @@ export default function DrawPage() {
       </View>
 
       <View style={styles.canvasContainer}>
+        {/* LE CANVAS TOUJOURS LÀ ET VISIBLE PAR DÉFAUT */}
         {replayPaths ? (
             <DrawingViewer 
                 imageUri={cloud.image_url}
@@ -374,49 +378,19 @@ export default function DrawPage() {
                 autoCenter={true}
             />
         ) : (
-           /* Affichage conditionnel de l'image originale */
-           showOriginalImage ? (
-                <View style={[StyleSheet.absoluteFill, { backgroundColor: 'black', justifyContent: 'center', zIndex: 999 }]}>
-                     <Image 
-                        source={{ uri: cloud.image_url }} 
-                        style={StyleSheet.absoluteFill} 
-                        resizeMode="contain" 
-                     />
-                     <TouchableOpacity 
-                        style={styles.closeOriginalBtn} 
-                        onPress={() => setShowOriginalImage(false)}
-                        hitSlop={20}
-                     >
-                         <X color="#FFF" size={32} />
-                     </TouchableOpacity>
-                     {/* On garde le DrawingCanvas monté mais invisible */}
-                     <View style={{ opacity: 0, flex: 1 }}>
-                        <DrawingCanvas
-                            ref={canvasRef}
-                            imageUri={cloud.image_url}
-                            strokeColor={strokeColor}
-                            strokeWidth={strokeWidth}
-                            isEraserMode={isEraserMode}
-                            onClear={handleClear}
-                            blurRadius={showSplash ? canvasBlur : 0}
-                        />
-                     </View>
-                </View>
-           ) : (
-                <DrawingCanvas
-                    ref={canvasRef}
-                    imageUri={cloud.image_url}
-                    strokeColor={strokeColor}
-                    strokeWidth={strokeWidth}
-                    isEraserMode={isEraserMode}
-                    onClear={handleClear}
-                    blurRadius={showSplash ? canvasBlur : 0}
-                />
-           )
+            <DrawingCanvas
+              ref={canvasRef}
+              imageUri={cloud.image_url}
+              strokeColor={strokeColor}
+              strokeWidth={strokeWidth}
+              isEraserMode={isEraserMode}
+              onClear={handleClear}
+              blurRadius={showSplash ? canvasBlur : 0}
+            />
         )}
       </View>
       
-      {!replayPaths && !showOriginalImage && (
+      {!replayPaths && (
           <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
             <View style={{flex: 1}} pointerEvents="none" /> 
             <DrawingControls
@@ -432,12 +406,39 @@ export default function DrawPage() {
           </View>
       )}
 
-      {/* MODALES... */}
-      <Modal animationType="slide" transparent={true} visible={authModalVisible} onRequestClose={() => {
+      {/* MODALE VISUALISATION IMAGE ORIGINALE */}
+      <Modal 
+          visible={showOriginalImage} 
+          animationType="fade" 
+          transparent={true} 
+          onRequestClose={() => setShowOriginalImage(false)}
+      >
+          {/* Fond semi-transparent pour voir l'arrière plan (l'index) */}
+          <View style={styles.fullImageOverlay}>
+              <TouchableOpacity 
+                  style={styles.fullImageCloseBtn} 
+                  onPress={() => setShowOriginalImage(false)}
+                  hitSlop={20}
+              >
+                  <X color="#FFF" size={32} />
+              </TouchableOpacity>
+              
+              <Image 
+                  source={{ uri: cloud.image_url }} 
+                  style={{ width: '100%', height: '100%' }} 
+                  resizeMode="contain" 
+              />
+          </View>
+      </Modal>
+
+      {/* MODALES (Connexion, Partage...) */}
+      <Modal animationType="slide" transparent={true} visible={authModalVisible && !user} onRequestClose={() => {
           if (!authLoading) setAuthModalVisible(false);
       }}>
+        {/* Contenu modale Auth */}
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
             <View style={styles.modalContent}>
+                {/* ... (Reste du code de la modale auth inchangé) */}
                 <Text style={styles.modalTitle}>{isSignUp ? "Créer un compte" : "Se connecter"}</Text>
                 <Text style={styles.modalSubtitle}>Sauvegardez votre dessin pour le publier</Text>
                 
@@ -492,6 +493,7 @@ export default function DrawPage() {
       </Modal>
 
       <Modal animationType="fade" transparent={true} visible={modalVisible} onRequestClose={() => setModalVisible(false)}>
+        {/* Contenu modale Partage */}
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
             <View style={styles.modalContent}>
                 <Text style={styles.modalTitle}>Qu'as-tu vu ?</Text>
@@ -563,7 +565,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
   canvasContainer: { width: '100%', height: '100%', backgroundColor: '#000' },
   
-  // Header toujours au-dessus (zIndex 10)
   header: { position: 'absolute', top: 0, left: 0, right: 0, paddingTop: 60, paddingBottom: 15, alignItems: 'center', zIndex: 10, pointerEvents: 'none' },
   headerText: { fontSize: 32, fontWeight: '900', color: '#FFFFFF', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 0 },
   versionText: { fontSize: 10, color: 'rgba(255,255,255,0.5)', marginTop: 2, textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 1 },
@@ -623,10 +624,18 @@ const styles = StyleSheet.create({
       fontSize: 16,
   },
 
-  closeOriginalBtn: {
+  // Styles pour la vue image originale
+  fullImageOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.9)', 
+      justifyContent: 'center',
+      alignItems: 'center',
+  },
+  fullImageCloseBtn: {
       position: 'absolute',
-      top: 50,
-      right: 20,
+      top: 60, 
+      right: 25,
+      zIndex: 10,
       padding: 10,
       backgroundColor: 'rgba(0,0,0,0.5)',
       borderRadius: 30,
