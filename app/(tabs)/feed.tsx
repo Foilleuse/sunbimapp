@@ -13,6 +13,7 @@ import Carousel from 'react-native-reanimated-carousel';
 // Types de réactions possibles
 type ReactionType = 'like' | 'smart' | 'beautiful' | 'crazy' | null;
 
+// FeedCard ne gère plus le bouton Oeil
 const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, isHolding }: { drawing: any, canvasSize: number, index: number, currentIndex: number, onUserPress: (user: any) => void, isHolding: boolean }) => {
     const { user } = useAuth();
     
@@ -33,12 +34,12 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
 
     // Chargement initial des réactions
     useEffect(() => {
-        if (!drawing.reactions) return;
         fetchReactionsState();
-    }, [drawing.id]);
+    }, [drawing.id]); // Dépendance sur l'ID du dessin pour recharger si la carte est recyclée
 
     const fetchReactionsState = async () => {
         try {
+            // Récupérer toutes les réactions pour ce dessin
             const { data: allReactions, error } = await supabase
                 .from('reactions')
                 .select('reaction_type, user_id')
@@ -50,11 +51,12 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
             let myReaction: ReactionType = null;
 
             allReactions?.forEach((r: any) => {
-                if (counts.hasOwnProperty(r.reaction_type)) {
-                    counts[r.reaction_type as keyof typeof counts]++;
+                const type = r.reaction_type as keyof typeof counts;
+                if (counts.hasOwnProperty(type)) {
+                    counts[type]++;
                 }
                 if (user && r.user_id === user.id) {
-                    myReaction = r.reaction_type as ReactionType;
+                    myReaction = type;
                 }
             });
 
@@ -69,49 +71,59 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
     const handleReaction = async (type: ReactionType) => {
         if (!user || !type) return;
 
+        // Optimistic UI Update
         const previousReaction = userReaction;
         const previousCounts = { ...reactionCounts };
+        
+        let newReaction: ReactionType = type;
+        let newCounts = { ...reactionCounts };
 
+        // Si on clique sur la même réaction, on l'enlève (toggle off)
         if (userReaction === type) {
-            setUserReaction(null);
-            setReactionCounts(prev => ({
-                ...prev,
-                [type]: Math.max(0, prev[type] - 1)
-            }));
-            
-            try {
-                await supabase.from('reactions').delete().eq('user_id', user.id).eq('drawing_id', drawing.id);
-            } catch (e) {
-                setUserReaction(previousReaction);
-                setReactionCounts(previousCounts);
-            }
+            newReaction = null;
+            newCounts[type] = Math.max(0, newCounts[type] - 1);
         } 
+        // Si on change de réaction ou qu'on en ajoute une nouvelle
         else {
-            setUserReaction(type);
-            setReactionCounts(prev => {
-                const newCounts = { ...prev };
-                if (previousReaction) {
-                    newCounts[previousReaction] = Math.max(0, newCounts[previousReaction] - 1);
-                }
-                newCounts[type]++;
-                return newCounts;
-            });
+            // Si on avait déjà une réaction différente, on décrémente l'ancienne
+            if (previousReaction) {
+                newCounts[previousReaction] = Math.max(0, newCounts[previousReaction] - 1);
+            }
+            // On incrémente la nouvelle
+            newCounts[type]++;
+        }
 
-            try {
+        // Appliquer les changements locaux immédiatement
+        setUserReaction(newReaction);
+        setReactionCounts(newCounts);
+
+        try {
+            if (newReaction === null) {
+                // Suppression
+                const { error } = await supabase
+                    .from('reactions')
+                    .delete()
+                    .eq('user_id', user.id)
+                    .eq('drawing_id', drawing.id);
+                if (error) throw error;
+            } else {
+                // Upsert (Insert ou Update)
                 const { error } = await supabase
                     .from('reactions')
                     .upsert({
                         user_id: user.id,
                         drawing_id: drawing.id,
-                        reaction_type: type
+                        reaction_type: newReaction
                     }, { onConflict: 'user_id, drawing_id' });
                 
                 if (error) throw error;
-            } catch (e) {
-                console.error(e);
-                setUserReaction(previousReaction);
-                setReactionCounts(previousCounts);
             }
+        } catch (e) {
+            console.error("Erreur mise à jour réaction:", e);
+            // Rollback en cas d'erreur
+            setUserReaction(previousReaction);
+            setReactionCounts(previousCounts);
+            Alert.alert("Oups", "Impossible d'enregistrer la réaction.");
         }
     };
 
@@ -164,6 +176,8 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
         );
     };
 
+    const optimizedAvatar = author?.avatar_url ? getOptimizedImageUrl(author.avatar_url, 50) : null;
+
     return (
         <View style={styles.cardContainer}>
             
@@ -185,22 +199,24 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
             
             <View style={styles.cardInfo}>
                 <View style={styles.headerInfo}>
-                    {/* Ligne Titre Centré + Bouton Options Absolu */}
                     <View style={styles.titleRow}>
                         <Text style={styles.drawingTitle} numberOfLines={1}>
                             {drawing.label || "Sans titre"}
                         </Text>
                         
-                        <TouchableOpacity onPress={handleReport} style={styles.moreBtnAbsolute} hitSlop={15}>
+                        <TouchableOpacity 
+                            onPress={handleReport} 
+                            style={styles.moreBtnAbsolute}
+                            hitSlop={15}
+                        >
                             <MoreHorizontal color="#CCC" size={24} />
                         </TouchableOpacity>
                     </View>
 
-                    {/* Nom de l'auteur centré, petit, sans avatar */}
                     <TouchableOpacity 
+                        style={styles.authorContainer}
                         onPress={() => onUserPress(author)} 
                         activeOpacity={0.7}
-                        style={styles.authorContainer}
                     >
                          <Text style={styles.userName}>{author?.display_name || "Anonyme"}</Text>
                     </TouchableOpacity>
@@ -273,6 +289,7 @@ export default function FeedPage() {
     const [backgroundCloud, setBackgroundCloud] = useState<string | null>(null);
     const { width: screenWidth } = Dimensions.get('window');
     
+    // État global pour le maintien du bouton Oeil
     const [isGlobalHolding, setIsGlobalHolding] = useState(false);
     
     const [layout, setLayout] = useState<{ width: number; height: number } | null>(null);
@@ -280,6 +297,7 @@ export default function FeedPage() {
     const [selectedUser, setSelectedUser] = useState<any>(null);
     const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
 
+    // Calcul de la hauteur de l'image (ratio 3:4)
     const IMAGE_HEIGHT = screenWidth * (4/3);
     const EYE_BUTTON_SIZE = 44;
     const CARD_OVERLAP = 40; 
@@ -437,7 +455,6 @@ const styles = StyleSheet.create({
     },
     headerInfo: { marginBottom: 10, alignItems: 'center' },
     
-    // Titre Centré
     titleRow: { 
         width: '100%',
         flexDirection: 'row', 
@@ -452,10 +469,9 @@ const styles = StyleSheet.create({
         color: '#000', 
         letterSpacing: -0.5, 
         textAlign: 'center',
-        maxWidth: '80%' // Pour laisser de la place au bouton options
+        maxWidth: '80%' 
     },
     
-    // Bouton Option Absolu à droite
     moreBtnAbsolute: { 
         position: 'absolute',
         right: 0,
@@ -480,7 +496,6 @@ const styles = StyleSheet.create({
         elevation: 4
     },
     
-    // Style Auteur Minimaliste
     authorContainer: {
         marginTop: 2
     },
@@ -490,12 +505,11 @@ const styles = StyleSheet.create({
         color: '#888' 
     },
 
-    // Nouvelle barre de réactions
     reactionBar: { 
         flexDirection: 'row', 
-        justifyContent: 'space-around', // Espacement équilibré
+        justifyContent: 'space-around', 
         alignItems: 'center', 
-        marginTop: 10,
+        width: '100%',
         paddingHorizontal: 10,
         paddingBottom: 10
     },
