@@ -25,6 +25,7 @@ const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color, count }: an
     });
 
     const handlePress = () => {
+        // Animation de rebond intensifiée (1.6 pour un effet "gros rebond")
         scale.value = withSequence(
             withSpring(1.6, { damping: 10, stiffness: 200 }), 
             withSpring(1, { damping: 10, stiffness: 200 })
@@ -51,7 +52,10 @@ const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color, count }: an
 const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, isHolding }: { drawing: any, canvasSize: number, index: number, currentIndex: number, onUserPress: (user: any) => void, isHolding: boolean }) => {
     const { user } = useAuth();
     
+    // État local pour la réaction de l'utilisateur
     const [userReaction, setUserReaction] = useState<ReactionType>(null);
+    
+    // Compteurs locaux pour l'affichage immédiat
     const [reactionCounts, setReactionCounts] = useState({
         like: 0,
         smart: 0,
@@ -63,6 +67,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
     const isActive = index === currentIndex; 
     const shouldRenderDrawing = isActive;
 
+    // Chargement initial des réactions
     useEffect(() => {
         fetchReactionsState();
     }, [drawing.id]); 
@@ -100,28 +105,35 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
     const handleReaction = async (type: ReactionType) => {
         if (!user || !type) return;
 
+        // Optimistic UI Update
         const previousReaction = userReaction;
         const previousCounts = { ...reactionCounts };
         
         let newReaction: ReactionType = type;
         let newCounts = { ...reactionCounts };
 
+        // Si on clique sur la même réaction, on l'enlève (toggle off)
         if (userReaction === type) {
             newReaction = null;
             newCounts[type] = Math.max(0, newCounts[type] - 1);
         } 
+        // Si on change de réaction ou qu'on en ajoute une nouvelle
         else {
+            // Si on avait déjà une réaction différente, on décrémente l'ancienne
             if (previousReaction) {
                 newCounts[previousReaction] = Math.max(0, newCounts[previousReaction] - 1);
             }
+            // On incrémente la nouvelle
             newCounts[type]++;
         }
 
+        // Appliquer les changements locaux immédiatement
         setUserReaction(newReaction);
         setReactionCounts(newCounts);
 
         try {
             if (newReaction === null) {
+                // Suppression
                 const { error } = await supabase
                     .from('reactions')
                     .delete()
@@ -129,6 +141,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
                     .eq('drawing_id', drawing.id);
                 if (error) throw error;
             } else {
+                // Upsert (Insert ou Update)
                 const { error } = await supabase
                     .from('reactions')
                     .upsert({
@@ -141,6 +154,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
             }
         } catch (e) {
             console.error("Erreur mise à jour réaction:", e);
+            // Rollback en cas d'erreur
             setUserReaction(previousReaction);
             setReactionCounts(previousCounts);
             Alert.alert("Oups", "Impossible d'enregistrer la réaction.");
@@ -196,8 +210,11 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
         );
     };
 
+    const optimizedAvatar = author?.avatar_url ? getOptimizedImageUrl(author.avatar_url, 50) : null;
+
     return (
         <View style={styles.cardContainer}>
+            
             <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent', position: 'relative' }}>
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
@@ -216,6 +233,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
             
             <View style={styles.cardInfo}>
                 <View style={styles.headerInfo}>
+                    {/* Ligne Titre Centré + Bouton Options Absolu */}
                     <View style={styles.titleRow}>
                         <Text style={styles.drawingTitle} numberOfLines={1}>
                             {drawing.label || "Sans titre"}
@@ -226,6 +244,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
                         </TouchableOpacity>
                     </View>
 
+                    {/* Nom de l'auteur centré */}
                     <TouchableOpacity 
                         onPress={() => onUserPress(author)} 
                         activeOpacity={0.7}
@@ -235,7 +254,9 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
                     </TouchableOpacity>
                 </View>
 
+                {/* --- BARRE DE RÉACTIONS ANIMÉE --- */}
                 <View style={styles.reactionBar}>
+                    
                     <AnimatedReactionBtn 
                         icon={Heart} 
                         color="#FF3B30" 
@@ -243,6 +264,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
                         count={reactionCounts.like} 
                         onPress={() => handleReaction('like')}
                     />
+
                     <AnimatedReactionBtn 
                         icon={Lightbulb} 
                         color="#FFCC00" 
@@ -250,6 +272,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
                         count={reactionCounts.smart} 
                         onPress={() => handleReaction('smart')}
                     />
+
                     <AnimatedReactionBtn 
                         icon={Palette} 
                         color="#5856D6" 
@@ -257,6 +280,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
                         count={reactionCounts.beautiful} 
                         onPress={() => handleReaction('beautiful')}
                     />
+
                     <AnimatedReactionBtn 
                         icon={Zap} 
                         color="#FF2D55" 
@@ -264,6 +288,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
                         count={reactionCounts.crazy} 
                         onPress={() => handleReaction('crazy')}
                     />
+
                 </View>
             </View>
         </View>
@@ -285,11 +310,13 @@ export default function FeedPage() {
     const { width: screenWidth } = Dimensions.get('window');
     
     const [isGlobalHolding, setIsGlobalHolding] = useState(false);
-    
     const [layout, setLayout] = useState<{ width: number; height: number } | null>(null);
 
     const [selectedUser, setSelectedUser] = useState<any>(null);
     const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
+
+    // Espace réservé pour le header transparent (ajustez si votre header change de hauteur)
+    const TOP_HEADER_SPACE = 100;
 
     // Calculs de position
     const IMAGE_HEIGHT = screenWidth * (4/3);
@@ -297,8 +324,6 @@ export default function FeedPage() {
     const MARGIN_BOTTOM = 25; 
     
     // Position du bouton Oeil ajustée
-    // On veut qu'il soit vers le bas de l'image, au-dessus de la carte info
-    // Ici on utilise une valeur relative au layout du carousel
     const eyeButtonTop = IMAGE_HEIGHT - EYE_BUTTON_SIZE - MARGIN_BOTTOM;
 
     useEffect(() => { fetchTodaysFeed(); }, [user]); 
@@ -360,21 +385,26 @@ export default function FeedPage() {
 
     return (
         <View style={styles.container}>
-            {/* 1. Image de fond (en arrière plan absolu) */}
+            {/* Image de fond (Nuage) positionnée avec le même Top offset que le carrousel pour alignement */}
             {backgroundCloud && (
                 <Image 
                     source={{ uri: optimizedBackground || backgroundCloud }}
-                    style={StyleSheet.absoluteFill}
+                    style={{
+                        position: 'absolute',
+                        top: TOP_HEADER_SPACE, // Décalage sous le header
+                        left: 0,
+                        width: screenWidth,
+                        height: IMAGE_HEIGHT, // Hauteur forcée 3:4
+                        zIndex: 0
+                    }}
                     resizeMode="cover"
                 />
             )}
 
-            {/* 2. Header (au-dessus de l'image) */}
             <SunbimHeader showCloseButton={false} transparent={true} />
             
-            {/* 3. Contenu principal (avec padding pour ne pas être sous le header) */}
             <View 
-                style={styles.mainContent} 
+                style={[styles.mainContent, { paddingTop: TOP_HEADER_SPACE }]} 
                 onLayout={(e) => setLayout(e.nativeEvent.layout)}
             >
                 {drawings.length > 0 && layout ? (
@@ -396,6 +426,7 @@ export default function FeedPage() {
                                 isHolding={isGlobalHolding && index === currentIndex}
                             />
                         )}
+                        // Pas de marginTop ici, géré par le padding du conteneur
                     />
                 ) : (
                     !loading && drawings.length === 0 ? (
@@ -403,7 +434,7 @@ export default function FeedPage() {
                     ) : null
                 )}
 
-                {/* 4. Bouton Oeil Statique (Overlay dans le conteneur principal) */}
+                {/* BOUTON OEIL STATIQUE */}
                 {drawings.length > 0 && (
                     <TouchableOpacity 
                         style={[
@@ -433,15 +464,15 @@ export default function FeedPage() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#87CEEB' },
+    container: { flex: 1, backgroundColor: '#87CEEB' }, // Fond bleu ciel
     loadingContainer: { flex: 1, backgroundColor: '#87CEEB', justifyContent: 'center', alignItems: 'center' },
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     text: { color: '#FFF', fontSize: 16 }, 
     
-    // Conteneur principal pour le contenu sous le header
+    // Conteneur principal
     mainContent: {
         flex: 1,
-        paddingTop: 100, // Espace pour le header transparent (ajustez selon la taille réelle du header)
+        // paddingTop est défini dynamiquement dans le JSX
         position: 'relative',
     },
 
