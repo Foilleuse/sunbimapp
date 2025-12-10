@@ -1,10 +1,6 @@
 import { Tabs, useRouter } from 'expo-router';
 import { View, Platform } from 'react-native';
 import { Home, Image as ImageIcon, Camera, Users, User } from 'lucide-react-native';
-// Suppression des imports qui posaient problème
-// import { HapticTab } from '../../components/haptic-tab';
-// import { IconSymbol } from '../../components/ui/icon-symbol';
-// import TabBarBackground from '../../components/ui/tab-bar-background';
 import { Colors } from '../../constants/theme';
 import { useColorScheme } from '../../hooks/use-color-scheme';
 
@@ -17,23 +13,38 @@ export default function TabLayout() {
       screenOptions={{
         headerShown: false,
         tabBarShowLabel: false,
-        // Restauration du style original demandé
+        // Style par défaut pour les autres onglets (fond blanc)
         tabBarStyle: {
           backgroundColor: '#FFFFFF',
           borderTopWidth: 1,
           borderTopColor: '#F0F0F0',
-          height: Platform.OS === 'ios' ? 85 : 60, // Ajustement hauteur selon OS
+          height: Platform.OS === 'ios' ? 85 : 60,
           paddingTop: 10,
         },
         tabBarActiveTintColor: '#000000',
         tabBarInactiveTintColor: '#CCCCCC',
       }}
     >
-      {/* 1. FEED */}
+      {/* 1. FEED - Barre transparente */}
       <Tabs.Screen
         name="feed"
         options={{
           tabBarIcon: ({ color }) => <Home color={color} size={28} />,
+          // Surcharge du style pour cet écran uniquement
+          tabBarStyle: {
+            position: 'absolute', // Nécessaire pour la transparence sur le contenu
+            backgroundColor: 'transparent',
+            borderTopWidth: 0,
+            elevation: 0, // Pour Android
+            height: Platform.OS === 'ios' ? 85 : 60,
+            paddingTop: 10,
+            bottom: 0,
+            left: 0,
+            right: 0,
+          },
+          // On change la couleur des icônes pour qu'elles soient visibles sur le fond bleu/photo
+          tabBarActiveTintColor: '#FFFFFF', 
+          tabBarInactiveTintColor: 'rgba(255,255,255,0.6)',
         }}
       />
 
@@ -49,14 +60,13 @@ export default function TabLayout() {
       <Tabs.Screen
         name="camera"
         options={{
-          // On cache la barre de navigation pour l'écran caméra lui-même (comme avant)
           tabBarStyle: { display: 'none' },
           tabBarIcon: () => (
             <View style={{
               width: 56, height: 56, borderRadius: 28,
               backgroundColor: '#000', 
               justifyContent: 'center', alignItems: 'center',
-              marginBottom: Platform.OS === 'ios' ? 30 : 20, // Remonter le bouton
+              marginBottom: Platform.OS === 'ios' ? 30 : 20,
               shadowColor: "#000", shadowOffset: {width:0, height:4}, shadowOpacity:0.3, shadowRadius:4,
               elevation: 5
             }}>
@@ -66,7 +76,7 @@ export default function TabLayout() {
         }}
       />
 
-      {/* 4. AMIS (Modifié depuis Messages) */}
+      {/* 4. AMIS */}
       <Tabs.Screen
         name="messages"
         options={{
