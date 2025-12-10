@@ -62,11 +62,10 @@ export default function DrawPage() {
   // Anti-rebond pour l'ouverture automatique de la modale de partage après login
   const [hasOpenedShareAfterLogin, setHasOpenedShareAfterLogin] = useState(false);
 
-// --- CONFIGURATION GOOGLE SIGNIN ---
+  // --- CONFIGURATION GOOGLE SIGNIN ---
   useEffect(() => {
     try {
       GoogleSignin.configure({
-        // iosClientId est supprimé car géré par GoogleService-Info.plist
         webClientId: '296503578118-9otrhg40mnenuvh1ir16o4qoujhvmb74.apps.googleusercontent.com', 
         scopes: ['profile', 'email'],
       });
@@ -76,10 +75,33 @@ export default function DrawPage() {
     }
   }, []);
 
+  // --- GESTION POST-CONNEXION (UNIQUE MAITRE DE LA MODALE) ---
+  useEffect(() => {
+    if (user) {
+        // 1. L'utilisateur est connecté : on force la fermeture de la modale d'auth
+        setAuthModalVisible(false);
+        setAuthLoading(false); // On arrête le chargement si ce n'était pas fait
+
+        // 2. Si on a un dessin en attente et qu'on n'a pas encore ouvert le partage
+        if (canvasRef.current?.getPaths().length > 0 && !modalVisible && !replayPaths && !hasOpenedShareAfterLogin) {
+             // Petit délai pour laisser l'animation de fermeture de la modale auth se terminer proprement
+             setTimeout(() => {
+                 setModalVisible(true);
+                 setHasOpenedShareAfterLogin(true); // On marque comme fait pour ne pas boucler
+             }, 600);
+        }
+    } else {
+        // Si l'utilisateur se déconnecte, on reset le flag pour la prochaine fois
+        setHasOpenedShareAfterLogin(false);
+    }
+  }, [user]); // Ne dépend que de 'user'
+
   // --- FONCTIONS SOCIAL LOGIN ---
   const handleGoogleLogin = async () => {
+    if (authLoading) return; // Anti-spam clic
+
     if (!isGoogleConfigured) {
-        Alert.alert("Erreur", "Configuration Google non chargée.");
+        Alert.alert("Erreur", "Google n'est pas encore prêt.");
         return;
     }
     
@@ -100,23 +122,23 @@ export default function DrawPage() {
         
         if (error) {
            Alert.alert("Erreur Supabase", error.message);
-        } else {
-           // Succès : on ferme immédiatement la modale
-           setAuthModalVisible(false);
+           setAuthLoading(false);
         }
+        // Pas de setAuthModalVisible(false) ici, c'est le useEffect[user] qui le fera
       } else {
-        throw new Error('Token Google manquant');
+        setAuthLoading(false);
       }
     } catch (error: any) {
+      setAuthLoading(false);
       if (error.code !== statusCodes.SIGN_IN_CANCELLED && error.code !== statusCodes.IN_PROGRESS) {
          Alert.alert("Erreur Google", error.message || "Une erreur est survenue.");
       }
-    } finally {
-        setAuthLoading(false);
     }
   };
 
   const handleAppleLogin = async () => {
+    if (authLoading) return;
+
     setAuthLoading(true);
     try {
       const credential = await AppleAuthentication.signInAsync({
@@ -130,19 +152,22 @@ export default function DrawPage() {
           provider: 'apple',
           token: credential.identityToken,
         });
-        if (error) throw error;
-        
-        // Succès : on ferme immédiatement
-        setAuthModalVisible(false);
+        if (error) {
+            setAuthLoading(false);
+            throw error;
+        }
+        // Succès : le useEffect[user] fermera la modale
+      } else {
+        setAuthLoading(false);
       }
     } catch (e: any) {
+      setAuthLoading(false);
       if (e.code !== 'ERR_REQUEST_CANCELED') {
         Alert.alert("Erreur Apple", e.message);
       }
-    } finally {
-        setAuthLoading(false);
     }
   };
+
 
   useEffect(() => {
     const listener = blurAnim.addListener(({ value }) => {
@@ -186,27 +211,6 @@ export default function DrawPage() {
       });
       return () => subscription.remove();
   }, []);
-
-  // --- GESTION POST-CONNEXION ---
-  useEffect(() => {
-    if (user) {
-        // S'assurer que la modale d'auth est fermée
-        setAuthModalVisible(false);
-        
-        // Si l'utilisateur a dessiné, on ouvre la modale de partage
-        // On utilise un flag hasOpenedShareAfterLogin pour éviter que ça ne boucle
-        if (canvasRef.current?.getPaths().length > 0 && !modalVisible && !replayPaths && !hasOpenedShareAfterLogin) {
-             // Petit délai pour laisser l'animation de fermeture de la modale auth se terminer
-             setTimeout(() => {
-                 setModalVisible(true);
-                 setHasOpenedShareAfterLogin(true);
-             }, 500);
-        }
-    } else {
-        // Si déconnexion, on reset le flag
-        setHasOpenedShareAfterLogin(false);
-    }
-  }, [user]);
 
   const checkStatusAndLoad = async () => {
     if (!cloud) {
@@ -263,24 +267,30 @@ export default function DrawPage() {
   const handleSharePress = () => {
     if (!canvasRef.current) return;
     
-    if (!user) { 
+    // Si déjà connecté (cas rare ici car géré par le useEffect, mais sécurité)
+    if (user) {
         const paths = canvasRef.current.getPaths();
         if (!paths || paths.length === 0) {
-            Alert.alert("Oups...", "Dessine quelque chose !");
+            Alert.alert("Oups", "Dessine quelque chose !");
         } else {
-            setAuthModalVisible(true);
+            setModalVisible(true);
         }
-        return; 
+        return;
     }
 
+    // Si pas connecté
     const paths = canvasRef.current.getPaths();
-    if (!paths || paths.length === 0) { Alert.alert("Oups", "Dessine quelque chose !"); return; }
-    
-    setModalVisible(true);
+    if (!paths || paths.length === 0) {
+        Alert.alert("Oups...", "Dessine quelque chose !");
+    } else {
+        setAuthModalVisible(true);
+    }
   };
 
   const handleAuthAction = async () => {
+    if (authLoading) return;
     if (!email || !password) return Alert.alert("Erreur", "Remplissez tous les champs");
+    
     setAuthLoading(true);
     try {
         let result;
@@ -295,15 +305,13 @@ export default function DrawPage() {
         
         if (isSignUp && data?.user && !data.session) {
              Alert.alert("Inscription réussie", "Veuillez vérifier vos emails pour confirmer votre compte.");
-             setAuthModalVisible(false); 
+             setAuthModalVisible(false); // On ferme pour qu'il aille voir ses mails
              return;
         }
-        // Succès : fermeture gérée par useEffect[user] ou immédiate ici
-        setAuthModalVisible(false);
+        // Si connexion réussie, le useEffect[user] fermera la modale
     } catch (e: any) {
         console.error("Auth Error:", e);
         Alert.alert("Erreur", e.message || "Une erreur est survenue lors de la connexion.");
-    } finally {
         setAuthLoading(false);
     }
   };
@@ -351,7 +359,6 @@ export default function DrawPage() {
   return (
     <View style={styles.container}>
       
-      {/* HEADER TOUJOURS VISIBLE (zIndex > Splash) */}
       <View style={styles.header}>
         <Text style={styles.headerText}>sunbim</Text>
         {updateLabel ? <Text style={styles.versionText}>{updateLabel}</Text> : null}
@@ -391,13 +398,16 @@ export default function DrawPage() {
                 strokeWidth={strokeWidth} onStrokeWidthChange={setStrokeWidth}
                 isEraserMode={isEraserMode} toggleEraser={toggleEraser}
                 onShare={handleSharePress}
-                isAuthenticated={!!user} // Passage de l'état connecté/déconnecté
+                isAuthenticated={!!user} 
              />
           </View>
       )}
 
       {/* MODALES... */}
-      <Modal animationType="slide" transparent={true} visible={authModalVisible} onRequestClose={() => setAuthModalVisible(false)}>
+      <Modal animationType="slide" transparent={true} visible={authModalVisible} onRequestClose={() => {
+          // Empêcher la fermeture si chargement, sinon fermer
+          if (!authLoading) setAuthModalVisible(false);
+      }}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
             <View style={styles.modalContent}>
                 <Text style={styles.modalTitle}>{isSignUp ? "Créer un compte" : "Se connecter"}</Text>
@@ -410,15 +420,18 @@ export default function DrawPage() {
                             buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
                             buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
                             cornerRadius={5}
-                            style={{ width: '100%', height: 44, marginBottom: 10 }}
+                            style={{ width: '100%', height: 44, marginBottom: 10, opacity: authLoading ? 0.6 : 1 }}
                             onPress={handleAppleLogin}
+                            enabled={!authLoading}
                         />
                     )}
                     
-                    {/* Bouton Google Personnalisé (pour style cohérent) */}
-                    <TouchableOpacity style={styles.googleBtn} onPress={handleGoogleLogin}>
+                    <TouchableOpacity 
+                        style={[styles.googleBtn, authLoading && { opacity: 0.6 }]} 
+                        onPress={handleGoogleLogin}
+                        disabled={authLoading}
+                    >
                         <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'center'}}>
-                           {/* Cercle coloré pour simuler logo G */}
                            <View style={{width:20, height:20, borderRadius:10, backgroundColor:'#FFF', justifyContent:'center', alignItems:'center', marginRight: 10}}>
                                 <Text style={{color:'#DB4437', fontWeight:'bold', fontSize:14}}>G</Text>
                            </View>
@@ -440,11 +453,11 @@ export default function DrawPage() {
                     {authLoading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.validateText}>{isSignUp ? "S'inscrire par email" : "Se connecter par email"}</Text>}
                 </TouchableOpacity>
                 
-                <TouchableOpacity onPress={() => setIsSignUp(!isSignUp)} style={{marginTop: 15, padding: 5}}>
+                <TouchableOpacity onPress={() => setIsSignUp(!isSignUp)} style={{marginTop: 15, padding: 5}} disabled={authLoading}>
                     <Text style={styles.switchText}>{isSignUp ? "J'ai déjà un compte" : "Pas encore de compte ?"}</Text>
                 </TouchableOpacity>
                 
-                <TouchableOpacity style={styles.cancelBtn} onPress={() => setAuthModalVisible(false)}>
+                <TouchableOpacity style={styles.cancelBtn} onPress={() => setAuthModalVisible(false)} disabled={authLoading}>
                     <Text style={styles.cancelText}>Fermer</Text>
                 </TouchableOpacity>
             </View>
