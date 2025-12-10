@@ -11,7 +11,7 @@ import { useRouter } from 'expo-router';
 import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer';
 import Carousel from 'react-native-reanimated-carousel';
 
-// Ajout de la prop isHolding pour contrôler la visibilité depuis le parent
+// FeedCard : Affiche le dessin/photo. Ne contient plus le bouton Oeil.
 const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, isHolding }: { drawing: any, canvasSize: number, index: number, currentIndex: number, onUserPress: (user: any) => void, isHolding: boolean }) => {
     const { user } = useAuth();
     
@@ -20,8 +20,6 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
     const [isLiked, setIsLiked] = useState(false);
     const [likesCount, setLikesCount] = useState(initialLikesCount);
     const [showComments, setShowComments] = useState(false); 
-    
-    // Suppression de l'état local isHolding car géré par le parent via le bouton statique
     
     const commentsCount = drawing.comments?.[0]?.count || 0;
     
@@ -139,7 +137,6 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
         <View style={styles.cardContainer}>
             
             <View style={{ width: canvasSize, aspectRatio: 3/4, backgroundColor: 'transparent', position: 'relative' }}>
-                
                 {/* On utilise la prop isHolding passée par le parent */}
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
@@ -154,7 +151,6 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
                         />
                     )}
                 </View>
-                {/* L'icône Oeil a été retirée d'ici pour être dans le parent (FeedPage) */}
             </View>
             
             <View style={styles.cardInfo}>
@@ -192,7 +188,6 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
 
                 <View style={styles.actionBar}>
                     <View style={styles.leftActions}>
-                        
                         <TouchableOpacity style={styles.actionBtn} onPress={handleLike}>
                             <Heart 
                                 color={isLiked ? "#FF3B30" : "#000"} 
@@ -227,7 +222,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
     return prev.drawing.id === next.drawing.id && 
            prev.index === next.index && 
            prev.currentIndex === next.currentIndex &&
-           prev.isHolding === next.isHolding; // Important : Re-render si l'état holding change
+           prev.isHolding === next.isHolding; 
 });
 
 export default function FeedPage() {
@@ -247,8 +242,17 @@ export default function FeedPage() {
     const [selectedUser, setSelectedUser] = useState<any>(null);
     const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
 
-    // Calcul de la hauteur de l'image (ratio 3:4) pour positionner le bouton statique
+    // --- CALCUL DE LA POSITION DU BOUTON OEIL ---
+    // Hauteur totale de l'image (ratio 3:4)
     const IMAGE_HEIGHT = screenWidth * (4/3);
+    const EYE_BUTTON_SIZE = 44;
+    // La carte blanche remonte de 40px sur la photo.
+    const CARD_OVERLAP = 40; 
+    // On ajoute une marge pour que le bouton soit visuellement au-dessus de la carte blanche
+    const MARGIN_BOTTOM = 15;
+    
+    // Position Top absolue = Hauteur Image - Zone cachée par la carte - Marge - Taille Bouton
+    const eyeButtonTop = IMAGE_HEIGHT - CARD_OVERLAP - MARGIN_BOTTOM - EYE_BUTTON_SIZE;
 
     useEffect(() => { fetchTodaysFeed(); }, [user]); 
 
@@ -315,7 +319,6 @@ export default function FeedPage() {
                 style={{ flex: 1, position: 'relative' }} 
                 onLayout={(e) => setLayout(e.nativeEvent.layout)}
             >
-                
                 {backgroundCloud && (
                     <Image 
                         source={{ uri: optimizedBackground || backgroundCloud }}
@@ -358,13 +361,13 @@ export default function FeedPage() {
                     ) : null
                 )}
 
-                {/* BOUTON OEIL STATIQUE FLOTTANT */}
-                {/* Positionné en dehors du Carousel pour ne pas bouger */}
+                {/* BOUTON OEIL STATIQUE (Overlay sur le Carousel) */}
+                {/* Positionné précisément au-dessus de la carte blanche, sur le coin bas-droit de la photo */}
                 {drawings.length > 0 && (
                     <TouchableOpacity 
                         style={[
                             styles.staticEyeBtn, 
-                            { top: IMAGE_HEIGHT - 35 } // Positionné juste au-dessus de la carte blanche
+                            { top: eyeButtonTop } 
                         ]}
                         activeOpacity={0.8}
                         onPressIn={() => setIsGlobalHolding(true)}
@@ -409,18 +412,17 @@ const styles = StyleSheet.create({
     
     moreBtn: { padding: 5, marginTop: 5 }, 
     
-    // Style du bouton Oeil Statique (restauré avec background)
+    // Style du bouton Oeil Statique
     staticEyeBtn: {
         position: 'absolute',
-        right: 20,
+        right: 15, // Marge droite par rapport à l'écran
         width: 44,
         height: 44,
         borderRadius: 22,
-        backgroundColor: 'rgba(255,255,255,0.9)', // Fond blanc semi-transparent
+        backgroundColor: 'rgba(255,255,255,0.9)', 
         justifyContent: 'center',
         alignItems: 'center',
-        zIndex: 100, // Au-dessus de tout
-        // Ombres
+        zIndex: 100, 
         shadowColor: "#000",
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.2,
