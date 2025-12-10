@@ -23,14 +23,18 @@ const MaskedDayImage = ({ uri, width, height, top }: { uri: string, width: numbe
 
     return (
         <Canvas style={{ position: 'absolute', top, left: 0, width, height, zIndex: 0 }} pointerEvents="none">
+             {/* 1. Le Masque (Dégradé d'opacité) */}
              <Rect x={0} y={0} width={width} height={height}>
                 <SkiaGradient
                     start={vec(0, 0)}
                     end={vec(0, height)}
+                    // Transparent aux extrémités, Opaque (blanc) au centre
                     colors={["transparent", "white", "white", "transparent"]}
+                    // Le fondu se fait sur les 10% du haut et du bas
                     positions={[0, 0.05, 0.95, 1]}
                 />
             </Rect>
+            {/* 2. L'Image (Source) - Affichée uniquement là où le masque est opaque */}
             <SkiaImage
                 image={image}
                 x={0} y={0} width={width} height={height}
@@ -52,6 +56,7 @@ const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color, count }: an
     });
 
     const handlePress = () => {
+        // Animation de rebond
         scale.value = withSequence(
             withSpring(1.6, { damping: 10, stiffness: 200 }), 
             withSpring(1, { damping: 10, stiffness: 200 })
@@ -329,7 +334,8 @@ export default function FeedPage() {
     const MARGIN_BOTTOM = 25; 
     
     // Position du bouton Oeil ajustée
-    const eyeButtonTop = IMAGE_HEIGHT - EYE_BUTTON_SIZE - MARGIN_BOTTOM;
+    // Ajout de TOP_HEADER_SPACE pour descendre le bouton au bon niveau
+    const eyeButtonTop = TOP_HEADER_SPACE + IMAGE_HEIGHT - EYE_BUTTON_SIZE - MARGIN_BOTTOM;
 
     useFocusEffect(
         useCallback(() => {
@@ -413,34 +419,22 @@ export default function FeedPage() {
 
     return (
         <View style={styles.container}>
-             {/* 1. BACKGROUND FLOU PLEIN ÉCRAN */}
-             {backgroundCloud && (
-                <Image 
-                    source={{ uri: optimizedBackground || backgroundCloud }}
-                    style={StyleSheet.absoluteFillObject}
-                    resizeMode="cover"
-                    blurRadius={20} // Flou gaussien
-                />
-            )}
-
-            {/* 2. IMAGE DU JOUR NETTE (MASQUÉE) */}
-            {/* Positionnée en ABSOLU au niveau racine, avec le bon décalage TOP_HEADER_SPACE */}
-            {backgroundCloud && (
-                <MaskedDayImage 
-                    uri={optimizedBackground || backgroundCloud}
-                    width={screenWidth}
-                    height={IMAGE_HEIGHT}
-                    top={TOP_HEADER_SPACE} // Alignement exact
-                />
-            )}
-
             <SunbimHeader showCloseButton={false} transparent={true} />
             
             <View 
                 style={[styles.mainContent, { paddingTop: TOP_HEADER_SPACE }]} 
                 onLayout={(e) => setLayout(e.nativeEvent.layout)}
             >
-                {/* 3. CARROUSEL DES DESSINS */}
+                {/* 2. Photo du jour NETTE AVEC BORDS FONDUS */}
+                {backgroundCloud && (
+                    <MaskedDayImage 
+                        uri={optimizedBackground || backgroundCloud}
+                        width={screenWidth}
+                        height={IMAGE_HEIGHT}
+                        top={TOP_HEADER_SPACE} // Alignement exact
+                    />
+                )}
+
                 {drawings.length > 0 && layout ? (
                     <Carousel
                         loop={true}
@@ -467,16 +461,11 @@ export default function FeedPage() {
                     ) : null
                 )}
 
-                {/* 4. BOUTON OEIL STATIQUE */}
+                {/* BOUTON OEIL STATIQUE */}
                 {drawings.length > 0 && (
                     <TouchableOpacity 
                         style={[
                             styles.staticEyeBtn, 
-                            // Le bouton doit être positionné par rapport au haut du conteneur (qui a déjà le padding)
-                            // Donc on n'ajoute pas +100 si on utilise un top relatif au conteneur parent
-                            // Mais ici 'staticEyeBtn' est absolu dans 'mainContent', donc le top: 0 est le haut de mainContent.
-                            // Comme mainContent a paddingTop: 120, le contenu (carousel) commence à 120.
-                            // Donc eyeButtonTop (calculé sur l'image) est correct SI on le décale de 0.
                             { top: eyeButtonTop } 
                         ]}
                         activeOpacity={0.8}
