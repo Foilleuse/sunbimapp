@@ -320,10 +320,13 @@ export default function FeedPage() {
     // Calcul de la hauteur de l'image (ratio 3:4)
     const IMAGE_HEIGHT = screenWidth * (4/3);
     const EYE_BUTTON_SIZE = 44;
-    const CARD_OVERLAP = 40; 
-    const MARGIN_BOTTOM = 15;
+    // On retire le chevauchement (0) car la carte est maintenant dessous
+    const CARD_OVERLAP = 0; 
+    // On ajuste la marge pour le bouton oeil
+    const MARGIN_BOTTOM = 25; 
     
-    const eyeButtonTop = IMAGE_HEIGHT - CARD_OVERLAP - MARGIN_BOTTOM - EYE_BUTTON_SIZE;
+    // Position Top absolue = Hauteur Image - Taille Bouton - Marge
+    const eyeButtonTop = IMAGE_HEIGHT - EYE_BUTTON_SIZE - MARGIN_BOTTOM;
 
     useEffect(() => { fetchTodaysFeed(); }, [user]); 
 
@@ -467,11 +470,10 @@ const styles = StyleSheet.create({
     cardContainer: { flex: 1, justifyContent: 'flex-start' }, 
     cardInfo: {
         flex: 1, 
-        backgroundColor: 'transparent', // Fond transparent pour la FeedCard
-        marginTop: -40, 
+        backgroundColor: 'transparent', 
+        marginTop: 0, // Suppression de la marge négative pour ne pas chevaucher
         paddingHorizontal: 20, 
-        paddingTop: 20,
-        // Pas d'ombre ni de bordure
+        paddingTop: 10,
         shadowColor: "transparent", 
         elevation: 0,
     },
