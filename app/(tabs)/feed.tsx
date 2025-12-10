@@ -388,12 +388,20 @@ export default function FeedPage() {
             {/* Header transparent */}
             <SunbimHeader showCloseButton={false} transparent={true} />
             
+            {/* Image de fond (Nuage) positionnée en absolu derrière tout */}
+            {backgroundCloud && (
+                <Image 
+                    source={{ uri: optimizedBackground || backgroundCloud }}
+                    style={StyleSheet.absoluteFillObject}
+                    resizeMode="cover"
+                />
+            )}
+
             <View 
                 style={{ flex: 1, position: 'relative' }} 
                 onLayout={(e) => setLayout(e.nativeEvent.layout)}
             >
-                {/* On ne remet pas l'image de fond ici car on veut le fond bleu de la page */}
-                {/* backgroundCloud && (...) <- SUPPRIMÉ pour laisser le fond bleu */}
+                {/* Suppression de l'image de fond d'ici, elle est maintenant au niveau parent */}
 
                 {drawings.length > 0 && layout ? (
                     <Carousel
@@ -414,8 +422,8 @@ export default function FeedPage() {
                                 isHolding={isGlobalHolding && index === currentIndex}
                             />
                         )}
-                        // On ajoute un padding top pour compenser le header transparent flottant
-                        style={{ paddingTop: 100 }} 
+                        // Padding top pour décaler le contenu sous le header
+                        style={{ marginTop: 100 }} 
                     />
                 ) : (
                     !loading && drawings.length === 0 ? (
@@ -428,7 +436,7 @@ export default function FeedPage() {
                     <TouchableOpacity 
                         style={[
                             styles.staticEyeBtn, 
-                            { top: eyeButtonTop + 100 } // +100 pour compenser le padding du carousel
+                            { top: eyeButtonTop + 100 } // +100 pour compenser le décalage du carousel
                         ]}
                         activeOpacity={0.8}
                         onPressIn={() => setIsGlobalHolding(true)}
@@ -453,7 +461,7 @@ export default function FeedPage() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#87CEEB' }, // Fond bleu ciel
+    container: { flex: 1, backgroundColor: '#87CEEB' }, // Fond de secours si pas d'image
     loadingContainer: { flex: 1, backgroundColor: '#87CEEB', justifyContent: 'center', alignItems: 'center' },
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     text: { color: '#FFF', fontSize: 16 }, 
@@ -526,7 +534,7 @@ const styles = StyleSheet.create({
         alignItems: 'center', 
         width: '100%',
         paddingHorizontal: 10,
-        paddingBottom: 40 // Padding augmenté pour remonter le contenu
+        paddingBottom: 40 
     },
     reactionBtn: { 
         alignItems: 'center', 
