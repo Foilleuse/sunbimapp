@@ -8,6 +8,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '../src/contexts/AuthContext';
 import * as Updates from 'expo-updates';
 import React from 'react';
+// Ajout des imports pour l'auth sociale
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 // Import de l'icône croix
@@ -362,7 +363,7 @@ export default function DrawPage() {
       
       {/* HEADER TOUJOURS VISIBLE (zIndex > Splash) */}
       <View style={styles.header}>
-        <Text style={styles.headerText}>sunbim</Text>
+        <Text style={styles.headerText}>nyola</Text>
         {updateLabel ? <Text style={styles.versionText}>{updateLabel}</Text> : null}
       </View>
 
@@ -401,7 +402,7 @@ export default function DrawPage() {
                 strokeWidth={strokeWidth} onStrokeWidthChange={setStrokeWidth}
                 isEraserMode={isEraserMode} toggleEraser={toggleEraser}
                 onShare={handleSharePress}
-                isAuthenticated={!!user} 
+                isAuthenticated={!!user} // Passage de l'état connecté/déconnecté
                 showOriginal={showOriginalImage}
                 onShowOriginal={showOriginal} 
              />
