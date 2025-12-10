@@ -73,10 +73,16 @@ export default function DrawPage() {
   // --- FONCTIONS SOCIAL LOGIN ---
   const handleGoogleLogin = async () => {
     try {
-      await GoogleSignin.hasPlayServices();
+      // CORRECTION : Pas besoin de hasPlayServices sur iOS, et ajout d'options explicites
+      if (Platform.OS === 'android') {
+          await GoogleSignin.hasPlayServices();
+      }
+      
+      // IMPORTANT : Si vous êtes en mode développement avec Expo Go ou un Dev Client, 
+      // il faut parfois forcer le webview ou s'assurer que le scheme est bien passé.
+      // Cependant, la méthode standard est celle-ci :
       const userInfo = await GoogleSignin.signIn();
       
-      // Récupération du token (compatible anciennes/nouvelles versions)
       const token = userInfo.data?.idToken || userInfo.idToken;
 
       if (token) {
@@ -90,17 +96,19 @@ export default function DrawPage() {
            Alert.alert("Erreur Supabase", error.message);
            setAuthLoading(false);
         }
-        // Si succès, le useEffect([user]) fermera la modale
       } else {
-        // En cas d'annulation ou d'échec silencieux, on ne bloque pas l'UI
+        // En cas d'annulation ou autre, on ne bloque pas
         setAuthLoading(false); 
       }
     } catch (error: any) {
       setAuthLoading(false);
-      if (error.code !== statusCodes.SIGN_IN_CANCELLED && error.code !== statusCodes.IN_PROGRESS) {
-        Alert.alert("Erreur Connexion Google", error.message || "Une erreur inconnue est survenue.");
+      if (error.code === statusCodes.SIGN_IN_CANCELLED) {
+        // L'utilisateur a annulé, on ne fait rien
+      } else if (error.code === statusCodes.IN_PROGRESS) {
+        // Déjà en cours
       } else {
-         console.log("Google Sign In Cancelled/In Progress");
+         Alert.alert("Erreur Connexion Google", error.message || "Une erreur est survenue.");
+         console.error(error);
       }
     }
   };
