@@ -64,6 +64,7 @@ export default function DrawPage() {
   // --- CONFIGURATION GOOGLE SIGNIN (Au montage) ---
   useEffect(() => {
     try {
+      console.log("Configuring Google Signin...");
       GoogleSignin.configure({
         // L'ID iOS sert à ouvrir la fenêtre de connexion sur l'iPhone
         // Assurez-vous que cet ID correspond à celui dans votre console Google Cloud ET dans votre Info.plist (schéma inversé)
@@ -75,6 +76,7 @@ export default function DrawPage() {
         scopes: ['profile', 'email'],
       });
       setIsGoogleConfigured(true);
+      console.log("Google Signin configured!");
     } catch (e) {
       console.error("Erreur config Google:", e);
     }
@@ -84,45 +86,49 @@ export default function DrawPage() {
   const handleGoogleLogin = async () => {
     if (!isGoogleConfigured) {
         console.error('Google Signin not configured yet');
+        Alert.alert("Erreur", "Google n'est pas encore prêt. Réessayez dans un instant.");
         return;
     }
+    
     setAuthLoading(true);
     try {
-      // CORRECTION : Pas besoin de hasPlayServices sur iOS, et ajout d'options explicites
       if (Platform.OS === 'android') {
           await GoogleSignin.hasPlayServices();
       }
       
+      console.log("Starting Google Signin...");
+      // C'est souvent ICI que ça freeze si le redirect échoue
       const userInfo = await GoogleSignin.signIn();
+      console.log("Google Signin Success, UserInfo received");
       
-      // Récupération du token (compatible anciennes/nouvelles versions de la lib)
       const token = userInfo.data?.idToken || userInfo.idToken;
 
       if (token) {
+        console.log("Token received, calling Supabase...");
         const { error } = await supabase.auth.signInWithIdToken({
           provider: 'google',
           token: token,
         });
         
         if (error) {
+           console.error("Supabase Error:", error);
            Alert.alert("Erreur Supabase", error.message);
-           // Ne pas laisser le chargement infini en cas d'erreur Supabase
            setAuthLoading(false);
+        } else {
+            console.log("Supabase Auth Success!");
         }
-        // Si succès, le useEffect([user]) fermera la modale automatiquement
       } else {
         throw new Error('Pas de token ID Google reçu (Vérifiez webClientId)');
       }
     } catch (error: any) {
-      // Gestion spécifique des erreurs Google pour éviter les alertes inutiles
       setAuthLoading(false);
       if (error.code === statusCodes.SIGN_IN_CANCELLED) {
         console.log("Google Sign In Cancelled");
       } else if (error.code === statusCodes.IN_PROGRESS) {
         console.log("Google Sign In In Progress");
       } else {
+         console.error("Google Error Details:", error);
          Alert.alert("Erreur Connexion Google", error.message || "Une erreur inconnue est survenue.");
-         console.error("Google Error:", error);
       }
     }
   };
