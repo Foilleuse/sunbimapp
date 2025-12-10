@@ -76,33 +76,29 @@ export default function DrawPage() {
       await GoogleSignin.hasPlayServices();
       const userInfo = await GoogleSignin.signIn();
       
-      if (userInfo.data?.idToken) { // Modification ici : userInfo.data.idToken dans les nouvelles versions
+      // Récupération du token (compatible anciennes/nouvelles versions)
+      const token = userInfo.data?.idToken || userInfo.idToken;
+
+      if (token) {
         setAuthLoading(true);
         const { error } = await supabase.auth.signInWithIdToken({
           provider: 'google',
-          token: userInfo.data.idToken, // Modification ici
+          token: token,
         });
-        if (error) throw error;
-        // La redirection ou la fermeture de modale sera gérée par le useEffect sur 'user'
-      } else if (userInfo.idToken) {
-          // Fallback pour anciennes versions
-          setAuthLoading(true);
-          const { error } = await supabase.auth.signInWithIdToken({
-            provider: 'google',
-            token: userInfo.idToken,
-          });
-          if (error) throw error;
+        
+        if (error) {
+           Alert.alert("Erreur Supabase", error.message);
+           setAuthLoading(false);
+        }
+        // Si succès, le useEffect([user]) fermera la modale
       } else {
-        throw new Error('Pas de token ID Google reçu');
+        throw new Error('Pas de token ID Google reçu (Vérifiez webClientId)');
       }
     } catch (error: any) {
-      if (error.code !== statusCodes.SIGN_IN_CANCELLED && error.code !== statusCodes.IN_PROGRESS) {
-        Alert.alert("Erreur Google", error.message);
-      } else {
-        // Annulation silencieuse
-        console.log("Google Sign In Cancelled/In Progress");
-      }
       setAuthLoading(false);
+      if (error.code !== statusCodes.SIGN_IN_CANCELLED && error.code !== statusCodes.IN_PROGRESS) {
+        Alert.alert("Erreur Connexion Google", error.message || "Une erreur inconnue est survenue.");
+      }
     }
   };
 
@@ -123,10 +119,10 @@ export default function DrawPage() {
         if (error) throw error;
       }
     } catch (e: any) {
+      setAuthLoading(false);
       if (e.code !== 'ERR_REQUEST_CANCELED') {
         Alert.alert("Erreur Apple", e.message);
       }
-      setAuthLoading(false);
     }
   };
 
