@@ -8,7 +8,6 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '../src/contexts/AuthContext';
 import * as Updates from 'expo-updates';
 import React from 'react';
-// Ajout des imports pour l'auth sociale
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 // Import de l'icône croix
@@ -42,7 +41,6 @@ export default function DrawPage() {
   const [strokeWidth, setStrokeWidth] = useState(2);
   const [isEraserMode, setIsEraserMode] = useState(false);
   
-  // ÉTAT POUR L'IMAGE ORIGINALE
   const [showOriginalImage, setShowOriginalImage] = useState(false);
   
   const [modalVisible, setModalVisible] = useState(false);
@@ -83,11 +81,11 @@ export default function DrawPage() {
   // --- GESTION POST-CONNEXION ---
   useEffect(() => {
     if (user) {
-        if (authModalVisible) {
-            setAuthModalVisible(false);
-            setAuthLoading(false); 
-        }
+        // Dès que l'utilisateur est détecté, on ferme la modale d'auth
+        setAuthModalVisible(false);
+        setAuthLoading(false);
 
+        // Ouverture automatique de la modale de partage si un dessin est en attente
         if (canvasRef.current?.getPaths().length > 0 && !modalVisible && !replayPaths && !hasOpenedShareAfterLogin) {
              const timer = setTimeout(() => {
                  setModalVisible(true);
@@ -98,7 +96,8 @@ export default function DrawPage() {
     } else {
         setHasOpenedShareAfterLogin(false);
     }
-  }, [user, authModalVisible]);
+    // Retrait de authModalVisible des dépendances pour éviter les boucles
+  }, [user]); 
 
   // --- FONCTIONS SOCIAL LOGIN ---
   const handleGoogleLogin = async () => {
@@ -123,18 +122,17 @@ export default function DrawPage() {
           token: token,
         });
         
-        if (error) {
-           Alert.alert("Erreur Supabase", error.message);
-           setAuthLoading(false);
-        }
+        if (error) throw error;
+        // Succès : le useEffect se chargera de fermer la modale quand 'user' changera
       } else {
-        setAuthLoading(false);
+        throw new Error("Token Google manquant");
       }
     } catch (error: any) {
-      setAuthLoading(false);
       if (error.code !== statusCodes.SIGN_IN_CANCELLED && error.code !== statusCodes.IN_PROGRESS) {
          Alert.alert("Erreur Google", error.message || "Une erreur est survenue.");
       }
+      // On arrête le chargement uniquement en cas d'erreur ou d'annulation
+      setAuthLoading(false);
     }
   };
 
@@ -154,10 +152,7 @@ export default function DrawPage() {
           provider: 'apple',
           token: credential.identityToken,
         });
-        if (error) {
-            setAuthLoading(false);
-            throw error;
-        }
+        if (error) throw error;
       } else {
         setAuthLoading(false);
       }
@@ -308,7 +303,7 @@ export default function DrawPage() {
         
         if (isSignUp && data?.user && !data.session) {
              Alert.alert("Inscription réussie", "Veuillez vérifier vos emails pour confirmer votre compte.");
-             setAuthModalVisible(false); // On ferme pour qu'il aille voir ses mails
+             setAuthModalVisible(false); 
              return;
         }
     } catch (e: any) {
@@ -361,14 +356,12 @@ export default function DrawPage() {
   return (
     <View style={styles.container}>
       
-      {/* HEADER TOUJOURS VISIBLE (zIndex > Splash) */}
       <View style={styles.header}>
         <Text style={styles.headerText}>nyola</Text>
         {updateLabel ? <Text style={styles.versionText}>{updateLabel}</Text> : null}
       </View>
 
       <View style={styles.canvasContainer}>
-        {/* LE CANVAS TOUJOURS LÀ */}
         {replayPaths ? (
             <DrawingViewer 
                 imageUri={cloud.image_url}
@@ -381,19 +374,49 @@ export default function DrawPage() {
                 autoCenter={true}
             />
         ) : (
-            <DrawingCanvas
-              ref={canvasRef}
-              imageUri={cloud.image_url}
-              strokeColor={strokeColor}
-              strokeWidth={strokeWidth}
-              isEraserMode={isEraserMode}
-              onClear={handleClear}
-              blurRadius={showSplash ? canvasBlur : 0}
-            />
+           /* Affichage conditionnel de l'image originale */
+           showOriginalImage ? (
+                <View style={[StyleSheet.absoluteFill, { backgroundColor: 'black', justifyContent: 'center', zIndex: 999 }]}>
+                     <Image 
+                        source={{ uri: cloud.image_url }} 
+                        style={StyleSheet.absoluteFill} 
+                        resizeMode="contain" 
+                     />
+                     <TouchableOpacity 
+                        style={styles.closeOriginalBtn} 
+                        onPress={() => setShowOriginalImage(false)}
+                        hitSlop={20}
+                     >
+                         <X color="#FFF" size={32} />
+                     </TouchableOpacity>
+                     {/* On garde le DrawingCanvas monté mais invisible */}
+                     <View style={{ opacity: 0, flex: 1 }}>
+                        <DrawingCanvas
+                            ref={canvasRef}
+                            imageUri={cloud.image_url}
+                            strokeColor={strokeColor}
+                            strokeWidth={strokeWidth}
+                            isEraserMode={isEraserMode}
+                            onClear={handleClear}
+                            blurRadius={showSplash ? canvasBlur : 0}
+                        />
+                     </View>
+                </View>
+           ) : (
+                <DrawingCanvas
+                    ref={canvasRef}
+                    imageUri={cloud.image_url}
+                    strokeColor={strokeColor}
+                    strokeWidth={strokeWidth}
+                    isEraserMode={isEraserMode}
+                    onClear={handleClear}
+                    blurRadius={showSplash ? canvasBlur : 0}
+                />
+           )
         )}
       </View>
       
-      {!replayPaths && (
+      {!replayPaths && !showOriginalImage && (
           <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
             <View style={{flex: 1}} pointerEvents="none" /> 
             <DrawingControls
@@ -402,41 +425,15 @@ export default function DrawPage() {
                 strokeWidth={strokeWidth} onStrokeWidthChange={setStrokeWidth}
                 isEraserMode={isEraserMode} toggleEraser={toggleEraser}
                 onShare={handleSharePress}
-                isAuthenticated={!!user} // Passage de l'état connecté/déconnecté
+                isAuthenticated={!!user} 
                 showOriginal={showOriginalImage}
                 onShowOriginal={showOriginal} 
              />
           </View>
       )}
 
-      {/* MODALE VISUALISATION IMAGE ORIGINALE */}
-      <Modal 
-          visible={showOriginalImage} 
-          animationType="fade" 
-          transparent={true} 
-          onRequestClose={() => setShowOriginalImage(false)}
-      >
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', alignItems: 'center' }]}>
-              {/* Image en plein écran, en mode contain pour voir toute l'image */}
-              <Image 
-                  source={{ uri: cloud.image_url }} 
-                  style={{ width: '100%', height: '100%' }} 
-                  resizeMode="contain" 
-              />
-              
-              {/* Bouton de fermeture */}
-              <TouchableOpacity 
-                  style={styles.closeOriginalBtn} 
-                  onPress={() => setShowOriginalImage(false)}
-                  hitSlop={20}
-              >
-                  <X color="#FFF" size={32} />
-              </TouchableOpacity>
-          </View>
-      </Modal>
-
-      {/* MODALES (Connexion, Partage...) */}
-      <Modal animationType="slide" transparent={true} visible={authModalVisible && !user} onRequestClose={() => {
+      {/* MODALES... */}
+      <Modal animationType="slide" transparent={true} visible={authModalVisible} onRequestClose={() => {
           if (!authLoading) setAuthModalVisible(false);
       }}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
@@ -444,7 +441,6 @@ export default function DrawPage() {
                 <Text style={styles.modalTitle}>{isSignUp ? "Créer un compte" : "Se connecter"}</Text>
                 <Text style={styles.modalSubtitle}>Sauvegardez votre dessin pour le publier</Text>
                 
-                {/* BOUTONS SOCIAUX */}
                 <View style={styles.socialContainer}>
                     {Platform.OS === 'ios' && (
                         <AppleAuthentication.AppleAuthenticationButton
@@ -627,7 +623,6 @@ const styles = StyleSheet.create({
       fontSize: 16,
   },
 
-  // Bouton de fermeture de l'image originale
   closeOriginalBtn: {
       position: 'absolute',
       top: 50,
