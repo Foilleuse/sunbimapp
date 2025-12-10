@@ -10,6 +10,7 @@ import { useRouter } from 'expo-router';
 import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer';
 import Carousel from 'react-native-reanimated-carousel';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withSequence } from 'react-native-reanimated';
+import { LinearGradient } from 'expo-linear-gradient'; // Import du dégradé
 
 // Types de réactions possibles
 type ReactionType = 'like' | 'smart' | 'beautiful' | 'crazy' | null;
@@ -214,6 +215,22 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
                         />
                     )}
                 </View>
+                
+                {/* DÉGRADÉS POUR ADOUCIR LES BORDS (HAUT ET BAS) */}
+                {/* Dégradé haut : couleur du thème ou blanc transparent vers transparent */}
+                <LinearGradient
+                    colors={['rgba(255,255,255,0.8)', 'transparent']}
+                    style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 40 }}
+                    pointerEvents="none"
+                />
+                
+                {/* Dégradé bas : transparent vers blanc transparent */}
+                <LinearGradient
+                    colors={['transparent', 'rgba(255,255,255,0.8)']}
+                    style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 40 }}
+                    pointerEvents="none"
+                />
+
             </View>
             
             <View style={styles.cardInfo}>
@@ -361,18 +378,7 @@ export default function FeedPage() {
 
     return (
         <View style={styles.container}>
-            {/* 1. NOUVEAU BACKGROUND : Photo du jour plein écran FLOU */}
-            {backgroundCloud && (
-                <Image 
-                    source={{ uri: optimizedBackground || backgroundCloud }}
-                    style={StyleSheet.absoluteFillObject} // Prend tout l'écran
-                    resizeMode="cover"
-                    blurRadius={30} // Flou gaussien intense
-                />
-            )}
-
-            {/* 2. Photo du jour NETTE (pour le dessin) */}
-            {/* Elle est positionnée exactement sous le carrousel pour l'effet de transparence */}
+            {/* Image de fond (Nuage) positionnée en absolu, avec la taille exacte 3:4 */}
             {backgroundCloud && (
                 <Image 
                     source={{ uri: optimizedBackground || backgroundCloud }}
@@ -382,7 +388,7 @@ export default function FeedPage() {
                         left: 0,
                         width: screenWidth,
                         height: IMAGE_HEIGHT,
-                        zIndex: 0 // Derrière le carrousel mais devant le fond flou
+                        zIndex: 0
                     }}
                     resizeMode="cover"
                 />
@@ -413,6 +419,7 @@ export default function FeedPage() {
                                 isHolding={isGlobalHolding && index === currentIndex}
                             />
                         )}
+                        // Pas de marginTop ici, géré par le padding du conteneur
                     />
                 ) : (
                     !loading && drawings.length === 0 ? (
@@ -450,7 +457,7 @@ export default function FeedPage() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#87CEEB' }, // Fallback couleur
+    container: { flex: 1, backgroundColor: '#87CEEB' }, 
     loadingContainer: { flex: 1, backgroundColor: '#87CEEB', justifyContent: 'center', alignItems: 'center' },
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     text: { color: '#FFF', fontSize: 16 }, 
