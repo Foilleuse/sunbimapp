@@ -10,10 +10,41 @@ import { useRouter } from 'expo-router';
 import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer';
 import Carousel from 'react-native-reanimated-carousel';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withSequence } from 'react-native-reanimated';
-import { LinearGradient } from 'expo-linear-gradient';
+// On utilise Skia pour le masquage avancé (fondu transparent)
+import { Canvas, Rect, LinearGradient as SkiaGradient, vec, useImage, Image as SkiaImage } from "@shopify/react-native-skia";
 
 // Types de réactions possibles
 type ReactionType = 'like' | 'smart' | 'beautiful' | 'crazy' | null;
+
+// --- COMPOSANT IMAGE MASQUÉE (FONDU BORDS) ---
+const MaskedDayImage = ({ uri, width, height, top }: { uri: string, width: number, height: number, top: number }) => {
+    const image = useImage(uri);
+    
+    if (!image) return null;
+
+    return (
+        <Canvas style={{ position: 'absolute', top, left: 0, width, height, zIndex: 0 }} pointerEvents="none">
+             {/* 1. Le Masque (Dégradé d'opacité) */}
+             <Rect x={0} y={0} width={width} height={height}>
+                <SkiaGradient
+                    start={vec(0, 0)}
+                    end={vec(0, height)}
+                    // Transparent aux extrémités, Opaque (blanc) au centre
+                    colors={["transparent", "white", "white", "transparent"]}
+                    // Le fondu se fait sur les 10% du haut et du bas
+                    positions={[0, 0.10, 0.90, 1]}
+                />
+            </Rect>
+            {/* 2. L'Image (Source) - Affichée uniquement là où le masque est opaque */}
+            <SkiaImage
+                image={image}
+                x={0} y={0} width={width} height={height}
+                fit="cover"
+                blendMode="srcIn" 
+            />
+        </Canvas>
+    );
+};
 
 // --- COMPOSANT BOUTON DE RÉACTION ANIMÉ ---
 const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color, count }: any) => {
@@ -26,7 +57,6 @@ const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color, count }: an
     });
 
     const handlePress = () => {
-        // Animation de rebond
         scale.value = withSequence(
             withSpring(1.6, { damping: 10, stiffness: 200 }), 
             withSpring(1, { damping: 10, stiffness: 200 })
@@ -197,8 +227,6 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
             ]
         );
     };
-
-    const optimizedAvatar = author?.avatar_url ? getOptimizedImageUrl(author.avatar_url, 50) : null;
 
     return (
         <View style={styles.cardContainer}>
@@ -381,34 +409,14 @@ export default function FeedPage() {
                 style={[styles.mainContent, { paddingTop: TOP_HEADER_SPACE }]} 
                 onLayout={(e) => setLayout(e.nativeEvent.layout)}
             >
-                {/* 2. Photo du jour NETTE */}
+                {/* 2. Photo du jour NETTE AVEC BORDS FONDUS (Remplaçant l'Image standard) */}
                 {backgroundCloud && (
-                    <View style={{
-                        position: 'absolute',
-                        top: TOP_HEADER_SPACE,
-                        left: 0,
-                        width: screenWidth,
-                        height: IMAGE_HEIGHT,
-                        zIndex: 0
-                    }}>
-                        <Image 
-                            source={{ uri: optimizedBackground || backgroundCloud }}
-                            style={StyleSheet.absoluteFillObject}
-                            resizeMode="cover"
-                        />
-                        {/* Dégradé HAUT pour fondre l'image dans le flou */}
-                        <LinearGradient
-                            colors={['rgba(255,255,255,0.6)', 'transparent']}
-                            style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 80 }}
-                            pointerEvents="none"
-                        />
-                         {/* Dégradé BAS pour fondre l'image vers le bas */}
-                        <LinearGradient
-                            colors={['transparent', 'rgba(255,255,255,0.6)']}
-                            style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 80 }}
-                            pointerEvents="none"
-                        />
-                    </View>
+                    <MaskedDayImage 
+                        uri={optimizedBackground || backgroundCloud}
+                        width={screenWidth}
+                        height={IMAGE_HEIGHT}
+                        top={TOP_HEADER_SPACE}
+                    />
                 )}
 
                 {drawings.length > 0 && layout ? (
