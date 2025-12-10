@@ -44,7 +44,7 @@ export const SunbimHeader: React.FC<SunbimHeaderProps> = ({
     ]}>
       {/* Conteneur Titre + Version */}
       <View style={styles.titleContainer}>
-          <Text style={[styles.headerText, transparent && styles.whiteText]}>sunbim</Text>
+          <Text style={[styles.headerText, transparent && styles.whiteText]}>nyola</Text>
           <Text style={[styles.versionText, transparent && styles.whiteSubText]}>{updateLabel}</Text>
       </View>
       

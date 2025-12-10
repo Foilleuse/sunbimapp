@@ -8,7 +8,6 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '../src/contexts/AuthContext';
 import * as Updates from 'expo-updates';
 import React from 'react';
-// Ajout des imports pour l'auth sociale
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 
@@ -60,23 +59,15 @@ export default function DrawPage() {
   const updateLabel = (Updates && Updates.updateId) ? `v.${Updates.updateId.substring(0, 6)}` : '';
   const [isGoogleConfigured, setIsGoogleConfigured] = useState(false);
 
-
-  // --- CONFIGURATION GOOGLE SIGNIN (Au montage) ---
+  // --- CONFIGURATION GOOGLE SIGNIN ---
   useEffect(() => {
     try {
-      console.log("Configuring Google Signin...");
       GoogleSignin.configure({
-        // L'ID iOS sert à ouvrir la fenêtre de connexion sur l'iPhone
-        // Assurez-vous que cet ID correspond à celui dans votre console Google Cloud ET dans votre Info.plist (schéma inversé)
         iosClientId: '296503578118-pdqa6300t0r1l315e94nn07uuj8fdepq.apps.googleusercontent.com', 
-        
-        // L'ID Web est OBLIGATOIRE pour obtenir l'idToken pour Supabase
         webClientId: '296503578118-9otrhg40mnenuvh1ir16o4qoujhvmb74.apps.googleusercontent.com', 
-        
         scopes: ['profile', 'email'],
       });
       setIsGoogleConfigured(true);
-      console.log("Google Signin configured!");
     } catch (e) {
       console.error("Erreur config Google:", e);
     }
@@ -85,8 +76,7 @@ export default function DrawPage() {
   // --- FONCTIONS SOCIAL LOGIN ---
   const handleGoogleLogin = async () => {
     if (!isGoogleConfigured) {
-        console.error('Google Signin not configured yet');
-        Alert.alert("Erreur", "Google n'est pas encore prêt. Réessayez dans un instant.");
+        Alert.alert("Erreur", "Configuration Google non chargée.");
         return;
     }
     
@@ -96,42 +86,30 @@ export default function DrawPage() {
           await GoogleSignin.hasPlayServices();
       }
       
-      console.log("Starting Google Signin...");
-      const response = await GoogleSignin.signIn();
-      console.log("Google Signin Response:", JSON.stringify(response));
-
-      // Gestion compatible v12 et v13+
-      // v13+ retourne { data: { idToken, user }, type: 'success' }
-      // v12 retourne { idToken, user }
-      const token = response.data?.idToken || response.idToken;
+      const userInfo = await GoogleSignin.signIn();
+      const token = userInfo.data?.idToken || userInfo.idToken;
 
       if (token) {
-        console.log("Token received, calling Supabase...");
-        const { data, error } = await supabase.auth.signInWithIdToken({
+        const { error } = await supabase.auth.signInWithIdToken({
           provider: 'google',
           token: token,
         });
         
         if (error) {
-           console.error("Supabase Error:", error);
            Alert.alert("Erreur Supabase", error.message);
            setAuthLoading(false);
-        } else {
-            console.log("Supabase Auth Success!");
-            // La redirection sera gérée par le useEffect sur 'user'
         }
       } else {
-        throw new Error('Pas de token ID Google reçu (Vérifiez webClientId)');
+        throw new Error('Token Google manquant');
       }
     } catch (error: any) {
       setAuthLoading(false);
       if (error.code === statusCodes.SIGN_IN_CANCELLED) {
-        console.log("Google Sign In Cancelled");
+        // Annulation utilisateur, on ne fait rien
       } else if (error.code === statusCodes.IN_PROGRESS) {
-        console.log("Google Sign In In Progress");
+        // Déjà en cours
       } else {
-         console.error("Google Error Details:", error);
-         Alert.alert("Erreur Connexion Google", error.message || "Une erreur inconnue est survenue.");
+         Alert.alert("Erreur Google", error.message || "Une erreur est survenue.");
       }
     }
   };
@@ -151,9 +129,8 @@ export default function DrawPage() {
           token: credential.identityToken,
         });
         if (error) throw error;
-        // Succès géré par le useEffect user
       } else {
-        setAuthLoading(false);
+          setAuthLoading(false);
       }
     } catch (e: any) {
       setAuthLoading(false);
@@ -162,7 +139,6 @@ export default function DrawPage() {
       }
     }
   };
-
 
   useEffect(() => {
     const listener = blurAnim.addListener(({ value }) => {
@@ -210,7 +186,6 @@ export default function DrawPage() {
   useEffect(() => {
     if (user) {
         setAuthModalVisible(false); 
-        // Si on a un dessin en attente, on ouvre la modale de partage
         if (canvasRef.current?.getPaths().length > 0 && !modalVisible && !replayPaths) {
              setModalVisible(true);
         }
@@ -358,7 +333,6 @@ export default function DrawPage() {
   return (
     <View style={styles.container}>
       
-      {/* HEADER TOUJOURS VISIBLE (zIndex > Splash) */}
       <View style={styles.header}>
         <Text style={styles.headerText}>sunbim</Text>
         {updateLabel ? <Text style={styles.versionText}>{updateLabel}</Text> : null}
@@ -398,19 +372,17 @@ export default function DrawPage() {
                 strokeWidth={strokeWidth} onStrokeWidthChange={setStrokeWidth}
                 isEraserMode={isEraserMode} toggleEraser={toggleEraser}
                 onShare={handleSharePress}
-                isAuthenticated={!!user} // Passage de l'état connecté/déconnecté
+                isAuthenticated={!!user} 
              />
           </View>
       )}
 
-      {/* MODALES... */}
       <Modal animationType="slide" transparent={true} visible={authModalVisible} onRequestClose={() => setAuthModalVisible(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
             <View style={styles.modalContent}>
                 <Text style={styles.modalTitle}>{isSignUp ? "Créer un compte" : "Se connecter"}</Text>
                 <Text style={styles.modalSubtitle}>Sauvegardez votre dessin pour le publier</Text>
                 
-                {/* BOUTONS SOCIAUX */}
                 <View style={styles.socialContainer}>
                     {Platform.OS === 'ios' && (
                         <AppleAuthentication.AppleAuthenticationButton
@@ -422,10 +394,8 @@ export default function DrawPage() {
                         />
                     )}
                     
-                    {/* Bouton Google Personnalisé (pour style cohérent) */}
                     <TouchableOpacity style={styles.googleBtn} onPress={handleGoogleLogin}>
                         <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'center'}}>
-                           {/* Cercle coloré pour simuler logo G */}
                            <View style={{width:20, height:20, borderRadius:10, backgroundColor:'#FFF', justifyContent:'center', alignItems:'center', marginRight: 10}}>
                                 <Text style={{color:'#DB4437', fontWeight:'bold', fontSize:14}}>G</Text>
                            </View>

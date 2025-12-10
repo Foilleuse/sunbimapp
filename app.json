@@ -67,7 +67,12 @@
           "photosPermission": "Allow $(PRODUCT_NAME) to access your photos to update your profile picture."
         }
       ],
-      "@react-native-google-signin/google-signin"
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.296503578118-pdqa6300t0r1l315e94nn07uuj8fdepq"
+        }
+      ]
     ],
     "extra": {
       "router": {
