@@ -198,7 +198,6 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
 
     return (
         <View style={styles.cardContainer}>
-            {/* Zone image 3:4 */}
             <View style={{ width: canvasSize, height: canvasSize * (4/3), backgroundColor: 'transparent', position: 'relative' }}>
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
@@ -207,12 +206,11 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
                             imageUri={drawing.cloud_image_url}
                             canvasData={drawing.canvas_data}
                             viewerSize={canvasSize}
-                            // On force la hauteur pour correspondre exactement au ratio 3:4
                             viewerHeight={canvasSize * (4/3)}
                             transparentMode={true} 
                             animated={isActive} 
                             startVisible={false} 
-                            autoCenter={false} // Important pour garder l'alignement original
+                            autoCenter={false}
                         />
                     )}
                 </View>
@@ -295,14 +293,15 @@ export default function FeedPage() {
     const [selectedUser, setSelectedUser] = useState<any>(null);
     const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
 
-    // Espace réservé pour le header transparent
-    const TOP_HEADER_SPACE = 100;
+    // Espace réservé pour le header transparent (augmenté pour descendre le contenu)
+    const TOP_HEADER_SPACE = 120;
 
     // Calculs de position
     const IMAGE_HEIGHT = screenWidth * (4/3);
     const EYE_BUTTON_SIZE = 44;
     const MARGIN_BOTTOM = 25; 
     
+    // Position du bouton Oeil ajustée
     const eyeButtonTop = IMAGE_HEIGHT - EYE_BUTTON_SIZE - MARGIN_BOTTOM;
 
     useEffect(() => { fetchTodaysFeed(); }, [user]); 
@@ -364,33 +363,33 @@ export default function FeedPage() {
 
     return (
         <View style={styles.container}>
+            {/* Image de fond (Nuage) positionnée en absolu, avec la taille exacte 3:4 */}
+            {backgroundCloud && (
+                <Image 
+                    source={{ uri: optimizedBackground || backgroundCloud }}
+                    style={{
+                        position: 'absolute',
+                        top: TOP_HEADER_SPACE, // Alignement exact sous le header
+                        left: 0,
+                        width: screenWidth,
+                        height: IMAGE_HEIGHT, // Hauteur forcée 3:4 pour correspondre au dessin
+                        zIndex: 0
+                    }}
+                    resizeMode="cover"
+                />
+            )}
+
             <SunbimHeader showCloseButton={false} transparent={true} />
             
             <View 
                 style={[styles.mainContent, { paddingTop: TOP_HEADER_SPACE }]} 
                 onLayout={(e) => setLayout(e.nativeEvent.layout)}
             >
-                 {/* Image de fond (Nuage) positionnée en absolu, avec la taille exacte 3:4 */}
-                {backgroundCloud && (
-                    <Image 
-                        source={{ uri: optimizedBackground || backgroundCloud }}
-                        style={{
-                            position: 'absolute',
-                            top: TOP_HEADER_SPACE, // Alignement exact sous le header
-                            left: 0,
-                            width: screenWidth,
-                            height: IMAGE_HEIGHT, // Hauteur forcée 3:4 pour correspondre au dessin
-                            zIndex: 0
-                        }}
-                        resizeMode="cover"
-                    />
-                )}
-
                 {drawings.length > 0 && layout ? (
                     <Carousel
                         loop={true}
                         width={layout.width}
-                        height={layout.height} // Utilise la hauteur disponible
+                        height={layout.height}
                         autoPlay={false}
                         data={drawings}
                         scrollAnimationDuration={500}
@@ -405,7 +404,6 @@ export default function FeedPage() {
                                 isHolding={isGlobalHolding && index === currentIndex}
                             />
                         )}
-                        // Pas de marginTop ici, géré par le padding du conteneur
                     />
                 ) : (
                     !loading && drawings.length === 0 ? (
@@ -448,10 +446,8 @@ const styles = StyleSheet.create({
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     text: { color: '#FFF', fontSize: 16 }, 
     
-    // Conteneur principal
     mainContent: {
         flex: 1,
-        // paddingTop est défini dynamiquement dans le JSX
         position: 'relative',
     },
 
