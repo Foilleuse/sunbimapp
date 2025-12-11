@@ -99,6 +99,16 @@ export default function ProfilePage() {
       return getOptimizedImageUrl(selectedDrawing.cloud_image_url, w, h);
   }, [selectedDrawing, screenWidth]);
 
+  // 🔥 OPTIMISATION AVATAR : Calcul de l'image HD carrée pour l'avatar
+  const profileAvatarOptimized = useMemo(() => {
+    if (!profile?.avatar_url) return null;
+    // La taille affichée est 80x80 (voir styles.profileAvatar)
+    // On calcule les pixels physiques nécessaires
+    const size = Math.round(80 * PixelRatio.get());
+    // On demande un crop carré exact
+    return getOptimizedImageUrl(profile.avatar_url, size, size);
+  }, [profile?.avatar_url]);
+
   const fetchHistory = async () => {
     try {
         const today = new Date().toISOString().split('T')[0];
@@ -242,8 +252,6 @@ export default function ProfilePage() {
     Alert.alert("Info", "Ceci est votre propre dessin.");
   };
 
-  const profileAvatarOptimized = profile?.avatar_url ? getOptimizedImageUrl(profile.avatar_url, 100) : null;
-
   const renderItem = ({ item }: { item: any }) => {
       // Optimisation grille : calcul précis avec PixelRatio
       const thumbW = Math.round(ITEM_SIZE * PixelRatio.get());
@@ -280,8 +288,6 @@ export default function ProfilePage() {
             }}
         >
             <DrawingViewer 
-                // Ici on garde l'URL simple car c'est une miniature statique (viewer simplifié)
-                // Mais idéalement, DrawingViewer devrait accepter l'URL optimisée si elle est chargée
                 imageUri={thumbOptimized || item.cloud_image_url}
                 canvasData={item.canvas_data}
                 viewerSize={ITEM_SIZE}
