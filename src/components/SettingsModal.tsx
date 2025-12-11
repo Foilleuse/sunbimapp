@@ -4,6 +4,7 @@ import { X, LogOut, Camera, User, ChevronRight, Bell, Shield, CircleHelp, Trash2
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabaseClient';
 import * as ImagePicker from 'expo-image-picker';
+import { decode } from 'base64-arraybuffer';
 import { getOptimizedImageUrl } from '../utils/imageOptimizer';
 import { useRouter } from 'expo-router';
 import * as AppleAuthentication from 'expo-apple-authentication';
@@ -62,11 +63,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
               allowsEditing: true,
               aspect: [1, 1],
               quality: 0.5,
-              base64: false, 
+              base64: true, // ✅ IMPORTANT: On demande le base64 pour l'upload ArrayBuffer
           });
 
           if (!result.canceled && result.assets && result.assets.length > 0) {
-              uploadAvatar(result.assets[0]);
+              const asset = result.assets[0];
+              if (asset.base64) {
+                  uploadAvatar(asset.base64, asset.mimeType || 'image/jpeg');
+              }
           }
       } catch (error) {
           Alert.alert('Erreur', 'Impossible de lancer la caméra.');
@@ -86,41 +90,41 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
         allowsEditing: true,
         aspect: [1, 1], 
         quality: 0.5, 
-        base64: false,
+        base64: true, // ✅ IMPORTANT: On demande le base64 pour l'upload ArrayBuffer
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        uploadAvatar(result.assets[0]);
+        const asset = result.assets[0];
+        if (asset.base64) {
+             uploadAvatar(asset.base64, asset.mimeType || 'image/jpeg');
+        }
       }
     } catch (error) {
       Alert.alert('Erreur', 'Impossible d\'ouvrir la galerie.');
     }
   };
 
-  const uploadAvatar = async (asset: ImagePicker.ImagePickerAsset) => {
+  const uploadAvatar = async (base64Data: string, mimeType: string) => {
     if (!user) return;
     setLoading(true);
     
     try {
         const fileName = `${user.id}/${new Date().getTime()}.jpg`;
 
-        // 1. Conversion de l'URI en Blob (Méthode la plus stable pour Expo/Supabase)
-        const response = await fetch(asset.uri);
-        const blob = await response.blob();
+        // 1. Conversion Base64 -> ArrayBuffer (Méthode robuste pour React Native + Supabase)
+        const arrayBuffer = decode(base64Data);
 
         // 2. Upload vers Supabase Storage
-        // IMPORTANT: Assurez-vous que le bucket 'avatars' existe et est Public ou a des policies RLS
         const { error: uploadError } = await supabase.storage
             .from('avatars')
-            .upload(fileName, blob, { 
-                contentType: 'image/jpeg', 
+            .upload(fileName, arrayBuffer, { 
+                contentType: mimeType || 'image/jpeg', 
                 upsert: true 
             });
 
         if (uploadError) {
-             // Détection spécifique si le bucket n'existe pas
              if (uploadError.message.includes("bucket")) {
-                 throw new Error("Le dossier de stockage 'avatars' n'existe pas dans Supabase.");
+                 throw new Error("Le bucket 'avatars' n'existe pas ou est mal configuré.");
              }
              throw uploadError;
         }
