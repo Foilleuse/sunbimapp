@@ -1,6 +1,5 @@
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform, Image, Pressable, Alert, PixelRatio } from 'react-native';
 import { useEffect, useState, memo, useCallback, useMemo } from 'react';
-// 1. Changement de l'import : Zap remplacé par Laugh
 import { User, Eye, MoreHorizontal, Lightbulb, Palette, Laugh, Heart } from 'lucide-react-native';
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
@@ -64,12 +63,12 @@ const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color }: any) => {
         <Pressable onPress={handlePress} style={styles.reactionBtn}>
             <Animated.View style={animatedStyle}>
                 <Icon 
-                    color={isActive ? color : "#000"} 
+                    // ✅ MODIFICATION : Blanc (#FFF) si inactif
+                    color={isActive ? color : "#FFF"} 
                     fill={isActive ? color : "transparent"} 
-                    size={32} // J'ai légèrement augmenté la taille (24->32) car il n'y a plus de texte
+                    size={40} 
                 />
             </Animated.View>
-            {/* 2. Suppression du Text affichant le count */}
         </Pressable>
     );
 };
@@ -292,7 +291,6 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
                         count={reactionCounts.beautiful} 
                         onPress={() => handleReaction('beautiful')}
                     />
-                    {/* 3. Remplacement de Zap par Laugh */}
                     <AnimatedReactionBtn 
                         icon={Laugh} 
                         color="#FF2D55" 
@@ -582,14 +580,21 @@ const styles = StyleSheet.create({
         alignItems: 'center', 
         width: '100%',
         paddingHorizontal: 10,
-        paddingBottom: 40 
+        // ✅ MODIFICATION : Augmenté à 60 pour remonter les icônes
+        paddingBottom: 60,
+        marginTop: 10
     },
     reactionBtn: { 
         alignItems: 'center', 
         justifyContent: 'center',
-        padding: 8
+        padding: 8,
+        // ✅ MODIFICATION : Ombre portée pour que le blanc ressorte
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 3,
+        elevation: 3
     },
-    // Styles non utilisés mais conservés pour référence ou futur usage
     reactionText: { 
         fontSize: 12, 
         fontWeight: '700', 
