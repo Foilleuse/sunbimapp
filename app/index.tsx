@@ -1,4 +1,6 @@
 import { View, Text, StyleSheet, ActivityIndicator, Alert, Modal, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Animated, Dimensions, AppState, Image, ScrollView } from 'react-native';
+// ✅ Ajout de ScrollView dans les imports ^^^
+
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '../src/lib/supabaseClient';
 import { DrawingCanvas, DrawingCanvasRef } from '../src/components/DrawingCanvas';
@@ -381,15 +383,12 @@ export default function DrawPage() {
             />
         )}
         
-        {/* 🔥 FILTRE CHAUD AJOUTÉ ICI */}
-        {/* Ce calque orange semi-transparent "réchauffe" l'image */}
+        {/* 🔥 FILTRE CHAUD (Sépia/Orangé) */}
         <View 
             pointerEvents="none" 
             style={{
                 ...StyleSheet.absoluteFillObject,
-                // Couleur orange avec 12% d'opacité. 
-                // Tu peux augmenter 0.12 vers 0.2 pour plus chaud, ou diminuer vers 0.05
-                backgroundColor: 'rgba(255, 160, 60, 0.12)', 
+                backgroundColor: 'rgba(255, 140, 0, 0.1)', // Orange avec 10% d'opacité
                 zIndex: 1, 
             }} 
         />
@@ -409,14 +408,16 @@ export default function DrawPage() {
           </View>
       )}
 
-      {/* MODALE CONNEXION */}
+      {/* MODALE CONNEXION (Fix de la vibration) */}
       <Modal animationType="slide" transparent={true} visible={authModalVisible && !user} onRequestClose={() => {
           if (!authLoading) setAuthModalVisible(false);
       }}>
+        {/* ✅ Behavior 'padding' sur iOS, 'undefined' sur Android pour éviter le conflit */}
         <KeyboardAvoidingView 
             behavior={Platform.OS === "ios" ? "padding" : undefined} 
             style={styles.modalOverlay}
         >
+            {/* ✅ ScrollView pour absorber le changement de taille sans sauter */}
             <ScrollView 
                 contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center' }}
                 keyboardShouldPersistTaps="handled"
@@ -477,7 +478,7 @@ export default function DrawPage() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* MODALE PARTAGE */}
+      {/* MODALE PARTAGE (Application du même fix pour cohérence) */}
       <Modal animationType="fade" transparent={true} visible={modalVisible} onRequestClose={() => setModalVisible(false)}>
         <KeyboardAvoidingView 
             behavior={Platform.OS === "ios" ? "padding" : undefined} 
@@ -556,16 +557,17 @@ export default function DrawPage() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
-  canvasContainer: { width: '100%', height: '100%', backgroundColor: '#FFF' },
+  container: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
+  canvasContainer: { width: '100%', height: '100%', backgroundColor: '#000' },
   
   header: { position: 'absolute', top: 0, left: 0, right: 0, paddingTop: 60, paddingBottom: 15, alignItems: 'center', zIndex: 10, pointerEvents: 'none' },
-  headerText: { fontSize: 32, fontWeight: '900', color: '#000000', textShadowColor: 'rgba(0,0,0,0.1)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 },
-  versionText: { fontSize: 10, color: 'rgba(0,0,0,0.5)', marginTop: 2 },
+  headerText: { fontSize: 32, fontWeight: '900', color: '#FFFFFF', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 0 },
+  versionText: { fontSize: 10, color: 'rgba(255,255,255,0.5)', marginTop: 2, textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 1 },
   
   noCloudText: { fontSize: 18, color: '#666', textAlign: 'center' },
   errorText: { color: 'red', textAlign: 'center' },
   
+  // ✅ MODIFICATION : Suppression de justifyContent et alignItems ici (déplacés dans ScrollView contentContainerStyle)
   modalOverlay: { 
       flex: 1, 
       backgroundColor: 'rgba(0,0,0,0.8)' 
