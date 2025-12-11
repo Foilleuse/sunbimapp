@@ -10,7 +10,7 @@ import * as Updates from 'expo-updates';
 import React from 'react';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
-import { X } from 'lucide-react-native';
+// Suppression de l'import de X car il n'est plus utilisé
 
 interface Cloud {
   id: string;
@@ -40,8 +40,7 @@ export default function DrawPage() {
   const [strokeWidth, setStrokeWidth] = useState(2);
   const [isEraserMode, setIsEraserMode] = useState(false);
   
-  // ÉTAT POUR L'IMAGE ORIGINALE
-  const [showOriginalImage, setShowOriginalImage] = useState(false);
+  // Suppression de l'état showOriginalImage
   
   const [modalVisible, setModalVisible] = useState(false);
   const [tagText, setTagText] = useState('');
@@ -263,9 +262,7 @@ export default function DrawPage() {
   const handleRedo = () => canvasRef.current?.redo();
   const toggleEraser = () => setIsEraserMode((prev) => !prev);
   
-  const showOriginal = () => {
-      setShowOriginalImage(true);
-  };
+  // Suppression de la fonction showOriginal
 
   const handleSharePress = () => {
     if (!canvasRef.current) return;
@@ -400,36 +397,12 @@ export default function DrawPage() {
                 isEraserMode={isEraserMode} toggleEraser={toggleEraser}
                 onShare={handleSharePress}
                 isAuthenticated={!!user} 
-                showOriginal={showOriginalImage}
-                onShowOriginal={showOriginal} 
+                // showOriginal et onShowOriginal supprimés
              />
           </View>
       )}
 
-      {/* MODALE VISUALISATION IMAGE ORIGINALE */}
-      <Modal 
-          visible={showOriginalImage} 
-          animationType="fade" 
-          transparent={true} 
-          onRequestClose={() => setShowOriginalImage(false)}
-      >
-          {/* Fond semi-transparent pour voir l'arrière plan (l'index) */}
-          <View style={styles.fullImageOverlay}>
-              <TouchableOpacity 
-                  style={styles.fullImageCloseBtn} 
-                  onPress={() => setShowOriginalImage(false)}
-                  hitSlop={20}
-              >
-                  <X color="#FFF" size={32} />
-              </TouchableOpacity>
-              
-              <Image 
-                  source={{ uri: cloud.image_url }} 
-                  style={{ width: '100%', height: '100%' }} 
-                  resizeMode="contain" 
-              />
-          </View>
-      </Modal>
+      {/* MODALE D'IMAGE ORIGINALE SUPPRIMÉE */}
 
       {/* MODALES (Connexion, Partage...) */}
       <Modal animationType="slide" transparent={true} visible={authModalVisible && !user} onRequestClose={() => {
@@ -623,21 +596,5 @@ const styles = StyleSheet.create({
       fontWeight: 'bold',
       fontSize: 16,
   },
-
-  // Styles pour la vue image originale
-  fullImageOverlay: {
-      flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.9)', 
-      justifyContent: 'center',
-      alignItems: 'center',
-  },
-  fullImageCloseBtn: {
-      position: 'absolute',
-      top: 60, 
-      right: 25,
-      zIndex: 10,
-      padding: 10,
-      backgroundColor: 'rgba(0,0,0,0.5)',
-      borderRadius: 30,
-  }
+  // Styles fullImageOverlay et fullImageCloseBtn supprimés
 });
