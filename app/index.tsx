@@ -561,8 +561,8 @@ const styles = StyleSheet.create({
   canvasContainer: { width: '100%', height: '100%', backgroundColor: '#FFF' },
   
   header: { position: 'absolute', top: 0, left: 0, right: 0, paddingTop: 60, paddingBottom: 15, alignItems: 'center', zIndex: 10, pointerEvents: 'none' },
-  headerText: { fontSize: 32, fontWeight: '900', color: '#ffffffff', textShadowColor: 'rgba(195, 195, 195, 0.1)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 },
-  versionText: { fontSize: 10, color: 'rgba(0,0,0,0.5)', marginTop: 2 },
+  headerText: { fontSize: 32, fontWeight: '900', color: '#FFFFFF', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 0 },
+  versionText: { fontSize: 10, color: 'rgba(255,255,255,0.5)', marginTop: 2, textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 1 },
   
   noCloudText: { fontSize: 18, color: '#666', textAlign: 'center' },
   errorText: { color: 'red', textAlign: 'center' },
