@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Alert, ActivityIn
 import { useState, useRef, useEffect } from 'react';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
-import { Cloud, Check, X } from 'lucide-react-native'; // Ajout d'icônes pour valider/annuler
+import { Cloud, Check, X } from 'lucide-react-native';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
 import { supabase } from '../../src/lib/supabaseClient';
 import { useAuth } from '../../src/contexts/AuthContext';
@@ -18,10 +18,13 @@ export default function CameraPage() {
   const [isTakingPhoto, setIsTakingPhoto] = useState(false); 
   const [isUploading, setIsUploading] = useState(false);
 
-  // NOUVEL ÉTAT : Image capturée en attente de validation
+  // État de l'image capturée
   const [capturedImage, setCapturedImage] = useState<{ uri: string; base64?: string } | null>(null);
 
-  const { width: screenWidth } = Dimensions.get('window');
+  const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+  
+  // CALCUL DU RATIO 3:4
+  // La hauteur de la caméra doit être exactement 4/3 de la largeur
   const CAMERA_HEIGHT = screenWidth * (4 / 3);
 
   useEffect(() => {
@@ -30,9 +33,7 @@ export default function CameraPage() {
     }
   }, [permission]);
 
-  if (!permission) {
-    return <View style={styles.container}><ActivityIndicator size="large" color="#fff" /></View>;
-  }
+  if (!permission) return <View style={styles.container}><ActivityIndicator size="large" color="#fff" /></View>;
 
   if (!permission.granted) {
     return (
@@ -54,50 +55,45 @@ export default function CameraPage() {
       }
   };
 
-  // 1. PRENDRE LA PHOTO (Et l'afficher en preview)
+  // 1. PRENDRE LA PHOTO
   const takePicture = async () => {
     if (cameraRef.current && !isTakingPhoto && !isUploading) {
         setIsTakingPhoto(true);
         try {
+            // Sans manipulateur, on prend la photo telle quelle.
+            // Comme le composant CameraView est contraint en 3:4 par le style,
+            // et que le capteur est nativement 4:3 sur la plupart des téléphones,
+            // l'image sortira au bon ratio.
             const photo = await cameraRef.current.takePictureAsync({
-                quality: 0.7,
-                base64: true, // On a besoin du base64 pour l'upload final
+                quality: 0.8,
+                base64: true, 
                 skipProcessing: false, 
                 shutterSound: true,
             });
             
             if (photo && photo.uri) {
-                // Au lieu d'upload direct, on stocke pour prévisualisation
                 setCapturedImage({ uri: photo.uri, base64: photo.base64 });
             } else {
-                throw new Error("Aucune image retournée par la caméra.");
+                throw new Error("Erreur capture photo.");
             }
-
         } catch (e: any) {
             console.error("Erreur capture:", e);
-            Alert.alert("Erreur", e.message || "Impossible de prendre la photo.");
+            Alert.alert("Erreur", "Impossible de prendre la photo.");
         } finally {
             setIsTakingPhoto(false);
         }
     }
   };
 
-  // 2. ANNULER LA PHOTO (Retour caméra)
-  const retakePicture = () => {
-      setCapturedImage(null);
-  };
+  const retakePicture = () => setCapturedImage(null);
 
-  // 3. CONFIRMER ET UPLOAD
   const confirmUpload = async () => {
       if (!capturedImage?.base64) return;
       await uploadToSupabase(capturedImage.base64);
   };
 
   const uploadToSupabase = async (base64Image: string) => {
-      if (!user) {
-          Alert.alert("Oups", "Connecte-toi pour envoyer tes nuages !");
-          return;
-      }
+      if (!user) return Alert.alert("Oups", "Connecte-toi pour envoyer tes nuages !");
 
       setIsUploading(true);
       try {
@@ -106,10 +102,7 @@ export default function CameraPage() {
 
           const { error: uploadError } = await supabase.storage
               .from('cloud-submissions')
-              .upload(fileName, arrayBuffer, {
-                  contentType: 'image/jpeg',
-                  upsert: false
-              });
+              .upload(fileName, arrayBuffer, { contentType: 'image/jpeg', upsert: false });
 
           if (uploadError) throw uploadError;
 
@@ -119,114 +112,101 @@ export default function CameraPage() {
 
           const { error: dbError } = await supabase
               .from('cloud_submissions')
-              .insert({
-                  user_id: user.id,
-                  image_url: publicUrl,
-                  status: 'pending'
-              });
+              .insert({ user_id: user.id, image_url: publicUrl, status: 'pending' });
 
           if (dbError) throw dbError;
 
           Alert.alert("Succès !", "Ton nuage a été envoyé.", [
-              { text: "Super", onPress: () => {
-                  setCapturedImage(null); // Reset
-                  router.back(); 
-              }}
+              { text: "Super", onPress: () => { setCapturedImage(null); router.back(); }}
           ]);
 
       } catch (e: any) {
           console.error("Erreur upload:", e);
-          Alert.alert("Erreur d'envoi", e.message || "Impossible d'envoyer le nuage.");
+          Alert.alert("Erreur d'envoi", e.message);
       } finally {
           setIsUploading(false);
       }
   };
 
-  // --- MODE PREVIEW (Si une image est capturée) ---
-  if (capturedImage) {
-      return (
-        <View style={styles.container}>
-            <SunbimHeader showCloseButton={true} onClose={retakePicture} />
-            
-            <View style={[styles.cameraContainer, { width: screenWidth, height: CAMERA_HEIGHT }]}>
-                <Image source={{ uri: capturedImage.uri }} style={{ flex: 1 }} resizeMode="cover" />
-                
-                {/* Overlay de chargement si en cours d'envoi */}
-                {isUploading && (
-                    <View style={styles.loadingOverlay}>
-                        <ActivityIndicator size="large" color="#FFF" />
-                        <Text style={styles.loadingText}>Envoi du nuage...</Text>
-                    </View>
-                )}
-            </View>
-
-            {/* BARRE DE VALIDATION */}
-            <View style={styles.previewControls}>
-                {/* Bouton Annuler */}
-                <TouchableOpacity style={[styles.actionBtn, styles.retakeBtn]} onPress={retakePicture} disabled={isUploading}>
-                    <X color="#FFF" size={32} />
-                </TouchableOpacity>
-
-                {/* Bouton Valider */}
-                <TouchableOpacity style={[styles.actionBtn, styles.confirmBtn]} onPress={confirmUpload} disabled={isUploading}>
-                    <Check color="#000" size={32} />
-                </TouchableOpacity>
-            </View>
-        </View>
-      );
-  }
-
-  // --- MODE CAMÉRA (Par défaut) ---
+  // --- RENDU ---
   return (
     <View style={styles.container}>
-        <SunbimHeader showCloseButton={true} onClose={() => router.back()} />
+        <SunbimHeader showCloseButton={true} onClose={() => capturedImage ? retakePicture() : router.back()} transparent={true} />
 
-        <View style={[styles.cameraContainer, { width: screenWidth, height: CAMERA_HEIGHT }]}>
-            <CameraView 
-                ref={cameraRef}
-                style={StyleSheet.absoluteFill}
-                facing="back"
-                zoom={zoom}
-                animateShutter={false}
-                flash="off" 
-            />
-            
-            <View style={styles.zoomContainer}>
-                {['1x', '1.5x', '2x'].map((z) => {
-                    let isActive = false;
-                    if (z === '1x' && zoom === 0) isActive = true;
-                    if (z === '1.5x' && zoom === 0.005) isActive = true;
-                    if (z === '2x' && zoom === 0.01) isActive = true;
+        {/* ZONE CAMÉRA / PREVIEW : Hauteur Fixe 3:4 */}
+        <View style={{ width: screenWidth, height: CAMERA_HEIGHT, backgroundColor: '#000', marginTop: 0 }}>
+            {capturedImage ? (
+                // Mode Prévisualisation (Image figée)
+                <Image 
+                    source={{ uri: capturedImage.uri }} 
+                    style={{ width: '100%', height: '100%' }} 
+                    resizeMode="cover" 
+                />
+            ) : (
+                // Mode Caméra Live
+                <CameraView 
+                    ref={cameraRef}
+                    style={{ flex: 1 }}
+                    facing="back"
+                    zoom={zoom}
+                    animateShutter={false}
+                    flash="off" 
+                />
+            )}
 
-                    return (
-                        <TouchableOpacity 
-                            key={z} 
-                            style={[styles.zoomBtn, isActive && styles.zoomBtnActive]} 
-                            onPress={() => handleZoom(z)}
-                            activeOpacity={0.7}
-                        >
-                            <Text style={[styles.zoomText, isActive && styles.zoomTextActive]}>
-                                {z}
-                            </Text>
-                        </TouchableOpacity>
-                    );
-                })}
-            </View>
+            {/* Overlay Zoom (uniquement en mode caméra) */}
+            {!capturedImage && (
+                <View style={styles.zoomOverlay}>
+                     {['1x', '1.5x', '2x'].map((z) => {
+                        let isActive = (z === '1x' && zoom === 0) || (z === '1.5x' && zoom === 0.005) || (z === '2x' && zoom === 0.01);
+                        return (
+                            <TouchableOpacity key={z} style={[styles.zoomBtn, isActive && styles.zoomBtnActive]} onPress={() => handleZoom(z)}>
+                                <Text style={[styles.zoomText, isActive && styles.zoomTextActive]}>{z}</Text>
+                            </TouchableOpacity>
+                        );
+                    })}
+                </View>
+            )}
+
+            {/* Overlay Loading */}
+            {isUploading && (
+                <View style={styles.loadingOverlay}>
+                    <ActivityIndicator size="large" color="#FFF" />
+                    <Text style={styles.loadingText}>Envoi du nuage...</Text>
+                </View>
+            )}
         </View>
 
-        <View style={styles.controlsContainer}>
-            <TouchableOpacity 
-                style={[styles.captureBtn, isTakingPhoto && { opacity: 0.5 }]} 
-                onPress={takePicture} 
-                activeOpacity={0.7}
-                disabled={isTakingPhoto}
-            >
-                {isTakingPhoto ? (
-                    <ActivityIndicator color="#FFF" />
-                ) : (
-                    <Cloud color="#FFF" size={72} fill="#FFF" />
-                )}
-            </TouchableOpacity>
+        {/* ZONE NOIRE DU BAS (Reste de l'écran) */}
+        {/* C'est ici qu'on met les contrôles, en dehors de la zone photo */}
+        <View style={styles.bottomControlArea}>
+            
+            {capturedImage ? (
+                // --- CONTRÔLES DE VALIDATION ---
+                <View style={styles.validationRow}>
+                     <TouchableOpacity style={[styles.actionBtn, styles.retakeBtn]} onPress={retakePicture} disabled={isUploading}>
+                        <X color="#FFF" size={32} />
+                    </TouchableOpacity>
+                    <Text style={styles.previewText}>Ça te plaît ?</Text>
+                    <TouchableOpacity style={[styles.actionBtn, styles.confirmBtn]} onPress={confirmUpload} disabled={isUploading}>
+                        <Check color="#000" size={32} />
+                    </TouchableOpacity>
+                </View>
+            ) : (
+                // --- CONTRÔLES DE CAPTURE ---
+                <View style={styles.captureColumn}>
+                    <Text style={styles.propositionText}>Propose un nuage du jour !</Text>
+                    
+                    <TouchableOpacity 
+                        style={[styles.captureBtn, isTakingPhoto && { opacity: 0.5 }]} 
+                        onPress={takePicture} 
+                        activeOpacity={0.7}
+                        disabled={isTakingPhoto}
+                    >
+                        {isTakingPhoto ? <ActivityIndicator color="#FFF" /> : <Cloud color="#FFF" size={60} fill="#FFF" />}
+                    </TouchableOpacity>
+                </View>
+            )}
         </View>
     </View>
   );
@@ -237,91 +217,71 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
-  cameraContainer: {
-    overflow: 'hidden',
-    backgroundColor: '#111',
-    position: 'relative',
-  },
-  loadingOverlay: {
-      ...StyleSheet.absoluteFillObject,
-      backgroundColor: 'rgba(0,0,0,0.7)',
-      justifyContent: 'center',
-      alignItems: 'center',
-      zIndex: 50
-  },
-  loadingText: {
-      color: '#FFF',
-      marginTop: 10,
-      fontWeight: '600'
-  },
-  message: { textAlign: 'center', color: '#FFF', marginTop: 100 },
-  permissionBtn: {
-      marginTop: 20,
-      alignSelf: 'center',
-      backgroundColor: '#FFF',
-      padding: 15,
-      borderRadius: 10
-  },
-  permissionText: { fontWeight: 'bold', color: '#000' },
   
-  zoomContainer: {
-      position: 'absolute',
-      bottom: 20, 
-      alignSelf: 'center',
-      flexDirection: 'row',
-      backgroundColor: 'rgba(0,0,0,0.6)',
-      borderRadius: 20,
-      padding: 6,
-      gap: 10,
+  // --- CAMERA ZONE ---
+  zoomOverlay: {
+    position: 'absolute',
+    bottom: 10,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 20,
+    padding: 4,
+    gap: 8,
   },
-  zoomBtn: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
-      justifyContent: 'center',
-      alignItems: 'center',
-      backgroundColor: 'transparent'
-  },
+  zoomBtn: { width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
   zoomBtnActive: { backgroundColor: 'rgba(255,255,255,0.3)' },
-  zoomText: { color: '#CCC', fontWeight: '600', fontSize: 12 },
-  zoomTextActive: { color: '#FFF', fontWeight: 'bold', fontSize: 13 },
+  zoomText: { color: '#CCC', fontSize: 11, fontWeight: '600' },
+  zoomTextActive: { color: '#FFF', fontWeight: 'bold' },
 
-  controlsContainer: {
-      flex: 1,
+  loadingOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', zIndex: 50 },
+  loadingText: { color: '#FFF', marginTop: 10, fontWeight: '600' },
+
+  // --- BOTTOM BLACK AREA ---
+  bottomControlArea: {
+      flex: 1, // Prend tout l'espace restant en bas
       backgroundColor: '#000',
       justifyContent: 'center',
       alignItems: 'center',
-      paddingBottom: 20
+      paddingBottom: 20, // Marge du bas
+  },
+  
+  // Mode Capture
+  captureColumn: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      width: '100%',
+  },
+  propositionText: {
+      color: '#FFF',
+      fontSize: 18,
+      fontWeight: '700',
+      marginBottom: 15, // Espace entre texte et bouton
+      textAlign: 'center'
   },
   captureBtn: {
-      justifyContent: 'center',
-      alignItems: 'center',
+      // Pas de fond, juste l'icône, ou un cercle subtil
       padding: 10,
   },
-  
-  // --- STYLES PREVIEW ---
-  previewControls: {
-      flex: 1,
-      backgroundColor: '#000',
+
+  // Mode Validation
+  validationRow: {
       flexDirection: 'row',
-      justifyContent: 'space-around', // Espacement équilibré
+      width: '100%',
+      justifyContent: 'space-around',
       alignItems: 'center',
-      paddingBottom: 20
   },
-  actionBtn: {
-      width: 70,
-      height: 70,
-      borderRadius: 35,
-      justifyContent: 'center',
-      alignItems: 'center',
-      borderWidth: 2,
+  previewText: {
+      color: '#CCC',
+      fontSize: 16,
+      fontWeight: '600'
   },
-  retakeBtn: {
-      backgroundColor: 'transparent',
-      borderColor: '#FFF',
-  },
-  confirmBtn: {
-      backgroundColor: '#FFF',
-      borderColor: '#FFF',
-  }
+  actionBtn: { width: 64, height: 64, borderRadius: 32, justifyContent: 'center', alignItems: 'center', borderWidth: 2 },
+  retakeBtn: { backgroundColor: 'transparent', borderColor: '#FFF' },
+  confirmBtn: { backgroundColor: '#FFF', borderColor: '#FFF' },
+
+  // Permissions
+  message: { textAlign: 'center', color: '#FFF', marginTop: 100 },
+  permissionBtn: { marginTop: 20, alignSelf: 'center', backgroundColor: '#FFF', padding: 15, borderRadius: 10 },
+  permissionText: { fontWeight: 'bold', color: '#000' },
 });
