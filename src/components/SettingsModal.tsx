@@ -4,11 +4,10 @@ import { X, LogOut, Camera, User, ChevronRight, Bell, Shield, CircleHelp, Trash2
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabaseClient';
 import * as ImagePicker from 'expo-image-picker';
-import { decode } from 'base64-arraybuffer';
 import { getOptimizedImageUrl } from '../utils/imageOptimizer';
 import { useRouter } from 'expo-router';
 import * as AppleAuthentication from 'expo-apple-authentication';
-import { GoogleSignin, statusCodes, GoogleSigninButton } from '@react-native-google-signin/google-signin';
+import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 
 interface SettingsModalProps {
   visible: boolean;
@@ -26,12 +25,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
 
   // --- CONFIGURATION GOOGLE SIGNIN ---
   useEffect(() => {
-    GoogleSignin.configure({
-      // Remplacez par vos IDs clients réels depuis la console Google Cloud
-      iosClientId: 'VOTRE_IOS_CLIENT_ID_GOOGLE.apps.googleusercontent.com',
-      webClientId: 'VOTRE_WEB_CLIENT_ID_GOOGLE.apps.googleusercontent.com', // Pour Android
-      scopes: ['profile', 'email'],
-    });
+    try {
+        GoogleSignin.configure({
+            // Remplacez par vos IDs clients réels depuis la console Google Cloud
+            iosClientId: 'VOTRE_IOS_CLIENT_ID_GOOGLE.apps.googleusercontent.com',
+            webClientId: 'VOTRE_WEB_CLIENT_ID_GOOGLE.apps.googleusercontent.com', // Pour Android
+            scopes: ['profile', 'email'],
+        });
+    } catch (e) {
+        console.log("Erreur config Google Signin (ignorer si non configuré):", e);
+    }
   }, []);
 
   // --- GESTION PHOTO DE PROFIL ---
@@ -60,12 +63,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
               allowsEditing: true,
               aspect: [1, 1],
               quality: 0.5,
-              base64: true,
+              base64: false, // Pas nécessaire pour FormData
           });
 
           if (!result.canceled && result.assets && result.assets.length > 0) {
-              const asset = result.assets[0];
-              if (asset.base64) uploadAvatar(asset.base64);
+              uploadAvatar(result.assets[0]);
           }
       } catch (error) {
           Alert.alert('Erreur', 'Impossible de lancer la caméra.');
@@ -85,29 +87,38 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
         allowsEditing: true,
         aspect: [1, 1], 
         quality: 0.5, 
-        base64: true, 
+        base64: false,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        const asset = result.assets[0];
-        if (asset.base64) uploadAvatar(asset.base64);
+        uploadAvatar(result.assets[0]);
       }
     } catch (error) {
       Alert.alert('Erreur', 'Impossible d\'ouvrir la galerie.');
     }
   };
 
-  const uploadAvatar = async (base64Data: string) => {
+  const uploadAvatar = async (asset: ImagePicker.ImagePickerAsset) => {
     if (!user) return;
     setLoading(true);
     
     try {
         const fileName = `${user.id}/${new Date().getTime()}.jpg`;
-        const contentType = 'image/jpeg';
+        
+        // Utilisation de FormData pour un upload plus robuste
+        const formData = new FormData();
+        formData.append('file', {
+            uri: asset.uri,
+            name: 'avatar.jpg',
+            type: 'image/jpeg', 
+        } as any);
 
         const { error: uploadError } = await supabase.storage
             .from('avatars')
-            .upload(fileName, decode(base64Data), { contentType, upsert: true });
+            .upload(fileName, formData, { 
+                contentType: 'image/jpeg', 
+                upsert: true 
+            });
 
         if (uploadError) throw uploadError;
 
@@ -122,17 +133,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
 
         Alert.alert("Succès", "Photo de profil mise à jour !");
     } catch (error: any) {
-        console.error(error);
-        Alert.alert("Erreur", "Echec de l'upload.");
+        console.error("Erreur upload:", error);
+        Alert.alert("Erreur", "Echec de l'upload : " + (error.message || "Erreur inconnue"));
     } finally {
         setLoading(false);
     }
   };
 
   // --- SOCIAL LOGIN (POUR LINKER UN COMPTE) ---
-  // Note: Si l'utilisateur est déjà connecté, cela lie le compte.
-  // Si c'est pour se connecter depuis l'écran de login, la logique serait similaire.
-  
   const linkGoogle = async () => {
     try {
       await GoogleSignin.hasPlayServices();
