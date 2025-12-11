@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Alert, ActivityIndicator, Image, SafeAreaView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Alert, ActivityIndicator, Image, SafeAreaView, Platform } from 'react-native';
 import { useState, useRef, useEffect } from 'react';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
@@ -21,11 +21,15 @@ export default function CameraPage() {
   // État de l'image capturée
   const [capturedImage, setCapturedImage] = useState<{ uri: string; base64?: string } | null>(null);
 
-  const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+  const { width: screenWidth } = Dimensions.get('window');
   
   // CALCUL DU RATIO 3:4
   // La hauteur de la caméra doit être exactement 4/3 de la largeur
   const CAMERA_HEIGHT = screenWidth * (4 / 3);
+  
+  // Hauteur estimée du header pour le décalage (paddingTop 60 + content ~40 + paddingBottom 15)
+  // On ajoute une marge de sécurité pour que ça ne colle pas
+  const HEADER_OFFSET = Platform.OS === 'ios' ? 110 : 110; 
 
   useEffect(() => {
     if (permission && !permission.granted) {
@@ -132,25 +136,16 @@ export default function CameraPage() {
   return (
     <View style={styles.container}>
         {/* HEADER NOIR */}
-        {/* On retire le prop 'transparent' pour que le header ait son fond par défaut (blanc), 
-            mais on surcharge le style via un wrapper ou directement si le composant le permettait.
-            Ici, le composant SunbimHeader ne permet pas de changer la couleur de fond via props, 
-            sauf 'transparent'. 
-            SOLUTION : On garde transparent={true} MAIS on met un fond noir derrière via le wrapper,
-            ET on s'assure que le contenu du header est visible (blanc).
-            
-            Si le header n'apparaît pas, c'est peut-être un problème de zIndex ou de hauteur.
-        */}
-        <View style={{ backgroundColor: '#000', width: '100%', zIndex: 100 }}>
+        <View style={{ zIndex: 100 }}>
             <SunbimHeader 
                 showCloseButton={true} 
                 onClose={() => capturedImage ? retakePicture() : router.back()} 
-                transparent={true} // Texte blanc
+                transparent={true} // Texte blanc, position absolute
             />
         </View>
 
         {/* ZONE CAMÉRA / PREVIEW : Hauteur Fixe 3:4 */}
-        <View style={{ width: screenWidth, height: CAMERA_HEIGHT, backgroundColor: '#000', marginTop: 0 }}>
+        <View style={{ width: screenWidth, height: CAMERA_HEIGHT, backgroundColor: '#000', marginTop: HEADER_OFFSET }}>
             {capturedImage ? (
                 // Mode Prévisualisation (Image figée)
                 <Image 
