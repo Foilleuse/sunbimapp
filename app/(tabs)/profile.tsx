@@ -1,5 +1,5 @@
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ActivityIndicator, Alert, Image, FlatList, Dimensions, Modal, Pressable, KeyboardAvoidingView, Platform, SafeAreaView } from 'react-native';
-import { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ActivityIndicator, Alert, Image, FlatList, Dimensions, Modal, Pressable, KeyboardAvoidingView, Platform, SafeAreaView, PixelRatio } from 'react-native';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'expo-router';
 import { supabase } from '../../src/lib/supabaseClient';
 import { useAuth } from '../../src/contexts/AuthContext';
@@ -8,9 +8,45 @@ import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SettingsModal } from '../../src/components/SettingsModal'; 
 import { SunbimHeader } from '../../src/components/SunbimHeader';
 import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer';
+// Ajout des imports d'animation
+import Animated, { useSharedValue, useAnimatedStyle, withSpring, withSequence } from 'react-native-reanimated';
 
 // Types de réactions possibles
 type ReactionType = 'like' | 'smart' | 'beautiful' | 'crazy' | null;
+
+// --- COMPOSANT BOUTON DE RÉACTION ANIMÉ (Recopié du Feed) ---
+const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color, count }: any) => {
+    const scale = useSharedValue(1);
+
+    const animatedStyle = useAnimatedStyle(() => {
+        return {
+            transform: [{ scale: scale.value }],
+        };
+    });
+
+    const handlePress = () => {
+        scale.value = withSequence(
+            withSpring(1.6, { damping: 10, stiffness: 200 }),
+            withSpring(1, { damping: 10, stiffness: 200 })
+        );
+        onPress();
+    };
+
+    return (
+        <Pressable onPress={handlePress} style={styles.reactionBtn}>
+            <Animated.View style={animatedStyle}>
+                <Icon
+                    color={isActive ? color : "#000"}
+                    fill={isActive ? color : "transparent"}
+                    size={24}
+                />
+            </Animated.View>
+            <Text style={[styles.reactionText, isActive && styles.activeText]}>
+                {count || 0}
+            </Text>
+        </Pressable>
+    );
+};
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -52,6 +88,16 @@ export default function ProfilePage() {
         fetchReactionsState();
     }
   }, [selectedDrawing]);
+
+  // 🔥 OPTIMISATION MODALE : Calcul de l'image HD 3:4 pour la vue détaillée
+  const optimizedModalImageUri = useMemo(() => {
+      if (!selectedDrawing?.cloud_image_url) return null;
+      
+      const w = Math.round(screenWidth * PixelRatio.get());
+      const h = Math.round(w * (4/3)); // Force le ratio 3:4
+
+      return getOptimizedImageUrl(selectedDrawing.cloud_image_url, w, h);
+  }, [selectedDrawing, screenWidth]);
 
   const fetchHistory = async () => {
     try {
@@ -154,60 +200,55 @@ export default function ProfilePage() {
 
         const previousReaction = userReaction;
         const previousCounts = { ...reactionCounts };
+        
+        // Logique optimiste UI
+        let newReaction: ReactionType = type;
+        let newCounts = { ...reactionCounts };
 
         if (userReaction === type) {
-            setUserReaction(null);
-            setReactionCounts(prev => ({
-                ...prev,
-                [type]: Math.max(0, prev[type] - 1)
-            }));
-            
-            try {
-                await supabase.from('reactions').delete().eq('user_id', user.id).eq('drawing_id', selectedDrawing.id);
-            } catch (e) {
-                setUserReaction(previousReaction);
-                setReactionCounts(previousCounts);
+            newReaction = null;
+            newCounts[type] = Math.max(0, newCounts[type] - 1);
+        } else {
+            if (previousReaction) {
+                newCounts[previousReaction] = Math.max(0, newCounts[previousReaction] - 1);
             }
-        } 
-        else {
-            setUserReaction(type);
-            setReactionCounts(prev => {
-                const newCounts = { ...prev };
-                if (previousReaction) {
-                    newCounts[previousReaction] = Math.max(0, newCounts[previousReaction] - 1);
-                }
-                newCounts[type]++;
-                return newCounts;
-            });
+            newCounts[type]++;
+        }
 
-            try {
+        setUserReaction(newReaction);
+        setReactionCounts(newCounts);
+
+        try {
+            if (newReaction === null) {
+                await supabase.from('reactions').delete().eq('user_id', user.id).eq('drawing_id', selectedDrawing.id);
+            } else {
                 const { error } = await supabase
                     .from('reactions')
                     .upsert({
                         user_id: user.id,
                         drawing_id: selectedDrawing.id,
-                        reaction_type: type
+                        reaction_type: newReaction
                     }, { onConflict: 'user_id, drawing_id' });
-                
                 if (error) throw error;
-            } catch (e) {
-                console.error(e);
-                setUserReaction(previousReaction);
-                setReactionCounts(previousCounts);
             }
+        } catch (e) {
+            console.error(e);
+            setUserReaction(previousReaction);
+            setReactionCounts(previousCounts);
         }
   };
 
   const handleReport = () => {
-    // Sur son propre profil, on ne se signale pas soi-même, mais l'option pourrait servir pour supprimer (pas demandé ici)
     Alert.alert("Info", "Ceci est votre propre dessin.");
   };
 
   const profileAvatarOptimized = profile?.avatar_url ? getOptimizedImageUrl(profile.avatar_url, 100) : null;
-  const selectedDrawingImageOptimized = selectedDrawing ? getOptimizedImageUrl(selectedDrawing.cloud_image_url, screenWidth) : null;
 
   const renderItem = ({ item }: { item: any }) => {
-      const thumbOptimized = getOptimizedImageUrl(item.cloud_image_url, ITEM_SIZE);
+      // Optimisation grille : calcul précis avec PixelRatio
+      const thumbW = Math.round(ITEM_SIZE * PixelRatio.get());
+      const thumbH = Math.round(thumbW * (4/3));
+      const thumbOptimized = getOptimizedImageUrl(item.cloud_image_url, thumbW, thumbH);
 
       if (item.type === 'missed') {
           return (
@@ -239,7 +280,9 @@ export default function ProfilePage() {
             }}
         >
             <DrawingViewer 
-                imageUri={item.cloud_image_url}
+                // Ici on garde l'URL simple car c'est une miniature statique (viewer simplifié)
+                // Mais idéalement, DrawingViewer devrait accepter l'URL optimisée si elle est chargée
+                imageUri={thumbOptimized || item.cloud_image_url}
                 canvasData={item.canvas_data}
                 viewerSize={ITEM_SIZE}
                 transparentMode={false}
@@ -335,7 +378,7 @@ export default function ProfilePage() {
           )}
       </View>
 
-      {/* MODALE D'AGRANDISSEMENT (STYLE FEED CARD) */}
+      {/* MODALE D'AGRANDISSEMENT */}
       <Modal visible={!!selectedDrawing} animationType="slide" presentationStyle="pageSheet" onRequestClose={closeDrawing}>
           {selectedDrawing && (
               <SafeAreaView style={styles.safeAreaContainer}>
@@ -350,16 +393,20 @@ export default function ProfilePage() {
                     onPressOut={() => setIsHolding(false)}
                     style={{ width: screenWidth, aspectRatio: 3/4, backgroundColor: '#F0F0F0' }}
                   >
+                      {/* Image de fond statique optimisée */}
                       <Image 
-                            source={{ uri: selectedDrawingImageOptimized || selectedDrawing.cloud_image_url }}
+                            source={{ uri: optimizedModalImageUri || selectedDrawing.cloud_image_url }}
                             style={[StyleSheet.absoluteFill, { opacity: 1 }]}
                             resizeMode="cover"
                         />
                       <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                         <DrawingViewer 
-                            imageUri={selectedDrawing.cloud_image_url}
+                            // ✅ Passe l'URI optimisée 3:4 au DrawingViewer pour alignement parfait
+                            imageUri={optimizedModalImageUri || selectedDrawing.cloud_image_url}
                             canvasData={selectedDrawing.canvas_data}
                             viewerSize={screenWidth}
+                            // Pour le modal, on peut déduire la hauteur
+                            viewerHeight={screenWidth * (4/3)} 
                             transparentMode={true}
                             animated={true}
                             startVisible={false}
@@ -368,7 +415,7 @@ export default function ProfilePage() {
                       <Text style={styles.hintText}>Maintenir pour voir l'original</Text>
                   </Pressable>
 
-                  {/* INFO CARD STYLE FEED */}
+                  {/* INFO CARD AVEC BOUTONS ANIMÉS */}
                   <View style={styles.infoCard}>
                     <View style={styles.infoContent}>
                         <View style={styles.titleRow}>
@@ -383,27 +430,36 @@ export default function ProfilePage() {
                         
                         <Text style={styles.userName}>{profile?.display_name || "Anonyme"}</Text>
 
-                        {/* BARRE DE RÉACTIONS */}
+                        {/* ✅ BARRE DE RÉACTIONS ANIMÉE */}
                         <View style={styles.reactionBar}>
-                            <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('like')}>
-                                <Heart color={userReaction === 'like' ? "#FF3B30" : "#000"} fill={userReaction === 'like' ? "#FF3B30" : "transparent"} size={24} />
-                                <Text style={[styles.reactionText, userReaction === 'like' && styles.activeText]}>{reactionCounts.like}</Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('smart')}>
-                                <Lightbulb color={userReaction === 'smart' ? "#FFCC00" : "#000"} fill={userReaction === 'smart' ? "#FFCC00" : "transparent"} size={24} />
-                                <Text style={[styles.reactionText, userReaction === 'smart' && styles.activeText]}>{reactionCounts.smart}</Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('beautiful')}>
-                                <Palette color={userReaction === 'beautiful' ? "#5856D6" : "#000"} fill={userReaction === 'beautiful' ? "#5856D6" : "transparent"} size={24} />
-                                <Text style={[styles.reactionText, userReaction === 'beautiful' && styles.activeText]}>{reactionCounts.beautiful}</Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('crazy')}>
-                                <Zap color={userReaction === 'crazy' ? "#FF2D55" : "#000"} fill={userReaction === 'crazy' ? "#FF2D55" : "transparent"} size={24} />
-                                <Text style={[styles.reactionText, userReaction === 'crazy' && styles.activeText]}>{reactionCounts.crazy}</Text>
-                            </TouchableOpacity>
+                            <AnimatedReactionBtn
+                                icon={Heart}
+                                color="#FF3B30"
+                                isActive={userReaction === 'like'}
+                                count={reactionCounts.like}
+                                onPress={() => handleReaction('like')}
+                            />
+                            <AnimatedReactionBtn
+                                icon={Lightbulb}
+                                color="#FFCC00"
+                                isActive={userReaction === 'smart'}
+                                count={reactionCounts.smart}
+                                onPress={() => handleReaction('smart')}
+                            />
+                            <AnimatedReactionBtn
+                                icon={Palette}
+                                color="#5856D6"
+                                isActive={userReaction === 'beautiful'}
+                                count={reactionCounts.beautiful}
+                                onPress={() => handleReaction('beautiful')}
+                            />
+                            <AnimatedReactionBtn
+                                icon={Zap}
+                                color="#FF2D55"
+                                isActive={userReaction === 'crazy'}
+                                count={reactionCounts.crazy}
+                                onPress={() => handleReaction('crazy')}
+                            />
                         </View>
                     </View>
                   </View>
@@ -548,12 +604,12 @@ const styles = StyleSheet.create({
   },
   reactionText: { 
       fontSize: 12, 
-      fontWeight: '600', 
+      fontWeight: '700', 
       color: '#999',
       marginTop: 4 
   },
   activeText: {
       color: '#000',
-      fontWeight: '800'
+      fontWeight: '900'
   }
 });
