@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform, Image, Pressable, Alert, PixelRatio } from 'react-native';
 import { useEffect, useState, memo, useCallback, useMemo } from 'react';
-import { User, Eye, MoreHorizontal, Lightbulb, Palette, Laugh, Heart } from 'lucide-react-native';
+import { User, Eye, MoreHorizontal, Lightbulb, Palette, Laugh, Heart, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
@@ -319,6 +319,9 @@ export default function FeedPage() {
     const [backgroundCloud, setBackgroundCloud] = useState<string | null>(null);
     const { width: screenWidth } = Dimensions.get('window');
     
+    // 🔥 ETAT POUR AFFICHER LES FLÈCHES DE TUTO
+    const [showTutorialArrows, setShowTutorialArrows] = useState(true);
+    
     const [isGlobalHolding, setIsGlobalHolding] = useState(false);
     
     const [layout, setLayout] = useState<{ width: number; height: number } | null>(null);
@@ -454,7 +457,11 @@ export default function FeedPage() {
                         autoPlay={false}
                         data={drawings}
                         scrollAnimationDuration={500}
-                        onSnapToItem={(index) => setCurrentIndex(index)}
+                        onSnapToItem={(index) => {
+                            setCurrentIndex(index);
+                            // 🔥 Désactive les flèches dès le premier swipe
+                            setShowTutorialArrows(false);
+                        }}
                         renderItem={({ item, index }) => (
                             <FeedCard 
                                 drawing={item} 
@@ -470,6 +477,18 @@ export default function FeedPage() {
                     !loading && drawings.length === 0 ? (
                         <View style={styles.centerBox}><Text style={styles.text}>La galerie est vide.</Text></View>
                     ) : null
+                )}
+
+                {/* 🔥 FLÈCHES DE TUTORIEL */}
+                {showTutorialArrows && drawings.length > 1 && (
+                    <View style={[styles.tutorialArrowsContainer, { top: TOP_HEADER_SPACE, height: IMAGE_HEIGHT }]} pointerEvents="none">
+                        <View style={styles.arrowBox}>
+                            <ChevronLeft color="rgba(255,255,255,0.7)" size={48} />
+                        </View>
+                        <View style={styles.arrowBox}>
+                            <ChevronRight color="rgba(255,255,255,0.7)" size={48} />
+                        </View>
+                    </View>
                 )}
 
                 {drawings.length > 0 && (
@@ -602,5 +621,24 @@ const styles = StyleSheet.create({
     activeText: {
         color: '#FFF',
         fontWeight: '900'
+    },
+
+    // 🔥 STYLES POUR LES FLÈCHES DE TUTORIEL
+    tutorialArrowsContainer: {
+        position: 'absolute',
+        width: '100%',
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: 15,
+        zIndex: 50, // Doit être au-dessus du carrousel mais sous le bouton Eye
+    },
+    arrowBox: {
+        opacity: 0.8,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.5,
+        shadowRadius: 3,
+        elevation: 5
     }
 });
