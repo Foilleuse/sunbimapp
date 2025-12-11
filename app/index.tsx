@@ -1,6 +1,4 @@
 import { View, Text, StyleSheet, ActivityIndicator, Alert, Modal, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Animated, Dimensions, AppState, Image, ScrollView } from 'react-native';
-// ✅ Ajout de ScrollView dans les imports ^^^
-
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '../src/lib/supabaseClient';
 import { DrawingCanvas, DrawingCanvasRef } from '../src/components/DrawingCanvas';
@@ -347,6 +345,7 @@ export default function DrawPage() {
     } catch (e: any) { Alert.alert("Erreur", e.message); setIsUploading(false); }
   };
 
+  // MODIFICATION : Fond blanc ici aussi pour le chargement
   if (loading) return <View style={styles.container}><ActivityIndicator size="large" color="#87CEEB" /></View>;
   if (!cloud) return <View style={styles.container}><Text style={styles.noCloudText}>Chargement...</Text></View>;
 
@@ -383,12 +382,12 @@ export default function DrawPage() {
             />
         )}
         
-        {/* 🔥 FILTRE CHAUD (Sépia/Orangé) */}
+        {/* FILTRE CHAUD (Sépia/Orangé) - Optionnel, je le laisse si tu veux le garder */}
         <View 
             pointerEvents="none" 
             style={{
                 ...StyleSheet.absoluteFillObject,
-                backgroundColor: 'rgba(255, 140, 0, 0.1)', // Orange avec 10% d'opacité
+                backgroundColor: 'rgba(255, 140, 0, 0.1)',
                 zIndex: 1, 
             }} 
         />
@@ -408,16 +407,14 @@ export default function DrawPage() {
           </View>
       )}
 
-      {/* MODALE CONNEXION (Fix de la vibration) */}
+      {/* MODALE CONNEXION */}
       <Modal animationType="slide" transparent={true} visible={authModalVisible && !user} onRequestClose={() => {
           if (!authLoading) setAuthModalVisible(false);
       }}>
-        {/* ✅ Behavior 'padding' sur iOS, 'undefined' sur Android pour éviter le conflit */}
         <KeyboardAvoidingView 
             behavior={Platform.OS === "ios" ? "padding" : undefined} 
             style={styles.modalOverlay}
         >
-            {/* ✅ ScrollView pour absorber le changement de taille sans sauter */}
             <ScrollView 
                 contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center' }}
                 keyboardShouldPersistTaps="handled"
@@ -478,7 +475,7 @@ export default function DrawPage() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* MODALE PARTAGE (Application du même fix pour cohérence) */}
+      {/* MODALE PARTAGE */}
       <Modal animationType="fade" transparent={true} visible={modalVisible} onRequestClose={() => setModalVisible(false)}>
         <KeyboardAvoidingView 
             behavior={Platform.OS === "ios" ? "padding" : undefined} 
@@ -557,17 +554,23 @@ export default function DrawPage() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
-  canvasContainer: { width: '100%', height: '100%', backgroundColor: '#000' },
+  // ✅ MODIFICATION : Fond blanc (#FFF) au lieu de noir (#000)
+  container: { flex: 1, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
+  // ✅ MODIFICATION : Fond blanc (#FFF) au lieu de noir (#000)
+  canvasContainer: { width: '100%', height: '100%', backgroundColor: '#FFF' },
   
   header: { position: 'absolute', top: 0, left: 0, right: 0, paddingTop: 60, paddingBottom: 15, alignItems: 'center', zIndex: 10, pointerEvents: 'none' },
-  headerText: { fontSize: 32, fontWeight: '900', color: '#FFFFFF', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 0 },
-  versionText: { fontSize: 10, color: 'rgba(255,255,255,0.5)', marginTop: 2, textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 1 },
+  
+  // ✅ MODIFICATION : Couleur du texte en noir (#000000) pour être visible sur fond blanc
+  // J'ai aussi réduit l'ombre portée pour qu'elle soit plus subtile sur fond clair
+  headerText: { fontSize: 32, fontWeight: '900', color: '#000000', textShadowColor: 'rgba(0,0,0,0.1)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 },
+  
+  // ✅ MODIFICATION : Couleur du texte de version en gris foncé
+  versionText: { fontSize: 10, color: 'rgba(0,0,0,0.5)', marginTop: 2 },
   
   noCloudText: { fontSize: 18, color: '#666', textAlign: 'center' },
   errorText: { color: 'red', textAlign: 'center' },
   
-  // ✅ MODIFICATION : Suppression de justifyContent et alignItems ici (déplacés dans ScrollView contentContainerStyle)
   modalOverlay: { 
       flex: 1, 
       backgroundColor: 'rgba(0,0,0,0.8)' 
