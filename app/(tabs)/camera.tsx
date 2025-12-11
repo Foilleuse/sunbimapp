@@ -131,7 +131,16 @@ export default function CameraPage() {
   // --- RENDU ---
   return (
     <View style={styles.container}>
-        <SunbimHeader showCloseButton={true} onClose={() => capturedImage ? retakePicture() : router.back()} />
+        {/* On force le header transparent pour qu'il s'affiche SUR le fond noir du container, mais le SunbimHeader gère la couleur de texte en fonction du prop transparent */}
+        {/* Pour obtenir un header noir, on utilise le style du container (noir) et on rend le header "transparent" pour le fond, mais en ajustant ses couleurs de texte si nécessaire. */}
+        {/* Cependant, SunbimHeader gère "transparent" comme "texte blanc sur fond transparent". C'est parfait ici car le fond derrière est noir. */}
+        <View style={{ backgroundColor: '#000', width: '100%' }}>
+            <SunbimHeader 
+                showCloseButton={true} 
+                onClose={() => capturedImage ? retakePicture() : router.back()} 
+                transparent={true} 
+            />
+        </View>
 
         {/* ZONE CAMÉRA / PREVIEW : Hauteur Fixe 3:4 */}
         <View style={{ width: screenWidth, height: CAMERA_HEIGHT, backgroundColor: '#000', marginTop: 0 }}>
