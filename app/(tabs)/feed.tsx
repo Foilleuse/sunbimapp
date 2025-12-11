@@ -65,8 +65,8 @@ const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color }: any) => {
                 <Icon 
                     color={isActive ? color : "#FFF"} 
                     fill={isActive ? color : "transparent"} 
-                    // ✅ MODIFICATION : Taille réduite à 30
-                    size={30} 
+                    // ✅ MODIFICATION : Taille réduite à 24
+                    size={24} 
                 />
             </Animated.View>
         </Pressable>
@@ -268,7 +268,6 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
                          <Text style={styles.userName}>{author?.display_name || "Anonyme"}</Text>
                     </TouchableOpacity>
 
-                    {/* ✅ MODIFICATION STRUCTURELLE : reactionBar déplacé ici, à l'intérieur de headerInfo */}
                     <View style={styles.reactionBar}>
                         <AnimatedReactionBtn 
                             icon={Heart} 
@@ -523,7 +522,7 @@ const styles = StyleSheet.create({
         elevation: 0,
     },
     headerInfo: { 
-        marginBottom: 0, // Réduit à 0
+        marginBottom: 0, 
         alignItems: 'center' 
     }, 
     
@@ -575,33 +574,24 @@ const styles = StyleSheet.create({
         fontSize: 13, 
         fontWeight: '600', 
         color: 'rgba(255,255,255,0.8)', 
-        // ✅ MODIFICATION : Marge réduite sous le nom
         marginBottom: 4
     },
 
     reactionBar: { 
         flexDirection: 'row', 
-        // ✅ MODIFICATION : Centré avec un gap
         justifyContent: 'center', 
         alignItems: 'center', 
         width: '100%',
-        gap: 25, // Espace entre les boutons
+        // ✅ MODIFICATION : Espace entre icônes augmenté
+        gap: 40,
         paddingHorizontal: 10,
-        // ✅ MODIFICATION : Padding bas réduit, margin top ajouté pour coller au nom
         paddingBottom: 20,
         marginTop: 4
     },
     reactionBtn: { 
         alignItems: 'center', 
         justifyContent: 'center',
-        // ✅ MODIFICATION : Padding réduit
-        padding: 4,
-        // ✅ MODIFICATION : Ombre supprimée
-        shadowColor: "transparent",
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0,
-        shadowRadius: 0,
-        elevation: 0
+        padding: 4
     },
     reactionText: { 
         fontSize: 12, 
