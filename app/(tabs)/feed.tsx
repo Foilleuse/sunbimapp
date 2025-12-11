@@ -1,13 +1,13 @@
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform, Image, Pressable, Alert, PixelRatio } from 'react-native';
 import { useEffect, useState, memo, useCallback, useMemo } from 'react';
-import { User, Eye, MoreHorizontal, Lightbulb, Palette, Zap, Heart } from 'lucide-react-native';
+// 1. Changement de l'import : Zap remplacé par Laugh
+import { User, Eye, MoreHorizontal, Lightbulb, Palette, Laugh, Heart } from 'lucide-react-native';
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { UserProfileModal } from '../../src/components/UserProfileModal'; 
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router'; 
-// ✅ Import de l'utilitaire optimisé
 import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer';
 import Carousel from 'react-native-reanimated-carousel';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withSequence } from 'react-native-reanimated';
@@ -18,7 +18,6 @@ type ReactionType = 'like' | 'smart' | 'beautiful' | 'crazy' | null;
 
 // --- COMPOSANT IMAGE MASQUÉE (FONDU BORDS) ---
 const MaskedDayImage = ({ uri, width, height, top }: { uri: string, width: number, height: number, top: number }) => {
-    // Note: useImage gère le chargement depuis l'URL optimisée
     const image = useImage(uri);
     
     if (!image) return null;
@@ -30,7 +29,6 @@ const MaskedDayImage = ({ uri, width, height, top }: { uri: string, width: numbe
                     start={vec(0, 0)}
                     end={vec(0, height)}
                     colors={["transparent", "white", "white", "transparent"]}
-                    // Ajustement des positions pour que le fondu soit plus doux sur les bords
                     positions={[0, 0.05, 0.95, 1]}
                 />
             </Rect>
@@ -45,7 +43,7 @@ const MaskedDayImage = ({ uri, width, height, top }: { uri: string, width: numbe
 };
 
 // --- COMPOSANT BOUTON DE RÉACTION ANIMÉ ---
-const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color, count }: any) => {
+const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color }: any) => {
     const scale = useSharedValue(1);
 
     const animatedStyle = useAnimatedStyle(() => {
@@ -68,12 +66,10 @@ const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color, count }: an
                 <Icon 
                     color={isActive ? color : "#000"} 
                     fill={isActive ? color : "transparent"} 
-                    size={24} 
+                    size={32} // J'ai légèrement augmenté la taille (24->32) car il n'y a plus de texte
                 />
             </Animated.View>
-            <Text style={[styles.reactionText, isActive && styles.activeText]}>
-                {count || 0}
-            </Text>
+            {/* 2. Suppression du Text affichant le count */}
         </Pressable>
     );
 };
@@ -93,13 +89,10 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
     const isActive = index === currentIndex; 
     const shouldRenderDrawing = isActive;
 
-    // 🔥 OPTIMISATION FEEDCARD : On calcule l'URL optimisée 3:4
-    // C'est crucial car DrawingViewer est lourd. On lui donne l'image déjà taillée.
     const optimizedDrawingUri = useMemo(() => {
         if (!drawing.cloud_image_url) return null;
         const w = Math.round(canvasSize * PixelRatio.get());
-        const h = Math.round(w * (4/3)); // Ratio 3:4 forcé (Vertical)
-        // On passe width ET height => Active le "Crop" serveur
+        const h = Math.round(w * (4/3)); 
         return getOptimizedImageUrl(drawing.cloud_image_url, w, h);
     }, [drawing.cloud_image_url, canvasSize]);
 
@@ -243,7 +236,6 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
                     {shouldRenderDrawing && (
                         <DrawingViewer
                             key={`${drawing.id}-${isActive}`} 
-                            // ✅ Utilisation de l'URI optimisée 3:4
                             imageUri={optimizedDrawingUri || drawing.cloud_image_url}
                             canvasData={drawing.canvas_data}
                             viewerSize={canvasSize}
@@ -300,8 +292,9 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
                         count={reactionCounts.beautiful} 
                         onPress={() => handleReaction('beautiful')}
                     />
+                    {/* 3. Remplacement de Zap par Laugh */}
                     <AnimatedReactionBtn 
-                        icon={Zap} 
+                        icon={Laugh} 
                         color="#FF2D55" 
                         isActive={userReaction === 'crazy'} 
                         count={reactionCounts.crazy} 
@@ -337,7 +330,6 @@ export default function FeedPage() {
 
     const TOP_HEADER_SPACE = 120;
 
-    // Calculs de position
     const IMAGE_HEIGHT = screenWidth * (4/3);
     const EYE_BUTTON_SIZE = 44;
     const MARGIN_BOTTOM = 25; 
@@ -420,19 +412,10 @@ export default function FeedPage() {
         }
     };
 
-    // 🔥 OPTIMISATION FEED : On calcule l'image de fond en 3:4
-    // On utilise la même URL optimisée pour le fond flou (absoluteFill) et le fond net (MaskedDayImage)
-    // pour éviter de charger deux images différentes.
     const optimizedBackground = useMemo(() => {
         if (!backgroundCloud) return null;
-        
-        // 1. Largeur physique de l'écran
         const physicalWidth = Math.round(screenWidth * PixelRatio.get());
-        
-        // 2. Hauteur physique (Ratio 3:4 Vertical)
         const physicalHeight = Math.round(physicalWidth * (4/3));
-
-        // 3. Demande de Crop serveur
         return getOptimizedImageUrl(backgroundCloud, physicalWidth, physicalHeight);
     }, [backgroundCloud, screenWidth]);
 
@@ -441,13 +424,12 @@ export default function FeedPage() {
 
     return (
         <View style={styles.container}>
-             {/* 1. BACKGROUND FLOU PLEIN ÉCRAN */}
              {backgroundCloud && (
                 <Image 
                     source={{ uri: optimizedBackground || backgroundCloud }}
                     style={StyleSheet.absoluteFillObject}
                     resizeMode="cover"
-                    blurRadius={20} // Flou gaussien
+                    blurRadius={20}
                 />
             )}
 
@@ -457,10 +439,8 @@ export default function FeedPage() {
                 style={[styles.mainContent, { paddingTop: TOP_HEADER_SPACE }]} 
                 onLayout={(e) => setLayout(e.nativeEvent.layout)}
             >
-                {/* 2. Photo du jour NETTE AVEC CROP IDENTIQUE AU DESSIN */}
                 {backgroundCloud && (
                     <MaskedDayImage 
-                        // ✅ On utilise ici l'URL optimisée et croppée
                         uri={optimizedBackground || backgroundCloud}
                         width={screenWidth}
                         height={IMAGE_HEIGHT}
@@ -487,7 +467,6 @@ export default function FeedPage() {
                                 isHolding={isGlobalHolding && index === currentIndex}
                             />
                         )}
-                        // Pas de style margin/padding ici, c'est géré par le conteneur parent
                     />
                 ) : (
                     !loading && drawings.length === 0 ? (
@@ -495,7 +474,6 @@ export default function FeedPage() {
                     ) : null
                 )}
 
-                {/* BOUTON OEIL STATIQUE */}
                 {drawings.length > 0 && (
                     <TouchableOpacity 
                         style={[
@@ -611,6 +589,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         padding: 8
     },
+    // Styles non utilisés mais conservés pour référence ou futur usage
     reactionText: { 
         fontSize: 12, 
         fontWeight: '700', 
