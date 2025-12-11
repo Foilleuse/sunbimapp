@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, FlatList, Dimensions, TouchableOpacity, ActivityIndicator, RefreshControl, TextInput, Keyboard, Pressable, Image, Platform, Modal, Alert, PixelRatio } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Dimensions, TouchableOpacity, ActivityIndicator, RefreshControl, TextInput, Keyboard, Pressable, Image, Platform, Modal, Alert, PixelRatio, SafeAreaView } from 'react-native';
 import { useEffect, useState, useCallback, memo, useMemo } from 'react';
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
@@ -7,8 +7,44 @@ import { useFocusEffect } from 'expo-router';
 import { Search, Heart, Cloud, CloudOff, XCircle, User, MessageCircle, X, MoreHorizontal, Lightbulb, Palette, Zap } from 'lucide-react-native';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer';
+// Ajout des imports d'animation
+import Animated, { useSharedValue, useAnimatedStyle, withSpring, withSequence } from 'react-native-reanimated';
 
 type ReactionType = 'like' | 'smart' | 'beautiful' | 'crazy' | null;
+
+// --- COMPOSANT BOUTON DE RÉACTION ANIMÉ ---
+const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color, count }: any) => {
+    const scale = useSharedValue(1);
+
+    const animatedStyle = useAnimatedStyle(() => {
+        return {
+            transform: [{ scale: scale.value }],
+        };
+    });
+
+    const handlePress = () => {
+        scale.value = withSequence(
+            withSpring(1.6, { damping: 10, stiffness: 200 }),
+            withSpring(1, { damping: 10, stiffness: 200 })
+        );
+        onPress();
+    };
+
+    return (
+        <Pressable onPress={handlePress} style={styles.reactionBtn}>
+            <Animated.View style={animatedStyle}>
+                <Icon
+                    color={isActive ? color : "#000"}
+                    fill={isActive ? color : "transparent"}
+                    size={24}
+                />
+            </Animated.View>
+            <Text style={[styles.reactionText, isActive && styles.activeText]}>
+                {count || 0}
+            </Text>
+        </Pressable>
+    );
+};
 
 // --- COMPOSANT VIGNETTE ---
 const GalleryItem = memo(({ item, itemSize, showClouds, onPress }: any) => {
@@ -151,18 +187,88 @@ export default function GalleryPage() {
         setReactionCounts({ like: 0, smart: 0, beautiful: 0, crazy: 0 });
     };
 
-    const fetchReactionsState = async () => { /* ... Logique inchangée ... */ };
-    const handleReaction = async (type: ReactionType) => { /* ... Logique inchangée ... */ };
-    const handleReport = () => { /* ... Logique inchangée ... */ };
+    const fetchReactionsState = async () => {
+        if (!selectedDrawing) return;
+        try {
+            const { data: allReactions, error } = await supabase
+                .from('reactions')
+                .select('reaction_type, user_id')
+                .eq('drawing_id', selectedDrawing.id);
+
+            if (error) throw error;
+
+            const counts = { like: 0, smart: 0, beautiful: 0, crazy: 0 };
+            let myReaction: ReactionType = null;
+
+            allReactions?.forEach((r: any) => {
+                if (counts.hasOwnProperty(r.reaction_type)) {
+                    counts[r.reaction_type as keyof typeof counts]++;
+                }
+                if (user && r.user_id === user.id) {
+                    myReaction = r.reaction_type as ReactionType;
+                }
+            });
+
+            setReactionCounts(counts);
+            setUserReaction(myReaction);
+
+        } catch (e) {
+            console.error("Erreur chargement réactions:", e);
+        }
+    };
+
+    const handleReaction = async (type: ReactionType) => {
+        if (!user || !type || !selectedDrawing) return;
+
+        const previousReaction = userReaction;
+        const previousCounts = { ...reactionCounts };
+        
+        let newReaction: ReactionType = type;
+        let newCounts = { ...reactionCounts };
+
+        if (userReaction === type) {
+            newReaction = null;
+            newCounts[type] = Math.max(0, newCounts[type] - 1);
+        } else {
+            if (previousReaction) {
+                newCounts[previousReaction] = Math.max(0, newCounts[previousReaction] - 1);
+            }
+            newCounts[type]++;
+        }
+
+        setUserReaction(newReaction);
+        setReactionCounts(newCounts);
+
+        try {
+            if (newReaction === null) {
+                await supabase.from('reactions').delete().eq('user_id', user.id).eq('drawing_id', selectedDrawing.id);
+            } else {
+                await supabase.from('reactions').upsert({
+                    user_id: user.id,
+                    drawing_id: selectedDrawing.id,
+                    reaction_type: newReaction
+                }, { onConflict: 'user_id, drawing_id' });
+            }
+        } catch (e) {
+            console.error(e);
+            setUserReaction(previousReaction);
+            setReactionCounts(previousCounts);
+        }
+    };
+
+    const handleReport = () => { Alert.alert("Info", "Fonctionnalité de signalement."); };
 
     const author = selectedDrawing?.users;
     
-    // 🔥 PLEIN ÉCRAN : PAS DE CROP
-    // On passe seulement width, PAS de height. L'optimiseur garde le format original.
-    const optimizedFullImage = useMemo(() => {
+    // 🔥 PLEIN ÉCRAN OPTIMISÉ 3:4 (pour alignement dessin)
+    // On demande un crop physique exact en 3:4 comme sur le Feed/Profil
+    const optimizedModalImageUri = useMemo(() => {
         if (!selectedDrawing?.cloud_image_url) return null;
+        
         const physicalWidth = Math.round(screenWidth * PixelRatio.get());
-        return getOptimizedImageUrl(selectedDrawing.cloud_image_url, physicalWidth);
+        const physicalHeight = Math.round(physicalWidth * (4/3));
+
+        return getOptimizedImageUrl(selectedDrawing.cloud_image_url, physicalWidth, physicalHeight);
     }, [selectedDrawing, screenWidth]);
     
     const renderItem = useCallback(({ item }: { item: any }) => (
@@ -203,9 +309,10 @@ export default function GalleryPage() {
                     )}
                 </View>
 
+                {/* MODALE STYLE FEED/PROFIL */}
                 <Modal visible={!!selectedDrawing} animationType="slide" presentationStyle="pageSheet" onRequestClose={closeViewer}>
                     {selectedDrawing && (
-                        <View style={styles.modalContainer}>
+                        <SafeAreaView style={styles.modalContainer}>
                              <View style={styles.modalHeader}>
                                   <TouchableOpacity onPress={closeViewer} style={styles.closeModalBtn}>
                                       <X color="#000" size={30} />
@@ -213,15 +320,18 @@ export default function GalleryPage() {
                               </View>
 
                             <Pressable onPressIn={() => setIsHolding(true)} onPressOut={() => setIsHolding(false)} style={{ width: screenWidth, aspectRatio: 3/4, backgroundColor: '#F0F0F0' }}>
+                                {/* Image de fond statique optimisée et croppée */}
                                 <Image 
-                                    source={{ uri: optimizedFullImage || selectedDrawing.cloud_image_url }}
+                                    source={{ uri: optimizedModalImageUri || selectedDrawing.cloud_image_url }}
                                     style={[StyleSheet.absoluteFill, { opacity: 1 }]}
                                     resizeMode="cover" 
                                 />
                                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                                     <DrawingViewer
-                                        imageUri={selectedDrawing.cloud_image_url} canvasData={selectedDrawing.canvas_data}
+                                        imageUri={optimizedModalImageUri || selectedDrawing.cloud_image_url} 
+                                        canvasData={selectedDrawing.canvas_data}
                                         viewerSize={screenWidth} 
+                                        viewerHeight={screenWidth * (4/3)}
                                         transparentMode={true} 
                                         startVisible={false} 
                                         animated={true}
@@ -230,25 +340,50 @@ export default function GalleryPage() {
                                 <Text style={styles.hintText}>Maintenir pour voir l'original</Text>
                             </Pressable>
 
-                            {/* INFO CARD */}
+                            {/* INFO CARD AVEC BOUTONS ANIMÉS */}
                             <View style={styles.infoCard}>
                                 <View style={styles.infoContent}>
                                     <View style={styles.titleRow}>
-                                        <Text style={styles.drawingTitle} numberOfLines={1}>{selectedDrawing.label || "Sans titre"}</Text>
+                                        <Text style={styles.drawingTitle} numberOfLines={1}>{selectedDrawing.label || "Sans titre"}
+                                        </Text>
                                         <TouchableOpacity onPress={handleReport} style={styles.moreBtnAbsolute} hitSlop={15}><MoreHorizontal color="#CCC" size={24} /></TouchableOpacity>
                                     </View>
                                     <Text style={styles.userName}>{author?.display_name || "Anonyme"}</Text>
-                                    {/* Barre de réaction simplifiée pour l'exemple */}
+                                    
+                                    {/* Barre de réactions animées */}
                                     <View style={styles.reactionBar}>
-                                         <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('like')}>
-                                            <Heart color={userReaction === 'like' ? "#FF3B30" : "#000"} fill={userReaction === 'like' ? "#FF3B30" : "transparent"} size={24} />
-                                            <Text style={[styles.reactionText, userReaction === 'like' && styles.activeText]}>{reactionCounts.like}</Text>
-                                        </TouchableOpacity>
-                                        {/* ... autres boutons ... */}
+                                        <AnimatedReactionBtn
+                                            icon={Heart}
+                                            color="#FF3B30"
+                                            isActive={userReaction === 'like'}
+                                            count={reactionCounts.like}
+                                            onPress={() => handleReaction('like')}
+                                        />
+                                        <AnimatedReactionBtn
+                                            icon={Lightbulb}
+                                            color="#FFCC00"
+                                            isActive={userReaction === 'smart'}
+                                            count={reactionCounts.smart}
+                                            onPress={() => handleReaction('smart')}
+                                        />
+                                        <AnimatedReactionBtn
+                                            icon={Palette}
+                                            color="#5856D6"
+                                            isActive={userReaction === 'beautiful'}
+                                            count={reactionCounts.beautiful}
+                                            onPress={() => handleReaction('beautiful')}
+                                        />
+                                        <AnimatedReactionBtn
+                                            icon={Zap}
+                                            color="#FF2D55"
+                                            isActive={userReaction === 'crazy'}
+                                            count={reactionCounts.crazy}
+                                            onPress={() => handleReaction('crazy')}
+                                        />
                                     </View>
                                 </View>
                             </View>
-                        </View>
+                        </SafeAreaView>
                     )}
                 </Modal>
             </View>
@@ -278,7 +413,9 @@ const styles = StyleSheet.create({
     moreBtnAbsolute: { position: 'absolute', right: 0, top: 5, padding: 5 },
     userName: { fontSize: 13, fontWeight: '500', color: '#888', marginBottom: 10 },
     reactionBar: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', width: '100%', paddingHorizontal: 10 },
+    
+    // Styles pour les boutons animés
     reactionBtn: { alignItems: 'center', justifyContent: 'center', padding: 8 },
-    reactionText: { fontSize: 12, fontWeight: '600', color: '#999', marginTop: 4 },
-    activeText: { color: '#000', fontWeight: '800' }
+    reactionText: { fontSize: 12, fontWeight: '700', color: '#999', marginTop: 4 },
+    activeText: { color: '#000', fontWeight: '900' }
 });
