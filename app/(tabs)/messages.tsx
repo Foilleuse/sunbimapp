@@ -1,5 +1,5 @@
-import { View, Text, StyleSheet, FlatList, Image, ActivityIndicator, TouchableOpacity, Dimensions } from 'react-native';
-import { useEffect, useState, useCallback } from 'react';
+import { View, Text, StyleSheet, FlatList, Image, ActivityIndicator, TouchableOpacity, Dimensions, PixelRatio } from 'react-native';
+import { useEffect, useState, useCallback, useMemo, memo } from 'react';
 import { supabase } from '../../src/lib/supabaseClient';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
@@ -7,7 +7,85 @@ import { User, UserMinus, UserCheck } from 'lucide-react-native';
 import { useFocusEffect } from 'expo-router';
 import { UserProfileModal } from '../../src/components/UserProfileModal'; 
 import { DrawingViewer } from '../../src/components/DrawingViewer'; 
-import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer'; // Import corrigé
+import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer';
+
+// Constantes de dimensions
+const ROW_HEIGHT = 105;
+const DRAWING_HEIGHT = ROW_HEIGHT - 20; // 85
+const DRAWING_WIDTH = DRAWING_HEIGHT * (3/4); // ~64
+
+// --- SOUS-COMPOSANT OPTIMISÉ POUR CHAQUE LIGNE ---
+const FriendRow = memo(({ item, onOpenProfile, onUnfollow }: { item: any, onOpenProfile: (i: any) => void, onUnfollow: (fid: string, uid: string) => void }) => {
+    
+    // 1. Optimisation Avatar (Carré 50x50 physique)
+    const optimizedAvatar = useMemo(() => {
+        if (!item.avatar_url) return null;
+        const size = Math.round(50 * PixelRatio.get());
+        return getOptimizedImageUrl(item.avatar_url, size, size);
+    }, [item.avatar_url]);
+
+    // 2. Optimisation Miniature Dessin (Ratio 3:4 physique)
+    const optimizedDrawingUrl = useMemo(() => {
+        if (!item.todaysDrawing?.cloudImageUrl) return null;
+        const w = Math.round(DRAWING_WIDTH * PixelRatio.get());
+        const h = Math.round(DRAWING_HEIGHT * PixelRatio.get());
+        return getOptimizedImageUrl(item.todaysDrawing.cloudImageUrl, w, h);
+    }, [item.todaysDrawing?.cloudImageUrl]);
+
+    return (
+        <TouchableOpacity 
+            style={styles.friendItem} 
+            onPress={() => onOpenProfile(item)}
+            activeOpacity={0.7}
+        >
+            <View style={styles.friendInfoContainer}>
+                <View style={styles.avatarContainer}>
+                    {item.avatar_url ? (
+                        <Image source={{ uri: optimizedAvatar || item.avatar_url }} style={styles.avatar} />
+                    ) : (
+                        <View style={[styles.avatar, styles.placeholderAvatar]}>
+                            <User size={24} color="#666" />
+                        </View>
+                    )}
+                </View>
+
+                <View style={styles.textContainer}>
+                    <Text style={styles.friendName} numberOfLines={1}>
+                        {item.display_name || "Utilisateur Anonyme"}
+                    </Text>
+                    {item.bio ? (
+                        <Text style={styles.friendBio} numberOfLines={1}>{item.bio}</Text>
+                    ) : null}
+                </View>
+            </View>
+            
+            <View style={styles.rightContainer}>
+                {item.todaysDrawing ? (
+                    <View style={[styles.miniDrawingContainer, { width: DRAWING_WIDTH, height: DRAWING_HEIGHT }]}>
+                        <DrawingViewer 
+                            // On passe l'URL optimisée ici
+                            imageUri={optimizedDrawingUrl || item.todaysDrawing.cloudImageUrl}
+                            canvasData={item.todaysDrawing.canvasData}
+                            viewerSize={DRAWING_WIDTH}
+                            viewerHeight={DRAWING_HEIGHT}
+                            transparentMode={true} 
+                            animated={false}
+                            startVisible={true}
+                        />
+                    </View>
+                ) : (
+                    <TouchableOpacity 
+                        style={styles.unfollowBtn} 
+                        onPress={() => onUnfollow(item.followId, item.id)}
+                        hitSlop={10}
+                    >
+                        <UserCheck size={20} color="#000" />
+                    </TouchableOpacity>
+                )}
+            </View>
+        </TouchableOpacity>
+    );
+});
 
 export default function FriendsPage() {
   const { user } = useAuth();
@@ -16,11 +94,6 @@ export default function FriendsPage() {
   
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
-
-  // Hauteur de ligne définie ici pour calculer le ratio
-  const ROW_HEIGHT = 105;
-  const DRAWING_HEIGHT = ROW_HEIGHT - 20; // Marge interne
-  const DRAWING_WIDTH = DRAWING_HEIGHT * (3/4); // Ratio 3:4
 
   useFocusEffect(
     useCallback(() => {
@@ -120,62 +193,14 @@ export default function FriendsPage() {
       setIsProfileModalVisible(true);
   };
 
-  const renderFriend = ({ item }: { item: any }) => {
-    const optimizedAvatar = getOptimizedImageUrl(item.avatar_url, 50);
-
-    return (
-        <TouchableOpacity 
-            style={styles.friendItem} 
-            onPress={() => handleOpenProfile(item)}
-            activeOpacity={0.7}
-        >
-            <View style={styles.friendInfoContainer}>
-                <View style={styles.avatarContainer}>
-                    {item.avatar_url ? (
-                        <Image source={{ uri: optimizedAvatar || item.avatar_url }} style={styles.avatar} />
-                    ) : (
-                        <View style={[styles.avatar, styles.placeholderAvatar]}>
-                            <User size={24} color="#666" />
-                        </View>
-                    )}
-                </View>
-
-                <View style={styles.textContainer}>
-                    <Text style={styles.friendName} numberOfLines={1}>
-                        {item.display_name || "Utilisateur Anonyme"}
-                    </Text>
-                    {item.bio ? (
-                        <Text style={styles.friendBio} numberOfLines={1}>{item.bio}</Text>
-                    ) : null}
-                </View>
-            </View>
-            
-            <View style={styles.rightContainer}>
-                {item.todaysDrawing ? (
-                    <View style={[styles.miniDrawingContainer, { width: DRAWING_WIDTH, height: DRAWING_HEIGHT }]}>
-                        <DrawingViewer 
-                            imageUri={item.todaysDrawing.cloudImageUrl}
-                            canvasData={item.todaysDrawing.canvasData}
-                            viewerSize={DRAWING_WIDTH}
-                            viewerHeight={DRAWING_HEIGHT}
-                            transparentMode={true} 
-                            animated={false}
-                            startVisible={true}
-                        />
-                    </View>
-                ) : (
-                    <TouchableOpacity 
-                        style={styles.unfollowBtn} 
-                        onPress={() => handleUnfollow(item.followId, item.id)}
-                        hitSlop={10}
-                    >
-                        <UserCheck size={20} color="#000" />
-                    </TouchableOpacity>
-                )}
-            </View>
-        </TouchableOpacity>
-    );
-  };
+  // Le renderItem appelle maintenant le composant mémorisé FriendRow
+  const renderFriend = ({ item }: { item: any }) => (
+      <FriendRow 
+          item={item} 
+          onOpenProfile={handleOpenProfile} 
+          onUnfollow={handleUnfollow} 
+      />
+  );
 
   return (
     <View style={styles.container}>
@@ -223,7 +248,7 @@ const styles = StyleSheet.create({
       paddingVertical: 10, 
       borderBottomWidth: 1, 
       borderBottomColor: '#F5F5F5',
-      height: 105 
+      height: ROW_HEIGHT 
   },
   friendInfoContainer: { 
       flexDirection: 'row', 
