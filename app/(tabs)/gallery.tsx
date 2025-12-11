@@ -1,25 +1,38 @@
-import { View, Text, StyleSheet, FlatList, Dimensions, TouchableOpacity, ActivityIndicator, RefreshControl, TextInput, Keyboard, Pressable, Image, Platform, Modal, Alert } from 'react-native';
-import { useEffect, useState, useCallback, memo } from 'react';
+import { View, Text, StyleSheet, FlatList, Dimensions, TouchableOpacity, ActivityIndicator, RefreshControl, TextInput, Keyboard, Pressable, Image, Platform, Modal, Alert, PixelRatio } from 'react-native';
+import { useEffect, useState, useCallback, memo, useMemo } from 'react';
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
 import { useFocusEffect } from 'expo-router';
 import { Search, Heart, Cloud, CloudOff, XCircle, User, MessageCircle, X, MoreHorizontal, Lightbulb, Palette, Zap } from 'lucide-react-native';
 import { useAuth } from '../../src/contexts/AuthContext';
+// Assurez-vous que le chemin est correct vers votre utilitaire optimisé
 import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer';
 
 // Types de réactions possibles
 type ReactionType = 'like' | 'smart' | 'beautiful' | 'crazy' | null;
 
-// Composant mémorisé pour éviter les re-rendus inutiles
+// --- COMPOSANT VIGNETTE OPTIMISÉ ---
 const GalleryItem = memo(({ item, itemSize, showClouds, onPress }: any) => {
+    
+    // 🔥 OPTIMISATION 1 : Calcul de l'URL pour la grille (Vignette)
+    // On multiplie par PixelRatio pour obtenir la netteté parfaite sur écrans HD/Retina
+    // tout en gardant un fichier très léger.
+    const optimizedUri = useMemo(() => {
+        if (!item.cloud_image_url) return null;
+        // Math.round assure un entier propre pour l'API
+        const physicalSize = Math.round(itemSize * PixelRatio.get());
+        return getOptimizedImageUrl(item.cloud_image_url, physicalSize);
+    }, [item.cloud_image_url, itemSize]);
+
     return (
         <TouchableOpacity 
             activeOpacity={0.9} onPress={() => onPress(item)}
             style={{ width: itemSize, aspectRatio: 3/4, marginBottom: 1, backgroundColor: '#F9F9F9', overflow: 'hidden' }}
         >
             <DrawingViewer
-                imageUri={item.cloud_image_url} 
+                // ✅ On utilise l'URL optimisée. Si échec, on utilise l'originale en fallback.
+                imageUri={optimizedUri || item.cloud_image_url} 
                 canvasData={item.canvas_data} 
                 viewerSize={itemSize}
                 transparentMode={!showClouds} 
@@ -74,8 +87,13 @@ export default function GalleryPage() {
                 return;
             }
 
+            // 🔥 OPTIMISATION 2 : Cohérence du Cache (Prefetch)
             if (cloudData.image_url) {
-                const prefetchUrl = getOptimizedImageUrl(cloudData.image_url, ITEM_SIZE * 2);
+                // IMPORTANT : On demande exactement la même taille que dans GalleryItem.
+                // Cela permet à l'image d'être stockée en cache disque et réutilisée immédiatement par la liste.
+                const targetSize = Math.round(ITEM_SIZE * PixelRatio.get());
+                const prefetchUrl = getOptimizedImageUrl(cloudData.image_url, targetSize);
+                
                 if (prefetchUrl) {
                     Image.prefetch(prefetchUrl).catch(e => console.log("Prefetch error (ignorable):", e));
                 }
@@ -110,7 +128,7 @@ export default function GalleryPage() {
 
             let query = supabase
                 .from('drawings')
-                .select('*, users(display_name, avatar_url)') // Plus besoin de counts ici
+                .select('*, users(display_name, avatar_url)')
                 .eq('cloud_id', cloudData.id)
                 .eq('is_hidden', false) 
                 .order('created_at', { ascending: false });
@@ -275,8 +293,14 @@ export default function GalleryPage() {
 
     const author = selectedDrawing?.users;
     
-    // OPTIMISATION DES IMAGES MODALE
-    const optimizedFullImage = selectedDrawing ? getOptimizedImageUrl(selectedDrawing.cloud_image_url, screenWidth) : null;
+    // 🔥 OPTIMISATION 3 : Image Full Screen (HD)
+    // On calcule l'URL optimisée pour la largeur de l'écran x Densité de pixels
+    // Ex: iPhone 14 = 390px * 3 = 1170px réels. On charge donc une image de haute qualité mais pas le fichier original inutilement lourd.
+    const optimizedFullImage = useMemo(() => {
+        if (!selectedDrawing?.cloud_image_url) return null;
+        const physicalWidth = Math.round(screenWidth * PixelRatio.get());
+        return getOptimizedImageUrl(selectedDrawing.cloud_image_url, physicalWidth);
+    }, [selectedDrawing, screenWidth]);
     
     const renderItem = useCallback(({ item }: { item: any }) => (
         <GalleryItem 
@@ -289,7 +313,6 @@ export default function GalleryPage() {
 
     return (
         <View style={styles.container}>
-            {/* RETRAIT DE LA PROP showProfileButton */}
             <SunbimHeader showCloseButton={false} onClose={closeViewer} /> 
             <View style={{flex: 1, position: 'relative'}}>
                 <View style={{flex: 1}}>
@@ -333,6 +356,7 @@ export default function GalleryPage() {
 
                             <Pressable onPressIn={() => setIsHolding(true)} onPressOut={() => setIsHolding(false)} style={{ width: screenWidth, aspectRatio: 3/4, backgroundColor: '#F0F0F0' }}>
                                 <Image 
+                                    // Utilisation de l'image optimisée HD
                                     source={{ uri: optimizedFullImage || selectedDrawing.cloud_image_url }}
                                     style={[StyleSheet.absoluteFill, { opacity: 1 }]}
                                     resizeMode="cover"
@@ -349,7 +373,7 @@ export default function GalleryPage() {
                                 <Text style={styles.hintText}>Maintenir pour voir l'original</Text>
                             </Pressable>
 
-                            {/* --- NOUVEAU FOOTER STYLE FEED --- */}
+                            {/* --- INFO CARD / FEED STYLE --- */}
                             <View style={styles.infoCard}>
                                 <View style={styles.infoContent}>
                                     <View style={styles.titleRow}>
@@ -413,7 +437,7 @@ const styles = StyleSheet.create({
     modalHeader: { width: '100%', height: 60, justifyContent: 'center', alignItems: 'flex-end', paddingRight: 20, paddingTop: 10, backgroundColor: '#FFF', zIndex: 20 },
     closeModalBtn: { padding: 5 },
     
-    // NOUVEAUX STYLES (Feed Card Style)
+    // INFO CARD STYLES
     infoCard: {
         width: '100%',
         padding: 20, 

@@ -1,47 +1,44 @@
-/**
- * Utilitaire pour optimiser les images stockées sur Supabase.
- * Documentation : https://supabase.com/docs/guides/storage/image-transformations
- */
-
 export const getOptimizedImageUrl = (
-  url: string | null | undefined, 
-  width: number, 
+  url: string | null | undefined,
+  width: number,
   quality: number = 75
 ): string | null => {
   if (!url) return null;
 
-  // 1. Vérification : Est-ce une URL Supabase ?
+  // 1. Vérification : URL Supabase
   const isSupabaseUrl = url.includes('supabase.co') || url.includes('supabase.in');
+  if (!isSupabaseUrl) return url;
 
-  if (!isSupabaseUrl) {
+  // 2. SÉCURITÉ : Vérification stricte
+  // On ne touche PAS aux URLs signées ou privées. Modifier leur URL casserait le token d'accès.
+  // On ne transforme que si l'URL contient explicitement le chemin public standard.
+  if (!url.includes('/storage/v1/object/public/')) {
     return url;
   }
 
-  // 2. Vérification : Est-ce une image gérée par le Storage ?
-  if (!url.includes('/storage/v1/object/')) {
-       return url;
-  }
-
-  // --- AMÉLIORATION : Standardisation des tailles (Bucketing) ---
-  // Pour maximiser le cache CDN, on arrondit la largeur demandée à des paliers fixes.
-  // Paliers : 100, 200, 400, 800, 1200, 1600...
+  // --- Bucketing (Votre logique est bonne) ---
   let targetWidth = width;
   if (width <= 100) targetWidth = 100;
   else if (width <= 200) targetWidth = 200;
   else if (width <= 400) targetWidth = 400;
   else if (width <= 800) targetWidth = 800;
   else if (width <= 1200) targetWidth = 1200;
-  else targetWidth = 1600; // Max standard
+  else targetWidth = 1600;
 
-  // 3. Gestion des paramètres existants
-  const separator = url.includes('?') ? '&' : '?';
+  // 3. CORRECTION MAJEURE : Changement d'endpoint
+  // On remplace le chemin statique par le chemin de transformation dynamique
+  let optimizedUrl = url.replace(
+    '/storage/v1/object/public/',
+    '/storage/v1/render/image/public/'
+  );
 
-  // 4. Construction de l'URL transformée
-  // On ajoute &format=origin pour garder le format source (plus rapide que la conversion à la volée parfois)
-  const optimizedUrl = `${url}${separator}width=${targetWidth}&quality=${quality}&format=origin&resize=cover`;
+  // 4. Construction des paramètres
+  const separator = optimizedUrl.includes('?') ? '&' : '?';
 
-  // Log pour débogage (Visible dans le terminal Metro/Expo)
-  // console.log(`⚡ [ImageOptimizer] ${width}px -> ${targetWidth}px :`, optimizedUrl);
+  // AMÉLIORATIONS :
+  // - Retrait de format=origin : Laisse Supabase choisir WebP/AVIF (bien plus léger)
+  // - Retrait de resize=cover : Inutile sans height, le resize proportionnel est le défaut
+  optimizedUrl = `${optimizedUrl}${separator}width=${targetWidth}&quality=${quality}`;
 
   return optimizedUrl;
 };
