@@ -1,4 +1,6 @@
-import { View, Text, StyleSheet, ActivityIndicator, Alert, Modal, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Animated, Dimensions, AppState, Image } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, Alert, Modal, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Animated, Dimensions, AppState, Image, ScrollView } from 'react-native';
+// ✅ Ajout de ScrollView dans les imports ^^^
+
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '../src/lib/supabaseClient';
 import { DrawingCanvas, DrawingCanvasRef } from '../src/components/DrawingCanvas';
@@ -10,7 +12,6 @@ import * as Updates from 'expo-updates';
 import React from 'react';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
-// Suppression de l'import de X car il n'est plus utilisé
 
 interface Cloud {
   id: string;
@@ -39,8 +40,6 @@ export default function DrawPage() {
   const [strokeColor, setStrokeColor] = useState('#000000');
   const [strokeWidth, setStrokeWidth] = useState(2);
   const [isEraserMode, setIsEraserMode] = useState(false);
-  
-  // Suppression de l'état showOriginalImage
   
   const [modalVisible, setModalVisible] = useState(false);
   const [tagText, setTagText] = useState('');
@@ -262,8 +261,6 @@ export default function DrawPage() {
   const handleRedo = () => canvasRef.current?.redo();
   const toggleEraser = () => setIsEraserMode((prev) => !prev);
   
-  // Suppression de la fonction showOriginal
-
   const handleSharePress = () => {
     if (!canvasRef.current) return;
     
@@ -362,7 +359,7 @@ export default function DrawPage() {
       </View>
 
       <View style={styles.canvasContainer}>
-        {/* LE CANVAS TOUJOURS LÀ ET VISIBLE PAR DÉFAUT */}
+        {/* LE CANVAS */}
         {replayPaths ? (
             <DrawingViewer 
                 imageUri={cloud.image_url}
@@ -385,6 +382,16 @@ export default function DrawPage() {
               blurRadius={showSplash ? canvasBlur : 0}
             />
         )}
+        
+        {/* 🔥 FILTRE CHAUD (Sépia/Orangé) */}
+        <View 
+            pointerEvents="none" 
+            style={{
+                ...StyleSheet.absoluteFillObject,
+                backgroundColor: 'rgba(255, 140, 0, 0.1)', // Orange avec 10% d'opacité
+                zIndex: 1, 
+            }} 
+        />
       </View>
       
       {!replayPaths && (
@@ -397,86 +404,101 @@ export default function DrawPage() {
                 isEraserMode={isEraserMode} toggleEraser={toggleEraser}
                 onShare={handleSharePress}
                 isAuthenticated={!!user} 
-                // showOriginal et onShowOriginal supprimés
              />
           </View>
       )}
 
-      {/* MODALE D'IMAGE ORIGINALE SUPPRIMÉE */}
-
-      {/* MODALES (Connexion, Partage...) */}
+      {/* MODALE CONNEXION (Fix de la vibration) */}
       <Modal animationType="slide" transparent={true} visible={authModalVisible && !user} onRequestClose={() => {
           if (!authLoading) setAuthModalVisible(false);
       }}>
-        {/* Contenu modale Auth */}
-        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-                {/* ... (Reste du code de la modale auth inchangé) */}
-                <Text style={styles.modalTitle}>{isSignUp ? "Créer un compte" : "Se connecter"}</Text>
-                <Text style={styles.modalSubtitle}>Sauvegardez votre dessin pour le publier</Text>
-                
-                <View style={styles.socialContainer}>
-                    {Platform.OS === 'ios' && (
-                        <AppleAuthentication.AppleAuthenticationButton
-                            buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
-                            buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
-                            cornerRadius={5}
-                            style={{ width: '100%', height: 44, marginBottom: 10, opacity: authLoading ? 0.6 : 1 }}
-                            onPress={handleAppleLogin}
-                            enabled={!authLoading}
-                        />
-                    )}
+        {/* ✅ Behavior 'padding' sur iOS, 'undefined' sur Android pour éviter le conflit */}
+        <KeyboardAvoidingView 
+            behavior={Platform.OS === "ios" ? "padding" : undefined} 
+            style={styles.modalOverlay}
+        >
+            {/* ✅ ScrollView pour absorber le changement de taille sans sauter */}
+            <ScrollView 
+                contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center' }}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+            >
+                <View style={styles.modalContent}>
+                    <Text style={styles.modalTitle}>{isSignUp ? "Créer un compte" : "Se connecter"}</Text>
+                    <Text style={styles.modalSubtitle}>Sauvegardez votre dessin pour le publier</Text>
                     
-                    <TouchableOpacity 
-                        style={[styles.googleBtn, authLoading && { opacity: 0.6 }]} 
-                        onPress={handleGoogleLogin}
-                        disabled={authLoading}
-                    >
-                        <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'center'}}>
-                           <View style={{width:20, height:20, borderRadius:10, backgroundColor:'#FFF', justifyContent:'center', alignItems:'center', marginRight: 10}}>
-                                <Text style={{color:'#DB4437', fontWeight:'bold', fontSize:14}}>G</Text>
-                           </View>
-                           <Text style={styles.googleBtnText}>Continuer avec Google</Text>
-                        </View>
+                    <View style={styles.socialContainer}>
+                        {Platform.OS === 'ios' && (
+                            <AppleAuthentication.AppleAuthenticationButton
+                                buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+                                buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                                cornerRadius={5}
+                                style={{ width: '100%', height: 44, marginBottom: 10, opacity: authLoading ? 0.6 : 1 }}
+                                onPress={handleAppleLogin}
+                                enabled={!authLoading}
+                            />
+                        )}
+                        
+                        <TouchableOpacity 
+                            style={[styles.googleBtn, authLoading && { opacity: 0.6 }]} 
+                            onPress={handleGoogleLogin}
+                            disabled={authLoading}
+                        >
+                            <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'center'}}>
+                            <View style={{width:20, height:20, borderRadius:10, backgroundColor:'#FFF', justifyContent:'center', alignItems:'center', marginRight: 10}}>
+                                    <Text style={{color:'#DB4437', fontWeight:'bold', fontSize:14}}>G</Text>
+                            </View>
+                            <Text style={styles.googleBtnText}>Continuer avec Google</Text>
+                            </View>
+                        </TouchableOpacity>
+                    </View>
+
+                    <View style={{flexDirection: 'row', alignItems: 'center', marginVertical: 15, width: '100%'}}>
+                        <View style={{flex: 1, height: 1, backgroundColor: '#EEE'}} />
+                        <Text style={{marginHorizontal: 10, color: '#999'}}>OU</Text>
+                        <View style={{flex: 1, height: 1, backgroundColor: '#EEE'}} />
+                    </View>
+
+                    <TextInput style={styles.input} placeholder="Email" placeholderTextColor="#999" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
+                    <TextInput style={styles.input} placeholder="Mot de passe" placeholderTextColor="#999" value={password} onChangeText={setPassword} secureTextEntry />
+                    
+                    <TouchableOpacity style={styles.validateBtn} onPress={handleAuthAction} disabled={authLoading}>
+                        {authLoading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.validateText}>{isSignUp ? "S'inscrire par email" : "Se connecter par email"}</Text>}
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity onPress={() => setIsSignUp(!isSignUp)} style={{marginTop: 15, padding: 5}} disabled={authLoading}>
+                        <Text style={styles.switchText}>{isSignUp ? "J'ai déjà un compte" : "Pas encore de compte ?"}</Text>
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity style={styles.cancelBtn} onPress={() => setAuthModalVisible(false)} disabled={authLoading}>
+                        <Text style={styles.cancelText}>Fermer</Text>
                     </TouchableOpacity>
                 </View>
-
-                <View style={{flexDirection: 'row', alignItems: 'center', marginVertical: 15, width: '100%'}}>
-                    <View style={{flex: 1, height: 1, backgroundColor: '#EEE'}} />
-                    <Text style={{marginHorizontal: 10, color: '#999'}}>OU</Text>
-                    <View style={{flex: 1, height: 1, backgroundColor: '#EEE'}} />
-                </View>
-
-                <TextInput style={styles.input} placeholder="Email" placeholderTextColor="#999" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
-                <TextInput style={styles.input} placeholder="Mot de passe" placeholderTextColor="#999" value={password} onChangeText={setPassword} secureTextEntry />
-                
-                <TouchableOpacity style={styles.validateBtn} onPress={handleAuthAction} disabled={authLoading}>
-                    {authLoading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.validateText}>{isSignUp ? "S'inscrire par email" : "Se connecter par email"}</Text>}
-                </TouchableOpacity>
-                
-                <TouchableOpacity onPress={() => setIsSignUp(!isSignUp)} style={{marginTop: 15, padding: 5}} disabled={authLoading}>
-                    <Text style={styles.switchText}>{isSignUp ? "J'ai déjà un compte" : "Pas encore de compte ?"}</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity style={styles.cancelBtn} onPress={() => setAuthModalVisible(false)} disabled={authLoading}>
-                    <Text style={styles.cancelText}>Fermer</Text>
-                </TouchableOpacity>
-            </View>
+            </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
 
+      {/* MODALE PARTAGE (Application du même fix pour cohérence) */}
       <Modal animationType="fade" transparent={true} visible={modalVisible} onRequestClose={() => setModalVisible(false)}>
-        {/* Contenu modale Partage */}
-        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-                <Text style={styles.modalTitle}>Qu'as-tu vu ?</Text>
-                <Text style={styles.modalSubtitle}>Donne un titre à ton œuvre</Text>
-                <TextInput style={styles.input} placeholder="Ex: Un dragon..." placeholderTextColor="#999" value={tagText} onChangeText={setTagText} autoFocus={true} maxLength={30} returnKeyType="done" onSubmitEditing={confirmShare} />
-                <TouchableOpacity style={styles.validateBtn} onPress={confirmShare} disabled={isUploading}>
-                    {isUploading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.validateText}>Publier</Text>}
-                </TouchableOpacity>
-                {!isUploading && <TouchableOpacity style={styles.cancelBtn} onPress={() => setModalVisible(false)}><Text style={styles.cancelText}>Annuler</Text></TouchableOpacity>}
-            </View>
+        <KeyboardAvoidingView 
+            behavior={Platform.OS === "ios" ? "padding" : undefined} 
+            style={styles.modalOverlay}
+        >
+            <ScrollView 
+                contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center' }}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+            >
+                <View style={styles.modalContent}>
+                    <Text style={styles.modalTitle}>Qu'as-tu vu ?</Text>
+                    <Text style={styles.modalSubtitle}>Donne un titre à ton œuvre</Text>
+                    <TextInput style={styles.input} placeholder="Ex: Un dragon..." placeholderTextColor="#999" value={tagText} onChangeText={setTagText} autoFocus={true} maxLength={30} returnKeyType="done" onSubmitEditing={confirmShare} />
+                    <TouchableOpacity style={styles.validateBtn} onPress={confirmShare} disabled={isUploading}>
+                        {isUploading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.validateText}>Publier</Text>}
+                    </TouchableOpacity>
+                    {!isUploading && <TouchableOpacity style={styles.cancelBtn} onPress={() => setModalVisible(false)}><Text style={styles.cancelText}>Annuler</Text></TouchableOpacity>}
+                </View>
+            </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
 
@@ -508,7 +530,7 @@ export default function DrawPage() {
           )}
       </Animated.View>
 
-      {/* --- SPLASH SCREEN TRANSPARENT AVEC TEXTE ET SOUS-TEXTE --- */}
+      {/* --- SPLASH SCREEN --- */}
       {showSplash && cloud && (
         <Animated.View 
             style={[
@@ -544,7 +566,13 @@ const styles = StyleSheet.create({
   
   noCloudText: { fontSize: 18, color: '#666', textAlign: 'center' },
   errorText: { color: 'red', textAlign: 'center' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' },
+  
+  // ✅ MODIFICATION : Suppression de justifyContent et alignItems ici (déplacés dans ScrollView contentContainerStyle)
+  modalOverlay: { 
+      flex: 1, 
+      backgroundColor: 'rgba(0,0,0,0.8)' 
+  },
+  
   modalContent: { width: '85%', backgroundColor: '#FFF', borderRadius: 20, padding: 25, alignItems: 'center' },
   modalTitle: { fontSize: 22, fontWeight: '800', color: '#000', marginBottom: 5 },
   modalSubtitle: { fontSize: 14, color: '#666', marginBottom: 20 },
@@ -596,5 +624,4 @@ const styles = StyleSheet.create({
       fontWeight: 'bold',
       fontSize: 16,
   },
-  // Styles fullImageOverlay et fullImageCloseBtn supprimés
 });
