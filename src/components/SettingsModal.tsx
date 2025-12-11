@@ -27,9 +27,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
   useEffect(() => {
     try {
         GoogleSignin.configure({
-            // Remplacez par vos IDs clients réels depuis la console Google Cloud
             iosClientId: 'VOTRE_IOS_CLIENT_ID_GOOGLE.apps.googleusercontent.com',
-            webClientId: 'VOTRE_WEB_CLIENT_ID_GOOGLE.apps.googleusercontent.com', // Pour Android
+            webClientId: 'VOTRE_WEB_CLIENT_ID_GOOGLE.apps.googleusercontent.com', 
             scopes: ['profile', 'email'],
         });
     } catch (e) {
@@ -63,7 +62,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
               allowsEditing: true,
               aspect: [1, 1],
               quality: 0.5,
-              base64: false, // Pas nécessaire pour FormData
+              base64: false, 
           });
 
           if (!result.canceled && result.assets && result.assets.length > 0) {
@@ -104,33 +103,32 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
     
     try {
         const fileName = `${user.id}/${new Date().getTime()}.jpg`;
-        
-        // Utilisation de FormData pour un upload plus robuste
-        const formData = new FormData();
-        
-        // Validation basique de l'asset
-        if (!asset.uri) throw new Error("URI de l'image manquant");
 
-        // Construction précise de l'objet fichier pour React Native
-        const fileData = {
-            uri: asset.uri,
-            name: 'avatar.jpg',
-            type: asset.mimeType || 'image/jpeg', // Utilisation du mimeType réel ou fallback
-        };
+        // 1. Conversion de l'URI en Blob (Méthode la plus stable pour Expo/Supabase)
+        const response = await fetch(asset.uri);
+        const blob = await response.blob();
 
-        formData.append('file', fileData as any);
-
+        // 2. Upload vers Supabase Storage
+        // IMPORTANT: Assurez-vous que le bucket 'avatars' existe et est Public ou a des policies RLS
         const { error: uploadError } = await supabase.storage
             .from('avatars')
-            .upload(fileName, formData, { 
+            .upload(fileName, blob, { 
                 contentType: 'image/jpeg', 
                 upsert: true 
             });
 
-        if (uploadError) throw uploadError;
+        if (uploadError) {
+             // Détection spécifique si le bucket n'existe pas
+             if (uploadError.message.includes("bucket")) {
+                 throw new Error("Le dossier de stockage 'avatars' n'existe pas dans Supabase.");
+             }
+             throw uploadError;
+        }
 
+        // 3. Récupération de l'URL publique
         const { data } = supabase.storage.from('avatars').getPublicUrl(fileName);
         
+        // 4. Mise à jour du profil utilisateur
         const { error: updateError } = await supabase
             .from('users')
             .update({ avatar_url: data.publicUrl })
@@ -162,9 +160,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
       }
     } catch (error: any) {
       if (error.code === statusCodes.SIGN_IN_CANCELLED) {
-        // user cancelled the login flow
       } else if (error.code === statusCodes.IN_PROGRESS) {
-        // operation (e.g. sign in) is in progress already
       } else {
         Alert.alert("Erreur Google", error.message);
       }
@@ -179,7 +175,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
           AppleAuthentication.AppleAuthenticationScope.EMAIL,
         ],
       });
-      // Sign in via Supabase with the identity token.
       if (credential.identityToken) {
         const { error } = await supabase.auth.signInWithIdToken({
           provider: 'apple',
@@ -190,7 +185,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
       }
     } catch (e: any) {
       if (e.code === 'ERR_REQUEST_CANCELED') {
-        // handle that the user canceled the sign-in flow
       } else {
         Alert.alert("Erreur Apple", e.message);
       }
@@ -315,14 +309,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
                 </View>
 
                 {/* SECTION COMPTES LIÉS */}
-                {/* Permet de lier un compte social à un compte existant */}
                 <View style={styles.sectionTitleContainer}>
                     <Text style={styles.sectionTitle}>COMPTES LIÉS</Text>
                 </View>
                 <View style={styles.menuContainer}>
                     <TouchableOpacity style={styles.menuItem} onPress={linkGoogle}>
                         <View style={styles.menuIconContainer}>
-                           {/* Ici on mettrait un logo Google, simulé par un cercle coloré pour l'instant */}
                             <View style={{width:20, height:20, borderRadius:10, backgroundColor:'#DB4437', justifyContent:'center', alignItems:'center'}}>
                                 <Text style={{color:'#FFF', fontWeight:'bold', fontSize:10}}>G</Text>
                             </View>
@@ -334,7 +326,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
                     {Platform.OS === 'ios' && (
                         <TouchableOpacity style={styles.menuItem} onPress={linkApple}>
                             <View style={styles.menuIconContainer}>
-                                {/* Logo Apple simulé */}
                                 <View style={{width:20, height:20, borderRadius:10, backgroundColor:'#000', justifyContent:'center', alignItems:'center'}}>
                                     <Text style={{color:'#FFF', fontWeight:'bold', fontSize:10}}></Text>
                                 </View>
