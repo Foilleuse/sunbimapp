@@ -131,7 +131,7 @@ export default function CameraPage() {
   // --- RENDU ---
   return (
     <View style={styles.container}>
-        <SunbimHeader showCloseButton={true} onClose={() => capturedImage ? retakePicture() : router.back()} transparent={true} />
+        <SunbimHeader showCloseButton={true} onClose={() => capturedImage ? retakePicture() : router.back()} />
 
         {/* ZONE CAMÉRA / PREVIEW : Hauteur Fixe 3:4 */}
         <View style={{ width: screenWidth, height: CAMERA_HEIGHT, backgroundColor: '#000', marginTop: 0 }}>
