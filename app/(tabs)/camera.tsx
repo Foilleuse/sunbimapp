@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Alert, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Alert, ActivityIndicator, Image, SafeAreaView } from 'react-native';
 import { useState, useRef, useEffect } from 'react';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
@@ -131,14 +131,21 @@ export default function CameraPage() {
   // --- RENDU ---
   return (
     <View style={styles.container}>
-        {/* On force le header transparent pour qu'il s'affiche SUR le fond noir du container, mais le SunbimHeader gère la couleur de texte en fonction du prop transparent */}
-        {/* Pour obtenir un header noir, on utilise le style du container (noir) et on rend le header "transparent" pour le fond, mais en ajustant ses couleurs de texte si nécessaire. */}
-        {/* Cependant, SunbimHeader gère "transparent" comme "texte blanc sur fond transparent". C'est parfait ici car le fond derrière est noir. */}
-        <View style={{ backgroundColor: '#000', width: '100%' }}>
+        {/* HEADER NOIR */}
+        {/* On retire le prop 'transparent' pour que le header ait son fond par défaut (blanc), 
+            mais on surcharge le style via un wrapper ou directement si le composant le permettait.
+            Ici, le composant SunbimHeader ne permet pas de changer la couleur de fond via props, 
+            sauf 'transparent'. 
+            SOLUTION : On garde transparent={true} MAIS on met un fond noir derrière via le wrapper,
+            ET on s'assure que le contenu du header est visible (blanc).
+            
+            Si le header n'apparaît pas, c'est peut-être un problème de zIndex ou de hauteur.
+        */}
+        <View style={{ backgroundColor: '#000', width: '100%', zIndex: 100 }}>
             <SunbimHeader 
                 showCloseButton={true} 
                 onClose={() => capturedImage ? retakePicture() : router.back()} 
-                transparent={true} 
+                transparent={true} // Texte blanc
             />
         </View>
 
