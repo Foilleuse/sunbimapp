@@ -63,10 +63,10 @@ const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color }: any) => {
         <Pressable onPress={handlePress} style={styles.reactionBtn}>
             <Animated.View style={animatedStyle}>
                 <Icon 
-                    // ✅ MODIFICATION : Blanc (#FFF) si inactif
                     color={isActive ? color : "#FFF"} 
                     fill={isActive ? color : "transparent"} 
-                    size={40} 
+                    // ✅ MODIFICATION : Taille réduite à 30
+                    size={30} 
                 />
             </Animated.View>
         </Pressable>
@@ -267,37 +267,38 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
                     >
                          <Text style={styles.userName}>{author?.display_name || "Anonyme"}</Text>
                     </TouchableOpacity>
-                </View>
 
-                <View style={styles.reactionBar}>
-                    <AnimatedReactionBtn 
-                        icon={Heart} 
-                        color="#FF3B30" 
-                        isActive={userReaction === 'like'} 
-                        count={reactionCounts.like} 
-                        onPress={() => handleReaction('like')}
-                    />
-                    <AnimatedReactionBtn 
-                        icon={Lightbulb} 
-                        color="#FFCC00" 
-                        isActive={userReaction === 'smart'} 
-                        count={reactionCounts.smart} 
-                        onPress={() => handleReaction('smart')}
-                    />
-                    <AnimatedReactionBtn 
-                        icon={Palette} 
-                        color="#5856D6" 
-                        isActive={userReaction === 'beautiful'} 
-                        count={reactionCounts.beautiful} 
-                        onPress={() => handleReaction('beautiful')}
-                    />
-                    <AnimatedReactionBtn 
-                        icon={Laugh} 
-                        color="#FF2D55" 
-                        isActive={userReaction === 'crazy'} 
-                        count={reactionCounts.crazy} 
-                        onPress={() => handleReaction('crazy')}
-                    />
+                    {/* ✅ MODIFICATION STRUCTURELLE : reactionBar déplacé ici, à l'intérieur de headerInfo */}
+                    <View style={styles.reactionBar}>
+                        <AnimatedReactionBtn 
+                            icon={Heart} 
+                            color="#FF3B30" 
+                            isActive={userReaction === 'like'} 
+                            count={reactionCounts.like} 
+                            onPress={() => handleReaction('like')}
+                        />
+                        <AnimatedReactionBtn 
+                            icon={Lightbulb} 
+                            color="#FFCC00" 
+                            isActive={userReaction === 'smart'} 
+                            count={reactionCounts.smart} 
+                            onPress={() => handleReaction('smart')}
+                        />
+                        <AnimatedReactionBtn 
+                            icon={Palette} 
+                            color="#5856D6" 
+                            isActive={userReaction === 'beautiful'} 
+                            count={reactionCounts.beautiful} 
+                            onPress={() => handleReaction('beautiful')}
+                        />
+                        <AnimatedReactionBtn 
+                            icon={Laugh} 
+                            color="#FF2D55" 
+                            isActive={userReaction === 'crazy'} 
+                            count={reactionCounts.crazy} 
+                            onPress={() => handleReaction('crazy')}
+                        />
+                    </View>
                 </View>
             </View>
         </View>
@@ -521,7 +522,10 @@ const styles = StyleSheet.create({
         shadowColor: "transparent", 
         elevation: 0,
     },
-    headerInfo: { marginBottom: 5, alignItems: 'center' }, 
+    headerInfo: { 
+        marginBottom: 0, // Réduit à 0
+        alignItems: 'center' 
+    }, 
     
     titleRow: { 
         width: '100%',
@@ -571,29 +575,33 @@ const styles = StyleSheet.create({
         fontSize: 13, 
         fontWeight: '600', 
         color: 'rgba(255,255,255,0.8)', 
-        marginBottom: 10
+        // ✅ MODIFICATION : Marge réduite sous le nom
+        marginBottom: 4
     },
 
     reactionBar: { 
         flexDirection: 'row', 
-        justifyContent: 'space-around', 
+        // ✅ MODIFICATION : Centré avec un gap
+        justifyContent: 'center', 
         alignItems: 'center', 
         width: '100%',
+        gap: 25, // Espace entre les boutons
         paddingHorizontal: 10,
-        // ✅ MODIFICATION : Augmenté à 60 pour remonter les icônes
-        paddingBottom: 60,
-        marginTop: 10
+        // ✅ MODIFICATION : Padding bas réduit, margin top ajouté pour coller au nom
+        paddingBottom: 20,
+        marginTop: 4
     },
     reactionBtn: { 
         alignItems: 'center', 
         justifyContent: 'center',
-        padding: 8,
-        // ✅ MODIFICATION : Ombre portée pour que le blanc ressorte
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.3,
-        shadowRadius: 3,
-        elevation: 3
+        // ✅ MODIFICATION : Padding réduit
+        padding: 4,
+        // ✅ MODIFICATION : Ombre supprimée
+        shadowColor: "transparent",
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0,
+        shadowRadius: 0,
+        elevation: 0
     },
     reactionText: { 
         fontSize: 12, 
