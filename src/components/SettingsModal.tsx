@@ -107,11 +107,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
         
         // Utilisation de FormData pour un upload plus robuste
         const formData = new FormData();
-        formData.append('file', {
+        
+        // Validation basique de l'asset
+        if (!asset.uri) throw new Error("URI de l'image manquant");
+
+        // Construction précise de l'objet fichier pour React Native
+        const fileData = {
             uri: asset.uri,
             name: 'avatar.jpg',
-            type: 'image/jpeg', 
-        } as any);
+            type: asset.mimeType || 'image/jpeg', // Utilisation du mimeType réel ou fallback
+        };
+
+        formData.append('file', fileData as any);
 
         const { error: uploadError } = await supabase.storage
             .from('avatars')
@@ -133,7 +140,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
 
         Alert.alert("Succès", "Photo de profil mise à jour !");
     } catch (error: any) {
-        console.error("Erreur upload:", error);
+        console.error("Erreur upload complète:", error);
         Alert.alert("Erreur", "Echec de l'upload : " + (error.message || "Erreur inconnue"));
     } finally {
         setLoading(false);
