@@ -542,26 +542,22 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                                 
                                 <Text style={styles.userName}>{userProfile?.display_name || "Anonyme"}</Text>
 
-                                {/* BARRE DE RÉACTIONS */}
+                                {/* BARRE DE RÉACTIONS - SANS COMPTEURS */}
                                 <View style={styles.reactionBar}>
                                     <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('like')}>
                                         <Heart color={userReaction === 'like' ? "#FF3B30" : "#000"} fill={userReaction === 'like' ? "#FF3B30" : "transparent"} size={24} />
-                                        <Text style={[styles.reactionText, userReaction === 'like' && styles.activeText]}>{reactionCounts.like}</Text>
                                     </TouchableOpacity>
 
                                     <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('smart')}>
                                         <Lightbulb color={userReaction === 'smart' ? "#FFCC00" : "#000"} fill={userReaction === 'smart' ? "#FFCC00" : "transparent"} size={24} />
-                                        <Text style={[styles.reactionText, userReaction === 'smart' && styles.activeText]}>{reactionCounts.smart}</Text>
                                     </TouchableOpacity>
 
                                     <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('beautiful')}>
                                         <Palette color={userReaction === 'beautiful' ? "#5856D6" : "#000"} fill={userReaction === 'beautiful' ? "#5856D6" : "transparent"} size={24} />
-                                        <Text style={[styles.reactionText, userReaction === 'beautiful' && styles.activeText]}>{reactionCounts.beautiful}</Text>
                                     </TouchableOpacity>
 
                                     <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('crazy')}>
                                         <Zap color={userReaction === 'crazy' ? "#FF2D55" : "#000"} fill={userReaction === 'crazy' ? "#FF2D55" : "transparent"} size={24} />
-                                        <Text style={[styles.reactionText, userReaction === 'crazy' && styles.activeText]}>{reactionCounts.crazy}</Text>
                                     </TouchableOpacity>
                                 </View>
                             </View>
@@ -728,6 +724,7 @@ const styles = StyleSheet.create({
       justifyContent: 'center',
       padding: 8
   },
+  // reactionText a été supprimé des éléments, mais le style peut rester si besoin pour d'autres usages
   reactionText: { 
       fontSize: 12, 
       fontWeight: '600', 
