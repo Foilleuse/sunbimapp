@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, TouchableOpacity, StyleSheet, Platform } from 'react-native';
-import { Eraser, Undo2, Redo2, Share2, User, Eye } from 'lucide-react-native';
+import { Eraser, Undo2, Redo2, Share2, User } from 'lucide-react-native';
 
 interface DrawingControlsProps {
   onUndo: () => void;
@@ -14,7 +14,6 @@ interface DrawingControlsProps {
   onShare: () => void;
   onClear?: () => void;
   isAuthenticated: boolean;
-  onShowOriginal: () => void; // Nouvelle prop simple
 }
 
 const COLORS = ['#FFFFFF', '#808080', '#000000'];
@@ -25,8 +24,7 @@ export const DrawingControls: React.FC<DrawingControlsProps> = ({
   strokeWidth, onStrokeWidthChange,
   isEraserMode, toggleEraser,
   onShare,
-  isAuthenticated,
-  onShowOriginal
+  isAuthenticated
 }) => {
   
   const [showColorMenu, setShowColorMenu] = useState(false);
@@ -91,17 +89,9 @@ export const DrawingControls: React.FC<DrawingControlsProps> = ({
 
         <View style={styles.separator} />
 
-        {/* DROITE : Slider & Share/User & OEIL */}
+        {/* DROITE : Slider & Share/User */}
         <View style={styles.group}>
-            {/* BOUTON OEIL SIMPLE */}
-            <TouchableOpacity 
-                onPress={onShowOriginal}
-                style={styles.iconBtn}
-                hitSlop={10}
-            >
-                <Eye color="#000" size={22} />
-            </TouchableOpacity>
-
+            
             <View style={styles.sliderContainer}
                 onTouchStart={handleSliderTouch}
                 onTouchMove={handleSliderTouch}
