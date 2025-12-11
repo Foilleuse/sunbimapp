@@ -39,9 +39,7 @@ const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color, count }: an
                     size={24}
                 />
             </Animated.View>
-            <Text style={[styles.reactionText, isActive && styles.activeText]}>
-                {count || 0}
-            </Text>
+            {/* Compteur supprimé comme demandé */}
         </Pressable>
     );
 };
