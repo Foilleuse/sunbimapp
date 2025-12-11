@@ -1,23 +1,27 @@
+import { PixelRatio } from 'react-native';
+
 /**
  * Utilitaire pour optimiser les images stockées sur Supabase.
+ * Documentation : https://supabase.com/docs/guides/storage/image-transformations
  */
 export const getOptimizedImageUrl = (
   url: string | null | undefined,
   width: number,
-  height?: number, // ✅ Paramètre optionnel
+  height?: number, // ✅ Paramètre optionnel : S'il est présent, on active le CROP.
   quality: number = 75
 ): string | null => {
   if (!url) return null;
 
+  // 1. Vérification : URL Supabase standard
   const isSupabaseUrl = url.includes('supabase.co') || url.includes('supabase.in');
   if (!isSupabaseUrl) return url;
 
-  // Sécurité : URLs publiques uniquement
+  // 2. Sécurité : On ne transforme que les URLs publiques
   if (!url.includes('/storage/v1/object/public/')) {
        return url;
   }
 
-  // --- Bucketing Largeur ---
+  // --- Bucketing : On standardise la largeur pour le cache CDN ---
   let targetWidth = width;
   if (width <= 100) targetWidth = 100;
   else if (width <= 200) targetWidth = 200;
@@ -26,21 +30,25 @@ export const getOptimizedImageUrl = (
   else if (width <= 1200) targetWidth = 1200;
   else targetWidth = 1600;
 
-  // --- Gestion Intelligente de la Hauteur ---
   let params = `width=${targetWidth}&quality=${quality}&format=origin`;
 
+  // 3. LOGIQUE CONDITIONNELLE (Le cœur du fix)
   if (height) {
-    // 🔥 Si une hauteur est demandée (ex: Grille 3:4), on l'adapte au bucketing
-    // pour que le ratio d'image reste exactement celui demandé.
+    // 🔥 CAS A : HAUTEUR FOURNIE (Galerie)
+    // On veut forcer un ratio précis (ex: 3:4).
+    // On calcule la hauteur cible proportionnelle au bucket de largeur.
     const ratio = height / width;
     const targetHeight = Math.round(targetWidth * ratio);
     
-    // On active le crop strict (cover) car on a des dimensions précises
+    // "resize=cover" est l'instruction qui dit au serveur : 
+    // "Coupe tout ce qui dépasse pour remplir exactement cette boîte".
     params += `&height=${targetHeight}&resize=cover`;
   } 
-  // SINON (Pas de height) : Supabase garde le ratio d'origine (Avatars, FullScreen...)
+  // 🧊 CAS B : PAS DE HAUTEUR (Avatars, Plein écran)
+  // On ne met PAS "resize=cover". Supabase va juste réduire la taille du fichier
+  // tout en gardant l'image entière (pas de têtes coupées).
 
-  // Changement d'endpoint
+  // 4. Remplacement de l'endpoint vers le moteur de rendu
   let optimizedUrl = url.replace(
     '/storage/v1/object/public/',
     '/storage/v1/render/image/public/'
