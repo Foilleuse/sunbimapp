@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, memo } from 'react';
-import { View, Text, StyleSheet, Modal, Image, TouchableOpacity, FlatList, ActivityIndicator, Dimensions, Alert, Pressable, Platform, SafeAreaView } from 'react-native';
+import React, { useState, useEffect, useCallback, memo, useMemo } from 'react';
+import { View, Text, StyleSheet, Modal, Image, TouchableOpacity, FlatList, ActivityIndicator, Dimensions, Alert, Pressable, Platform, SafeAreaView, PixelRatio } from 'react-native';
 import { X, User, UserPlus, UserCheck, Heart, MessageCircle, Lock, AlertCircle, Unlock, Lightbulb, Palette, Zap, MoreHorizontal } from 'lucide-react-native';
 import { supabase } from '../lib/supabaseClient';
 import { DrawingViewer } from './DrawingViewer';
@@ -18,6 +18,17 @@ type ReactionType = 'like' | 'smart' | 'beautiful' | 'crazy' | null;
 
 // --- COMPOSANT MÉMORISÉ POUR LA GRILLE ---
 const DrawingGridItem = memo(({ item, size, isUnlocked, onPress, spacing }: any) => {
+    
+    // 🔥 OPTIMISATION GRILLE : Calcul de l'image exacte 3:4 avec densité de pixels
+    const optimizedGridUri = useMemo(() => {
+        if (!item.cloud_image_url) return null;
+        // Calcul des pixels physiques nécessaires
+        const w = Math.round(size * PixelRatio.get());
+        const h = Math.round(w * (4/3)); // Ratio 3:4
+        // Demande de crop au serveur
+        return getOptimizedImageUrl(item.cloud_image_url, w, h);
+    }, [item.cloud_image_url, size]);
+
     return (
         <TouchableOpacity 
             onPress={() => onPress(item)}
@@ -25,7 +36,8 @@ const DrawingGridItem = memo(({ item, size, isUnlocked, onPress, spacing }: any)
             style={{ width: size, aspectRatio: 3/4, marginBottom: spacing, backgroundColor: '#F9F9F9', overflow: 'hidden', position: 'relative' }}
         >
             <DrawingViewer 
-                imageUri={item.cloud_image_url}
+                // ✅ Utilisation de l'URL optimisée
+                imageUri={optimizedGridUri || item.cloud_image_url}
                 canvasData={isUnlocked ? item.canvas_data : []}
                 viewerSize={size}
                 transparentMode={false}
@@ -352,8 +364,21 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
       setReactionCounts({ like: 0, smart: 0, beautiful: 0, crazy: 0 });
   };
 
-  const profileAvatarOptimized = userProfile?.avatar_url ? getOptimizedImageUrl(userProfile.avatar_url, 100) : null;
-  const selectedDrawingImageOptimized = selectedDrawing ? getOptimizedImageUrl(selectedDrawing.cloud_image_url, screenWidth) : null;
+  // 🔥 OPTIMISATION AVATAR : Densité de pixels réelle
+  const profileAvatarOptimized = useMemo(() => {
+    if (!userProfile?.avatar_url) return null;
+    const size = Math.round(70 * PixelRatio.get()); // 70 = style.profileAvatar height
+    return getOptimizedImageUrl(userProfile.avatar_url, size, size);
+  }, [userProfile?.avatar_url]);
+
+  // 🔥 OPTIMISATION MODALE VIEW : HD + Ratio 3:4 forcé
+  const selectedDrawingImageOptimized = useMemo(() => {
+    if (!selectedDrawing?.cloud_image_url) return null;
+    const w = Math.round(screenWidth * PixelRatio.get());
+    const h = Math.round(w * (4/3));
+    return getOptimizedImageUrl(selectedDrawing.cloud_image_url, w, h);
+  }, [selectedDrawing, screenWidth]);
+
 
   const renderDrawingItem = useCallback(({ item }: { item: any }) => {
     const isUnlocked = (currentUser?.id === userId) || unlockedCloudIds.includes(item.cloud_id);
@@ -488,9 +513,11 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                                 />
                                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                                     <DrawingViewer
-                                        imageUri={selectedDrawing.cloud_image_url} 
+                                        // ✅ Utilisation de l'URL optimisée 3:4
+                                        imageUri={selectedDrawingImageOptimized || selectedDrawing.cloud_image_url} 
                                         canvasData={isSelectedUnlocked ? selectedDrawing.canvas_data : []}
                                         viewerSize={screenWidth} 
+                                        viewerHeight={screenWidth * (4/3)} // Force height
                                         transparentMode={true} 
                                         startVisible={false} 
                                         animated={true}
