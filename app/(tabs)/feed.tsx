@@ -425,11 +425,11 @@ export default function FeedPage() {
 
     return (
         <View style={styles.container}>
-             {/* 🔥 BACKGROUND SPLIT EN DEUX */}
+             {/* 🔥 BACKGROUND SPLIT EN DEUX AVEC ÉCART */}
              {backgroundCloud && (
                 <View style={[StyleSheet.absoluteFill, { gap: 100 }]}>
-                    {/* Partie Haute : Affiche le HAUT de l'image (défaut) */}
-                    <View style={{ width: '100%', height: '50%', overflow: 'hidden' }}>
+                    {/* Partie Haute : positionnée au milieu (justifyContent: flex-end) */}
+                    <View style={{ width: '100%', height: '50%', overflow: 'hidden', justifyContent: 'flex-end' }}>
                         <Image 
                             source={{ uri: optimizedBackground || backgroundCloud }}
                             style={{ width: '100%', height: '200%' }} 
@@ -437,12 +437,8 @@ export default function FeedPage() {
                             blurRadius={20}
                         />
                     </View>
-                    {/* Partie Basse (Renversée) : Affiche le BAS de l'image (défaut sur l'image inversée)
-                        - L'image est tournée de 180°.
-                        - Le "haut" visuel du composant inversé correspond au "bas" de l'image originale.
-                        - En alignant ce composant en haut du conteneur (défaut), on voit donc le bas de l'original.
-                    */}
-                    <View style={{ width: '100%', height: '50%', overflow: 'hidden' }}>
+                    {/* Partie Basse (Renversée) : part de plus bas (justifyContent: flex-end) */}
+                    <View style={{ width: '100%', height: '50%', overflow: 'hidden', justifyContent: 'flex-end' }}>
                         <Image 
                             source={{ uri: optimizedBackground || backgroundCloud }}
                             style={{ 
