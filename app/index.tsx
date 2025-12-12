@@ -385,15 +385,7 @@ export default function DrawPage() {
             />
         )}
         
-        {/* 🔥 FILTRE CHAUD (Sépia/Orangé) */}
-        <View 
-            pointerEvents="none" 
-            style={{
-                ...StyleSheet.absoluteFillObject,
-                backgroundColor: 'rgba(255, 160, 60, 0.12)', 
-                zIndex: 1, 
-            }} 
-        />
+        {/* ✅ SUPPRESSION DU FILTRE CHAUD ICI */}
       </View>
       
       {!replayPaths && (
