@@ -427,7 +427,8 @@ export default function FeedPage() {
         <View style={styles.container}>
              {/* 🔥 BACKGROUND SPLIT EN DEUX AVEC ÉCART */}
              {backgroundCloud && (
-                <View style={[StyleSheet.absoluteFill, { gap: 100 }]}>
+                // ✅ MODIFICATION : top: TOP_HEADER_SPACE pour aligner avec le carrousel
+                <View style={[StyleSheet.absoluteFill, { top: TOP_HEADER_SPACE, gap: 100 }]}>
                     {/* Partie Haute : positionnée au milieu (justifyContent: flex-end) */}
                     <View style={{ width: '100%', height: '50%', overflow: 'hidden', justifyContent: 'flex-end' }}>
                         <Image 
