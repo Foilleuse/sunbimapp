@@ -317,7 +317,7 @@ export default function FeedPage() {
     const [loading, setLoading] = useState(true);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [backgroundCloud, setBackgroundCloud] = useState<string | null>(null);
-    const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+    const { width: screenWidth } = Dimensions.get('window');
     
     // 🔥 ETAT POUR AFFICHER LES FLÈCHES DE TUTO
     const [showTutorialArrows, setShowTutorialArrows] = useState(true);
@@ -425,29 +425,30 @@ export default function FeedPage() {
 
     return (
         <View style={styles.container}>
-             {/* 🔥 BACKGROUND SPLIT EN DEUX : 
-                - Top Half: Image "part du bas" (alignement bottom)
-                - Bottom Half: Image renversée "part du haut" (donc alignement bottom de l'image source)
-             */}
+             {/* 🔥 BACKGROUND SPLIT EN DEUX */}
              {backgroundCloud && (
                 <View style={StyleSheet.absoluteFill}>
-                    {/* Partie Haute */}
-                    <View style={{ width: '100%', height: '50%', overflow: 'hidden', justifyContent: 'flex-end' }}>
+                    {/* Partie Haute : Affiche le HAUT de l'image (défaut) */}
+                    <View style={{ width: '100%', height: '50%', overflow: 'hidden' }}>
                         <Image 
                             source={{ uri: optimizedBackground || backgroundCloud }}
-                            style={{ width: '100%', height: '200%' }} // On affiche une image 2x plus grande
+                            style={{ width: '100%', height: '200%' }} 
                             resizeMode="cover"
                             blurRadius={20}
                         />
                     </View>
-                    {/* Partie Basse (Renversée) */}
-                    <View style={{ width: '100%', height: '50%', overflow: 'hidden', justifyContent: 'flex-end' }}>
+                    {/* Partie Basse (Renversée) : Affiche le BAS de l'image (défaut sur l'image inversée)
+                        - L'image est tournée de 180°.
+                        - Le "haut" visuel du composant inversé correspond au "bas" de l'image originale.
+                        - En alignant ce composant en haut du conteneur (défaut), on voit donc le bas de l'original.
+                    */}
+                    <View style={{ width: '100%', height: '50%', overflow: 'hidden' }}>
                         <Image 
                             source={{ uri: optimizedBackground || backgroundCloud }}
                             style={{ 
                                 width: '100%', 
                                 height: '200%', 
-                                transform: [{ rotate: '180deg' }] // Rotation 180deg
+                                transform: [{ rotate: '180deg' }] 
                             }} 
                             resizeMode="cover"
                             blurRadius={20}
