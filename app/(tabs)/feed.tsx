@@ -5,46 +5,57 @@ import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
 import { useAuth } from '../../src/contexts/AuthContext';
-import { UserProfileModal } from '../../src/components/UserProfileModal';
-import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { UserProfileModal } from '../../src/components/UserProfileModal'; 
+import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router'; 
 import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer';
 import Carousel from 'react-native-reanimated-carousel';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withSequence } from 'react-native-reanimated';
-// ✅ AJOUT de Group pour les transformations
+// ✅ AJOUT DE 'Group' pour les effets miroirs
 import { Canvas, Rect, LinearGradient as SkiaGradient, vec, useImage, Image as SkiaImage, Group } from "@shopify/react-native-skia";
 
 // Types de réactions possibles
 type ReactionType = 'like' | 'smart' | 'beautiful' | 'crazy' | null;
 
-// --- COMPOSANT IMAGE MASQUÉE (FONDU BORDS + MIROIR) ---
-// ✅ MODIFICATION : Ajout de la prop "mirrored"
-const MaskedDayImage = ({ uri, width, height, top, mirrored = false }: { uri: string, width: number, height: number, top: number, mirrored?: boolean }) => {
+// --- NOUVEAU COMPOSANT BACKGROUND MIROIR (Sans limites) ---
+const MirroredBackground = ({ uri, width, height, top }: { uri: string, width: number, height: number, top: number }) => {
     const image = useImage(uri);
     
     if (!image) return null;
 
-    // Le centre de rotation pour l'effet miroir
-    const origin = vec(width / 2, height / 2);
+    // Le point bas du viewer, d'où partira le miroir inférieur
+    const bottom = top + height;
 
     return (
-        <Canvas style={{ position: 'absolute', top, left: 0, width, height, zIndex: 0 }} pointerEvents="none">
-            {/* ✅ AJOUT du Group pour gérer l'effet miroir */}
-            <Group origin={origin} transform={[{ scaleY: mirrored ? -1 : 1 }]}>
-                <Rect x={0} y={0} width={width} height={height}>
-                    <SkiaGradient
-                        start={vec(0, 0)}
-                        end={vec(0, height)}
-                        colors={["transparent", "white", "white", "transparent"]}
-                        positions={[0, 0.05, 0.95, 1]}
-                    />
-                </Rect>
+        <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
+            
+            {/* 1. IMAGE CENTRALE (Derrière le dessin) */}
+            {/* Affiche l'image originale sans retouche pour s'aligner parfaitement sous le drawing viewer */}
+            <SkiaImage
+                image={image}
+                x={0} y={top} width={width} height={height}
+                fit="cover"
+            />
+
+            {/* 2. MIROIR HAUT (Part du haut et monte) */}
+            {/* Transformation : On retourne l'image verticalement (scaleY: -1) autour de la ligne du haut (top) */}
+            <Group origin={vec(width / 2, top)} transform={[{ scaleY: -1 }]}>
                 <SkiaImage
                     image={image}
-                    x={0} y={0} width={width} height={height}
+                    x={0} y={top} width={width} height={height}
                     fit="cover"
-                    blendMode="srcIn" 
                 />
             </Group>
+
+            {/* 3. MIROIR BAS (Part du bas et descend) */}
+            {/* Transformation : On retourne l'image verticalement (scaleY: -1) autour de la ligne du bas (bottom) */}
+            <Group origin={vec(width / 2, bottom)} transform={[{ scaleY: -1 }]}>
+                <SkiaImage
+                    image={image}
+                    x={0} y={top} width={width} height={height}
+                    fit="cover"
+                />
+            </Group>
+
         </Canvas>
     );
 };
@@ -141,7 +152,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
 
         const previousReaction = userReaction;
         const previousCounts = { ...reactionCounts };
-       
+        
         let newReaction: ReactionType = type;
         let newCounts = { ...reactionCounts };
 
@@ -175,7 +186,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
                         drawing_id: drawing.id,
                         reaction_type: newReaction
                     }, { onConflict: 'user_id, drawing_id' });
-              
+                
                 if (error) throw error;
             }
         } catch (e) {
@@ -200,7 +211,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
                             const { error } = await supabase
                                 .from('reports')
                                 .insert({ reporter_id: user.id, drawing_id: drawing.id, reason: 'Contenu inapproprié' });
-                           
+                            
                             if (error) throw error;
                             Alert.alert("Signalement envoyé", "Nous allons examiner cette image. Merci de votre vigilance.");
                         } catch (e) {
@@ -218,7 +229,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
                             const { error } = await supabase
                                 .from('blocks')
                                 .insert({ blocker_id: user.id, blocked_id: author.id });
-                           
+                            
                             if (error) throw error;
                             Alert.alert("Utilisateur bloqué", "Vous ne verrez plus les contenus de cet utilisateur.");
                         } catch (e: any) {
@@ -254,14 +265,14 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
                     )}
                 </View>
             </View>
-           
+            
             <View style={styles.cardInfo}>
                 <View style={styles.headerInfo}>
                     <View style={styles.titleRow}>
                         <Text style={styles.drawingTitle} numberOfLines={1}>
                             {drawing.label || "Sans titre"}
                         </Text>
-                       
+                        
                         <TouchableOpacity onPress={handleReport} style={styles.moreBtnAbsolute} hitSlop={15}>
                             <MoreHorizontal color="#CCC" size={24} />
                         </TouchableOpacity>
@@ -272,7 +283,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
                         activeOpacity={0.7}
                         style={styles.authorContainer}
                     >
-                        <Text style={styles.userName}>{author?.display_name || "Anonyme"}</Text>
+                         <Text style={styles.userName}>{author?.display_name || "Anonyme"}</Text>
                     </TouchableOpacity>
 
                     <View style={styles.reactionBar}>
@@ -354,7 +365,7 @@ export default function FeedPage() {
         try {
             const today = new Date().toISOString().split('T')[0];
             const { data: cloudData } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();
-           
+            
             if (!cloudData) {
                 setLoading(false);
                 return;
@@ -367,7 +378,7 @@ export default function FeedPage() {
                     .eq('user_id', user.id)
                     .eq('cloud_id', cloudData.id)
                     .maybeSingle();
-              
+                
                 if (!myDrawing) {
                     router.replace('/'); 
                     return; 
@@ -383,7 +394,7 @@ export default function FeedPage() {
                         .from('blocks')
                         .select('blocked_id')
                         .eq('blocker_id', user.id);
-                   
+                    
                     if (blocks && blocks.length > 0) {
                         blockedUserIds = blocks.map(b => b.blocked_id);
                     }
@@ -432,13 +443,18 @@ export default function FeedPage() {
 
     return (
         <View style={styles.container}>
-            {/* 🔥 BACKGROUND RESTAURE : Image complète sur tout l'écran */}
+            {/* 
+               🔥 BACKGROUND MIROIR INFINI :
+               On utilise le nouveau composant MirroredBackground qui dessine le centre 
+               + les extensions miroirs en haut et en bas.
+               L'ancienne Image avec blur a été supprimée.
+            */}
             {backgroundCloud && (
-                <Image 
-                    source={{ uri: optimizedBackground || backgroundCloud }}
-                    style={StyleSheet.absoluteFillObject}
-                    resizeMode="cover"
-                    blurRadius={20}
+                <MirroredBackground 
+                    uri={optimizedBackground || backgroundCloud}
+                    width={screenWidth}
+                    height={IMAGE_HEIGHT}
+                    top={TOP_HEADER_SPACE} 
                 />
             )}
 
@@ -448,26 +464,10 @@ export default function FeedPage() {
                 style={[styles.mainContent, { paddingTop: TOP_HEADER_SPACE }]} 
                 onLayout={(e) => setLayout(e.nativeEvent.layout)}
             >
-                {backgroundCloud && (
-                    <>
-                        {/* 1ère Image : Part du haut, effet miroir */}
-                        <MaskedDayImage 
-                            uri={optimizedBackground || backgroundCloud}
-                            width={screenWidth}
-                            height={IMAGE_HEIGHT}
-                            top={TOP_HEADER_SPACE} 
-                            mirrored={true}
-                        />
-                        {/* 2ème Image : Part du bas (sous le viewer), effet miroir */}
-                        <MaskedDayImage 
-                            uri={optimizedBackground || backgroundCloud}
-                            width={screenWidth}
-                            height={IMAGE_HEIGHT}
-                            top={TOP_HEADER_SPACE + IMAGE_HEIGHT} 
-                            mirrored={true}
-                        />
-                    </>
-                )}
+                {/* 
+                    L'ancien composant <MaskedDayImage /> a été remplacé par <MirroredBackground /> 
+                    placé juste avant pour être en arrière-plan.
+                */}
 
                 {drawings.length > 0 && layout ? (
                     <Carousel
