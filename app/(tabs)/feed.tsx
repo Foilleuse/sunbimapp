@@ -317,7 +317,7 @@ export default function FeedPage() {
     const [loading, setLoading] = useState(true);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [backgroundCloud, setBackgroundCloud] = useState<string | null>(null);
-    const { width: screenWidth } = Dimensions.get('window');
+    const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
     
     // 🔥 ETAT POUR AFFICHER LES FLÈCHES DE TUTO
     const [showTutorialArrows, setShowTutorialArrows] = useState(true);
@@ -329,6 +329,7 @@ export default function FeedPage() {
     const [selectedUser, setSelectedUser] = useState<any>(null);
     const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
 
+    // ✅ REVERSION : On remet l'espace pour le header pour la position du carrousel
     const TOP_HEADER_SPACE = 120;
 
     const IMAGE_HEIGHT = screenWidth * (4/3);
@@ -425,14 +426,36 @@ export default function FeedPage() {
 
     return (
         <View style={styles.container}>
-             {/* 🔥 BACKGROUND RESTAURE : Image complète sur tout l'écran */}
+             {/* 🔥 BACKGROUND SPLIT À HAUTEUR DU BOUTON OEIL */}
              {backgroundCloud && (
-                <Image 
-                    source={{ uri: optimizedBackground || backgroundCloud }}
-                    style={StyleSheet.absoluteFillObject}
-                    resizeMode="cover"
-                    blurRadius={20}
-                />
+                <View style={StyleSheet.absoluteFill}>
+                    {/* Partie Haute : s'arrête exactement au niveau du bouton œil */}
+                    <View style={{ height: eyeButtonTop, width: '100%', overflow: 'hidden', justifyContent: 'flex-end' }}>
+                        <Image 
+                            source={{ uri: optimizedBackground || backgroundCloud }}
+                            style={{ width: '100%', height: screenHeight }} 
+                            resizeMode="cover"
+                            blurRadius={20}
+                        />
+                    </View>
+                    
+                    {/* Écart invisible */}
+                    <View style={{ height: 100 }} />
+
+                    {/* Partie Basse (Effet Miroir) : commence après l'écart */}
+                    <View style={{ flex: 1, width: '100%', overflow: 'hidden', justifyContent: 'flex-start' }}>
+                        <Image 
+                            source={{ uri: optimizedBackground || backgroundCloud }}
+                            style={{ 
+                                width: '100%', 
+                                height: screenHeight, 
+                                transform: [{ scaleY: -1 }] // Effet Miroir vertical
+                            }} 
+                            resizeMode="cover"
+                            blurRadius={20}
+                        />
+                    </View>
+                </View>
             )}
 
             <SunbimHeader showCloseButton={false} transparent={true} />
