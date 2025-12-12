@@ -426,11 +426,11 @@ export default function FeedPage() {
 
     return (
         <View style={styles.container}>
-             {/* 🔥 BACKGROUND SPLIT À HAUTEUR DU BOUTON OEIL */}
+             {/* 🔥 BACKGROUND SPLIT COLLÉ ET NON ROGNÉ */}
              {backgroundCloud && (
                 <View style={StyleSheet.absoluteFill}>
-                    {/* Partie Haute : s'arrête exactement au niveau du bouton œil */}
-                    <View style={{ height: eyeButtonTop, width: '100%', overflow: 'hidden', justifyContent: 'flex-end' }}>
+                    {/* Partie Haute : s'arrête exactement au niveau du bouton œil, alignée en haut */}
+                    <View style={{ height: eyeButtonTop, width: '100%', overflow: 'hidden', justifyContent: 'flex-start' }}>
                         <Image 
                             source={{ uri: optimizedBackground || backgroundCloud }}
                             style={{ width: '100%', height: screenHeight }} 
@@ -439,11 +439,8 @@ export default function FeedPage() {
                         />
                     </View>
                     
-                    {/* Écart invisible */}
-                    <View style={{ height: 100 }} />
-
-                    {/* Partie Basse (Effet Miroir) : commence après l'écart */}
-                    <View style={{ flex: 1, width: '100%', overflow: 'hidden', justifyContent: 'flex-start' }}>
+                    {/* Partie Basse (Effet Miroir) : commence directement après, alignée en bas */}
+                    <View style={{ flex: 1, width: '100%', overflow: 'hidden', justifyContent: 'flex-end' }}>
                         <Image 
                             source={{ uri: optimizedBackground || backgroundCloud }}
                             style={{ 
