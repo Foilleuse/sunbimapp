@@ -427,7 +427,7 @@ export default function FeedPage() {
         <View style={styles.container}>
              {/* 🔥 BACKGROUND SPLIT EN DEUX */}
              {backgroundCloud && (
-                <View style={StyleSheet.absoluteFill}>
+                <View style={[StyleSheet.absoluteFill, { gap: 100 }]}>
                     {/* Partie Haute : Affiche le HAUT de l'image (défaut) */}
                     <View style={{ width: '100%', height: '50%', overflow: 'hidden' }}>
                         <Image 
