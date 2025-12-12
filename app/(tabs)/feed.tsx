@@ -5,38 +5,46 @@ import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
 import { useAuth } from '../../src/contexts/AuthContext';
-import { UserProfileModal } from '../../src/components/UserProfileModal'; 
-import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router'; 
+import { UserProfileModal } from '../../src/components/UserProfileModal';
+import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer';
 import Carousel from 'react-native-reanimated-carousel';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withSequence } from 'react-native-reanimated';
-import { Canvas, Rect, LinearGradient as SkiaGradient, vec, useImage, Image as SkiaImage } from "@shopify/react-native-skia";
+// ✅ AJOUT de Group pour les transformations
+import { Canvas, Rect, LinearGradient as SkiaGradient, vec, useImage, Image as SkiaImage, Group } from "@shopify/react-native-skia";
 
 // Types de réactions possibles
 type ReactionType = 'like' | 'smart' | 'beautiful' | 'crazy' | null;
 
-// --- COMPOSANT IMAGE MASQUÉE (FONDU BORDS) ---
-const MaskedDayImage = ({ uri, width, height, top }: { uri: string, width: number, height: number, top: number }) => {
+// --- COMPOSANT IMAGE MASQUÉE (FONDU BORDS + MIROIR) ---
+// ✅ MODIFICATION : Ajout de la prop "mirrored"
+const MaskedDayImage = ({ uri, width, height, top, mirrored = false }: { uri: string, width: number, height: number, top: number, mirrored?: boolean }) => {
     const image = useImage(uri);
     
     if (!image) return null;
 
+    // Le centre de rotation pour l'effet miroir
+    const origin = vec(width / 2, height / 2);
+
     return (
         <Canvas style={{ position: 'absolute', top, left: 0, width, height, zIndex: 0 }} pointerEvents="none">
-             <Rect x={0} y={0} width={width} height={height}>
-                <SkiaGradient
-                    start={vec(0, 0)}
-                    end={vec(0, height)}
-                    colors={["transparent", "white", "white", "transparent"]}
-                    positions={[0, 0.05, 0.95, 1]}
+            {/* ✅ AJOUT du Group pour gérer l'effet miroir */}
+            <Group origin={origin} transform={[{ scaleY: mirrored ? -1 : 1 }]}>
+                <Rect x={0} y={0} width={width} height={height}>
+                    <SkiaGradient
+                        start={vec(0, 0)}
+                        end={vec(0, height)}
+                        colors={["transparent", "white", "white", "transparent"]}
+                        positions={[0, 0.05, 0.95, 1]}
+                    />
+                </Rect>
+                <SkiaImage
+                    image={image}
+                    x={0} y={0} width={width} height={height}
+                    fit="cover"
+                    blendMode="srcIn" 
                 />
-            </Rect>
-            <SkiaImage
-                image={image}
-                x={0} y={0} width={width} height={height}
-                fit="cover"
-                blendMode="srcIn" 
-            />
+            </Group>
         </Canvas>
     );
 };
@@ -65,7 +73,6 @@ const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color }: any) => {
                 <Icon 
                     color={isActive ? color : "#FFF"} 
                     fill={isActive ? color : "transparent"} 
-                    // ✅ MODIFICATION : Taille réduite à 24
                     size={24} 
                 />
             </Animated.View>
@@ -134,7 +141,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
 
         const previousReaction = userReaction;
         const previousCounts = { ...reactionCounts };
-        
+       
         let newReaction: ReactionType = type;
         let newCounts = { ...reactionCounts };
 
@@ -168,7 +175,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
                         drawing_id: drawing.id,
                         reaction_type: newReaction
                     }, { onConflict: 'user_id, drawing_id' });
-                
+              
                 if (error) throw error;
             }
         } catch (e) {
@@ -193,7 +200,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
                             const { error } = await supabase
                                 .from('reports')
                                 .insert({ reporter_id: user.id, drawing_id: drawing.id, reason: 'Contenu inapproprié' });
-                            
+                           
                             if (error) throw error;
                             Alert.alert("Signalement envoyé", "Nous allons examiner cette image. Merci de votre vigilance.");
                         } catch (e) {
@@ -211,7 +218,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
                             const { error } = await supabase
                                 .from('blocks')
                                 .insert({ blocker_id: user.id, blocked_id: author.id });
-                            
+                           
                             if (error) throw error;
                             Alert.alert("Utilisateur bloqué", "Vous ne verrez plus les contenus de cet utilisateur.");
                         } catch (e: any) {
@@ -247,14 +254,14 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
                     )}
                 </View>
             </View>
-            
+           
             <View style={styles.cardInfo}>
                 <View style={styles.headerInfo}>
                     <View style={styles.titleRow}>
                         <Text style={styles.drawingTitle} numberOfLines={1}>
                             {drawing.label || "Sans titre"}
                         </Text>
-                        
+                       
                         <TouchableOpacity onPress={handleReport} style={styles.moreBtnAbsolute} hitSlop={15}>
                             <MoreHorizontal color="#CCC" size={24} />
                         </TouchableOpacity>
@@ -265,7 +272,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
                         activeOpacity={0.7}
                         style={styles.authorContainer}
                     >
-                         <Text style={styles.userName}>{author?.display_name || "Anonyme"}</Text>
+                        <Text style={styles.userName}>{author?.display_name || "Anonyme"}</Text>
                     </TouchableOpacity>
 
                     <View style={styles.reactionBar}>
@@ -317,7 +324,7 @@ export default function FeedPage() {
     const [loading, setLoading] = useState(true);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [backgroundCloud, setBackgroundCloud] = useState<string | null>(null);
-    const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+    const { width: screenWidth } = Dimensions.get('window');
     
     // 🔥 ETAT POUR AFFICHER LES FLÈCHES DE TUTO
     const [showTutorialArrows, setShowTutorialArrows] = useState(true);
@@ -329,7 +336,6 @@ export default function FeedPage() {
     const [selectedUser, setSelectedUser] = useState<any>(null);
     const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
 
-    // ✅ REVERSION : On remet l'espace pour le header pour la position du carrousel
     const TOP_HEADER_SPACE = 120;
 
     const IMAGE_HEIGHT = screenWidth * (4/3);
@@ -348,7 +354,7 @@ export default function FeedPage() {
         try {
             const today = new Date().toISOString().split('T')[0];
             const { data: cloudData } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();
-            
+           
             if (!cloudData) {
                 setLoading(false);
                 return;
@@ -361,7 +367,7 @@ export default function FeedPage() {
                     .eq('user_id', user.id)
                     .eq('cloud_id', cloudData.id)
                     .maybeSingle();
-                
+              
                 if (!myDrawing) {
                     router.replace('/'); 
                     return; 
@@ -377,7 +383,7 @@ export default function FeedPage() {
                         .from('blocks')
                         .select('blocked_id')
                         .eq('blocker_id', user.id);
-                    
+                   
                     if (blocks && blocks.length > 0) {
                         blockedUserIds = blocks.map(b => b.blocked_id);
                     }
@@ -426,33 +432,14 @@ export default function FeedPage() {
 
     return (
         <View style={styles.container}>
-             {/* 🔥 BACKGROUND SPLIT COLLÉ ET NON ROGNÉ */}
-             {backgroundCloud && (
-                <View style={StyleSheet.absoluteFill}>
-                    {/* Partie Haute : s'arrête exactement au niveau du bouton œil, alignée en haut */}
-                    <View style={{ height: eyeButtonTop, width: '100%', overflow: 'hidden', justifyContent: 'flex-start' }}>
-                        <Image 
-                            source={{ uri: optimizedBackground || backgroundCloud }}
-                            style={{ width: '100%', height: screenHeight }} 
-                            resizeMode="cover"
-                            blurRadius={20}
-                        />
-                    </View>
-                    
-                    {/* Partie Basse (Effet Miroir) : commence directement après, alignée en bas */}
-                    <View style={{ flex: 1, width: '100%', overflow: 'hidden', justifyContent: 'flex-end' }}>
-                        <Image 
-                            source={{ uri: optimizedBackground || backgroundCloud }}
-                            style={{ 
-                                width: '100%', 
-                                height: screenHeight, 
-                                transform: [{ scaleY: -1 }] // Effet Miroir vertical
-                            }} 
-                            resizeMode="cover"
-                            blurRadius={20}
-                        />
-                    </View>
-                </View>
+            {/* 🔥 BACKGROUND RESTAURE : Image complète sur tout l'écran */}
+            {backgroundCloud && (
+                <Image 
+                    source={{ uri: optimizedBackground || backgroundCloud }}
+                    style={StyleSheet.absoluteFillObject}
+                    resizeMode="cover"
+                    blurRadius={20}
+                />
             )}
 
             <SunbimHeader showCloseButton={false} transparent={true} />
@@ -462,12 +449,24 @@ export default function FeedPage() {
                 onLayout={(e) => setLayout(e.nativeEvent.layout)}
             >
                 {backgroundCloud && (
-                    <MaskedDayImage 
-                        uri={optimizedBackground || backgroundCloud}
-                        width={screenWidth}
-                        height={IMAGE_HEIGHT}
-                        top={TOP_HEADER_SPACE} 
-                    />
+                    <>
+                        {/* 1ère Image : Part du haut, effet miroir */}
+                        <MaskedDayImage 
+                            uri={optimizedBackground || backgroundCloud}
+                            width={screenWidth}
+                            height={IMAGE_HEIGHT}
+                            top={TOP_HEADER_SPACE} 
+                            mirrored={true}
+                        />
+                        {/* 2ème Image : Part du bas (sous le viewer), effet miroir */}
+                        <MaskedDayImage 
+                            uri={optimizedBackground || backgroundCloud}
+                            width={screenWidth}
+                            height={IMAGE_HEIGHT}
+                            top={TOP_HEADER_SPACE + IMAGE_HEIGHT} 
+                            mirrored={true}
+                        />
+                    </>
                 )}
 
                 {drawings.length > 0 && layout ? (
