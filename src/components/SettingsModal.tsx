@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabaseClient';
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
+// ✅ Import conservé comme demandé, même s'il n'est plus utilisé pour l'avatar
 import { getOptimizedImageUrl } from '../utils/imageOptimizer';
 import { useRouter } from 'expo-router';
 import * as AppleAuthentication from 'expo-apple-authentication';
@@ -274,7 +275,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
       );
   };
 
-  const currentAvatar = profile?.avatar_url ? getOptimizedImageUrl(profile.avatar_url, 100) : null;
+  // ✅ MODIFICATION : Utilisation directe de l'URL sans passer par l'optimiseur
+  const currentAvatar = profile?.avatar_url || null;
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
