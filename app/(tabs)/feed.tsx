@@ -437,14 +437,14 @@ export default function FeedPage() {
                             blurRadius={20}
                         />
                     </View>
-                    {/* Partie Basse (Renversée) : part de plus bas (justifyContent: flex-end) */}
+                    {/* Partie Basse (Effet Miroir) : part de plus bas (justifyContent: flex-end) */}
                     <View style={{ width: '100%', height: '50%', overflow: 'hidden', justifyContent: 'flex-end' }}>
                         <Image 
                             source={{ uri: optimizedBackground || backgroundCloud }}
                             style={{ 
                                 width: '100%', 
                                 height: '200%', 
-                                transform: [{ rotate: '180deg' }] 
+                                transform: [{ scaleY: -1 }] // Effet Miroir vertical (flip)
                             }} 
                             resizeMode="cover"
                             blurRadius={20}
