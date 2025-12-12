@@ -19,7 +19,7 @@ type ReactionType = 'like' | 'smart' | 'beautiful' | 'crazy' | null;
 // --- COMPOSANT MÉMORISÉ POUR LA GRILLE ---
 const DrawingGridItem = memo(({ item, size, isUnlocked, onPress, spacing }: any) => {
     
-    // 🔥 OPTIMISATION GRILLE : Calcul de l'image exacte 3:4 avec densité de pixels
+    // 🔥 OPTIMISATION GRILLE : CONSERVÉE (Calcul de l'image exacte 3:4)
     const optimizedGridUri = useMemo(() => {
         if (!item.cloud_image_url) return null;
         // Calcul des pixels physiques nécessaires
@@ -364,14 +364,9 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
       setReactionCounts({ like: 0, smart: 0, beautiful: 0, crazy: 0 });
   };
 
-  // 🔥 OPTIMISATION AVATAR : Densité de pixels réelle
-  const profileAvatarOptimized = useMemo(() => {
-    if (!userProfile?.avatar_url) return null;
-    const size = Math.round(70 * PixelRatio.get()); // 70 = style.profileAvatar height
-    return getOptimizedImageUrl(userProfile.avatar_url, size, size);
-  }, [userProfile?.avatar_url]);
+  // ❌ OPTIMISATION AVATAR SUPPRIMÉE ICI : on utilise directement l'URL dans le JSX
 
-  // 🔥 OPTIMISATION MODALE VIEW : HD + Ratio 3:4 forcé
+  // 🔥 OPTIMISATION MODALE VIEW : CONSERVÉE (HD + Ratio 3:4 forcé)
   const selectedDrawingImageOptimized = useMemo(() => {
     if (!selectedDrawing?.cloud_image_url) return null;
     const w = Math.round(screenWidth * PixelRatio.get());
@@ -411,7 +406,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                 <View style={styles.profileInfoContainer}>
                     {userProfile?.avatar_url ? (
                         <Image 
-                            source={{ uri: profileAvatarOptimized || userProfile.avatar_url }} 
+                            // ✅ MODIFICATION : Utilisation directe de l'URL sans transformation
+                            source={{ uri: userProfile.avatar_url }} 
                             style={styles.profileAvatar} 
                         />
                     ) : (
@@ -507,17 +503,17 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                                 style={{ width: screenWidth, aspectRatio: 3/4, backgroundColor: '#F0F0F0' }}
                             >
                                 <Image 
+                                    // ✅ Utilisation conservée de l'image optimisée pour le viewer
                                     source={{ uri: selectedDrawingImageOptimized || selectedDrawing.cloud_image_url }}
                                     style={[StyleSheet.absoluteFill, { opacity: 1 }]}
                                     resizeMode="cover"
                                 />
                                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                                     <DrawingViewer
-                                        // ✅ Utilisation de l'URL optimisée 3:4
                                         imageUri={selectedDrawingImageOptimized || selectedDrawing.cloud_image_url} 
                                         canvasData={isSelectedUnlocked ? selectedDrawing.canvas_data : []}
                                         viewerSize={screenWidth} 
-                                        viewerHeight={screenWidth * (4/3)} // Force height
+                                        viewerHeight={screenWidth * (4/3)} 
                                         transparentMode={true} 
                                         startVisible={false} 
                                         animated={true}
@@ -724,7 +720,6 @@ const styles = StyleSheet.create({
       justifyContent: 'center',
       padding: 8
   },
-  // reactionText a été supprimé des éléments, mais le style peut rester si besoin pour d'autres usages
   reactionText: { 
       fontSize: 12, 
       fontWeight: '600', 
