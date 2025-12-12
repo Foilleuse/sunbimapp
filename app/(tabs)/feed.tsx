@@ -425,36 +425,14 @@ export default function FeedPage() {
 
     return (
         <View style={styles.container}>
-             {/* 🔥 BACKGROUND SPLIT EN DEUX AVEC ÉCART */}
+             {/* 🔥 BACKGROUND RESTAURE : Image complète sur tout l'écran */}
              {backgroundCloud && (
-                <View style={StyleSheet.absoluteFill}>
-                    {/* Partie Haute : S'arrête exactement au TOP_HEADER_SPACE (niveau haut de la Feed Card) */}
-                    <View style={{ height: TOP_HEADER_SPACE, width: '100%', overflow: 'hidden', justifyContent: 'flex-end' }}>
-                        <Image 
-                            source={{ uri: optimizedBackground || backgroundCloud }}
-                            style={{ width: '100%', height: IMAGE_HEIGHT }} // On utilise une grande hauteur pour avoir du contenu à afficher
-                            resizeMode="cover"
-                            blurRadius={20}
-                        />
-                    </View>
-                    
-                    {/* Écart invisible */}
-                    <View style={{ height: 100 }} />
-
-                    {/* Partie Basse (Effet Miroir) : Commence après l'écart */}
-                    <View style={{ flex: 1, width: '100%', overflow: 'hidden', justifyContent: 'flex-start' }}>
-                        <Image 
-                            source={{ uri: optimizedBackground || backgroundCloud }}
-                            style={{ 
-                                width: '100%', 
-                                height: IMAGE_HEIGHT, 
-                                transform: [{ scaleY: -1 }] // Effet Miroir vertical (flip)
-                            }} 
-                            resizeMode="cover"
-                            blurRadius={20}
-                        />
-                    </View>
-                </View>
+                <Image 
+                    source={{ uri: optimizedBackground || backgroundCloud }}
+                    style={StyleSheet.absoluteFillObject}
+                    resizeMode="cover"
+                    blurRadius={20}
+                />
             )}
 
             <SunbimHeader showCloseButton={false} transparent={true} />
