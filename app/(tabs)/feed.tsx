@@ -427,24 +427,27 @@ export default function FeedPage() {
         <View style={styles.container}>
              {/* 🔥 BACKGROUND SPLIT EN DEUX AVEC ÉCART */}
              {backgroundCloud && (
-                // ✅ MODIFICATION : top: TOP_HEADER_SPACE pour aligner avec le carrousel
-                <View style={[StyleSheet.absoluteFill, { top: TOP_HEADER_SPACE, gap: 100 }]}>
-                    {/* Partie Haute : positionnée au milieu (justifyContent: flex-end) */}
-                    <View style={{ width: '100%', height: '50%', overflow: 'hidden', justifyContent: 'flex-end' }}>
+                <View style={StyleSheet.absoluteFill}>
+                    {/* Partie Haute : S'arrête exactement au TOP_HEADER_SPACE (niveau haut de la Feed Card) */}
+                    <View style={{ height: TOP_HEADER_SPACE, width: '100%', overflow: 'hidden', justifyContent: 'flex-end' }}>
                         <Image 
                             source={{ uri: optimizedBackground || backgroundCloud }}
-                            style={{ width: '100%', height: '200%' }} 
+                            style={{ width: '100%', height: IMAGE_HEIGHT }} // On utilise une grande hauteur pour avoir du contenu à afficher
                             resizeMode="cover"
                             blurRadius={20}
                         />
                     </View>
-                    {/* Partie Basse (Effet Miroir) : part de plus bas (justifyContent: flex-end) */}
-                    <View style={{ width: '100%', height: '50%', overflow: 'hidden', justifyContent: 'flex-end' }}>
+                    
+                    {/* Écart invisible */}
+                    <View style={{ height: 100 }} />
+
+                    {/* Partie Basse (Effet Miroir) : Commence après l'écart */}
+                    <View style={{ flex: 1, width: '100%', overflow: 'hidden', justifyContent: 'flex-start' }}>
                         <Image 
                             source={{ uri: optimizedBackground || backgroundCloud }}
                             style={{ 
                                 width: '100%', 
-                                height: '200%', 
+                                height: IMAGE_HEIGHT, 
                                 transform: [{ scaleY: -1 }] // Effet Miroir vertical (flip)
                             }} 
                             resizeMode="cover"
