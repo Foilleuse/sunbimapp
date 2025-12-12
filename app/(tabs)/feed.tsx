@@ -10,51 +10,73 @@ import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer';
 import Carousel from 'react-native-reanimated-carousel';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withSequence } from 'react-native-reanimated';
-// ✅ AJOUT DE 'Group' pour les effets miroirs
-import { Canvas, Rect, LinearGradient as SkiaGradient, vec, useImage, Image as SkiaImage, Group } from "@shopify/react-native-skia";
+// ✅ AJOUTS SKIA : Blur, Mask, Paint pour gérer le style visuel complet
+import { Canvas, Rect, LinearGradient as SkiaGradient, vec, useImage, Image as SkiaImage, Group, Blur, Mask, Paint } from "@shopify/react-native-skia";
 
 // Types de réactions possibles
 type ReactionType = 'like' | 'smart' | 'beautiful' | 'crazy' | null;
 
-// --- NOUVEAU COMPOSANT BACKGROUND MIROIR (Sans limites) ---
+// --- COMPOSANT BACKGROUND : MIROIR + FLOU + FONDU ---
 const MirroredBackground = ({ uri, width, height, top }: { uri: string, width: number, height: number, top: number }) => {
     const image = useImage(uri);
     
     if (!image) return null;
 
-    // Le point bas du viewer, d'où partira le miroir inférieur
     const bottom = top + height;
+    const BLUR_RADIUS = 25; // Intensité du flou pour l'arrière-plan
 
     return (
         <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
             
-            {/* 1. IMAGE CENTRALE (Derrière le dessin) */}
-            {/* Affiche l'image originale sans retouche pour s'aligner parfaitement sous le drawing viewer */}
-            <SkiaImage
-                image={image}
-                x={0} y={top} width={width} height={height}
-                fit="cover"
-            />
+            {/* 
+                1. COUCHE ARRIÈRE-PLAN (FLOUTÉE & INFINIE)
+                Contient l'image centrale + les deux miroirs (haut et bas).
+                On applique un flou global à ce groupe pour créer la profondeur.
+            */}
+            <Group layer={<Paint><Blur blur={BLUR_RADIUS} /></Paint>}>
+                {/* Image de fond centrale (pour éviter les trous sous le fondu) */}
+                <SkiaImage image={image} x={0} y={top} width={width} height={height} fit="cover" />
 
-            {/* 2. MIROIR HAUT (Part du haut et monte) */}
-            {/* Transformation : On retourne l'image verticalement (scaleY: -1) autour de la ligne du haut (top) */}
-            <Group origin={vec(width / 2, top)} transform={[{ scaleY: -1 }]}>
+                {/* Miroir Haut (Part du haut et monte) */}
+                <Group origin={vec(width / 2, top)} transform={[{ scaleY: -1 }]}>
+                    <SkiaImage image={image} x={0} y={top} width={width} height={height} fit="cover" />
+                </Group>
+
+                {/* Miroir Bas (Part du bas et descend) */}
+                <Group origin={vec(width / 2, bottom)} transform={[{ scaleY: -1 }]}>
+                    <SkiaImage image={image} x={0} y={top} width={width} height={height} fit="cover" />
+                </Group>
+            </Group>
+
+            {/* 
+                2. COUCHE PREMIER-PLAN (NETTE AVEC FONDU)
+                C'est l'image qui s'aligne avec le DrawingViewer.
+                On utilise un MASQUE pour rendre ses bords (haut/bas) transparents.
+                
+                La transparence révèle la couche floutée juste en dessous, créant
+                une transition invisible : Net -> Fondu -> Flou.
+            */}
+            <Mask
+                mode="luminance"
+                mask={
+                    <Rect x={0} y={top} width={width} height={height}>
+                        <SkiaGradient
+                            start={vec(0, top)}
+                            end={vec(0, bottom)}
+                            // Noir = Transparent, Blanc = Visible
+                            // On garde l'image visible sur 80% et on fond sur les 10% haut/bas
+                            colors={["black", "white", "white", "black"]}
+                            positions={[0, 0.1, 0.9, 1]}
+                        />
+                    </Rect>
+                }
+            >
                 <SkiaImage
                     image={image}
                     x={0} y={top} width={width} height={height}
                     fit="cover"
                 />
-            </Group>
-
-            {/* 3. MIROIR BAS (Part du bas et descend) */}
-            {/* Transformation : On retourne l'image verticalement (scaleY: -1) autour de la ligne du bas (bottom) */}
-            <Group origin={vec(width / 2, bottom)} transform={[{ scaleY: -1 }]}>
-                <SkiaImage
-                    image={image}
-                    x={0} y={top} width={width} height={height}
-                    fit="cover"
-                />
-            </Group>
+            </Mask>
 
         </Canvas>
     );
@@ -444,10 +466,8 @@ export default function FeedPage() {
     return (
         <View style={styles.container}>
             {/* 
-               🔥 BACKGROUND MIROIR INFINI :
-               On utilise le nouveau composant MirroredBackground qui dessine le centre 
-               + les extensions miroirs en haut et en bas.
-               L'ancienne Image avec blur a été supprimée.
+               🔥 BACKGROUND INTÉGRAL : MIROIRS + FLOU + FONDU
+               C'est ici que toute la logique visuelle est gérée via Skia.
             */}
             {backgroundCloud && (
                 <MirroredBackground 
@@ -464,11 +484,6 @@ export default function FeedPage() {
                 style={[styles.mainContent, { paddingTop: TOP_HEADER_SPACE }]} 
                 onLayout={(e) => setLayout(e.nativeEvent.layout)}
             >
-                {/* 
-                    L'ancien composant <MaskedDayImage /> a été remplacé par <MirroredBackground /> 
-                    placé juste avant pour être en arrière-plan.
-                */}
-
                 {drawings.length > 0 && layout ? (
                     <Carousel
                         loop={true}
@@ -621,7 +636,6 @@ const styles = StyleSheet.create({
         justifyContent: 'center', 
         alignItems: 'center', 
         width: '100%',
-        // ✅ MODIFICATION : Espace entre icônes augmenté
         gap: 40,
         paddingHorizontal: 10,
         paddingBottom: 20,
@@ -651,7 +665,7 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         paddingHorizontal: 15,
-        zIndex: 50, // Doit être au-dessus du carrousel mais sous le bouton Eye
+        zIndex: 50,
     },
     arrowBox: {
         opacity: 0.8,
