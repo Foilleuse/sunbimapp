@@ -99,15 +99,7 @@ export default function ProfilePage() {
       return getOptimizedImageUrl(selectedDrawing.cloud_image_url, w, h);
   }, [selectedDrawing, screenWidth]);
 
-  // 🔥 OPTIMISATION AVATAR : Calcul de l'image HD carrée pour l'avatar
-  const profileAvatarOptimized = useMemo(() => {
-    if (!profile?.avatar_url) return null;
-    // La taille affichée est 80x80 (voir styles.profileAvatar)
-    // On calcule les pixels physiques nécessaires
-    const size = Math.round(80 * PixelRatio.get());
-    // On demande un crop carré exact
-    return getOptimizedImageUrl(profile.avatar_url, size, size);
-  }, [profile?.avatar_url]);
+  // Note: Optimisation avatar supprimée pour afficher l'original
 
   const fetchHistory = async () => {
     try {
@@ -336,7 +328,7 @@ export default function ProfilePage() {
           <View style={styles.profileInfoContainer}>
               {profile?.avatar_url ? (
                   <Image 
-                    source={{ uri: profileAvatarOptimized || profile.avatar_url }} 
+                    source={{ uri: profile.avatar_url }} // Utilisation directe de l'URL originale
                     style={styles.profileAvatar} 
                   />
               ) : (
