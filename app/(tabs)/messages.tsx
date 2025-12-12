@@ -17,12 +17,9 @@ const DRAWING_WIDTH = DRAWING_HEIGHT * (3/4); // ~64
 // --- SOUS-COMPOSANT OPTIMISÉ POUR CHAQUE LIGNE ---
 const FriendRow = memo(({ item, onOpenProfile, onUnfollow }: { item: any, onOpenProfile: (i: any) => void, onUnfollow: (fid: string, uid: string) => void }) => {
     
-    // 1. Optimisation Avatar (Carré 50x50 physique)
-    const optimizedAvatar = useMemo(() => {
-        if (!item.avatar_url) return null;
-        const size = Math.round(50 * PixelRatio.get());
-        return getOptimizedImageUrl(item.avatar_url, size, size);
-    }, [item.avatar_url]);
+    // 1. Optimisation Avatar (Désactivée)
+    // On utilise directement l'URL de l'avatar sans transformation
+    const avatarUrl = item.avatar_url;
 
     // 2. Optimisation Miniature Dessin (Ratio 3:4 physique)
     const optimizedDrawingUrl = useMemo(() => {
@@ -40,8 +37,8 @@ const FriendRow = memo(({ item, onOpenProfile, onUnfollow }: { item: any, onOpen
         >
             <View style={styles.friendInfoContainer}>
                 <View style={styles.avatarContainer}>
-                    {item.avatar_url ? (
-                        <Image source={{ uri: optimizedAvatar || item.avatar_url }} style={styles.avatar} />
+                    {avatarUrl ? (
+                        <Image source={{ uri: avatarUrl }} style={styles.avatar} />
                     ) : (
                         <View style={[styles.avatar, styles.placeholderAvatar]}>
                             <User size={24} color="#666" />

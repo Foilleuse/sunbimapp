@@ -10,51 +10,52 @@ import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer';
 import Carousel from 'react-native-reanimated-carousel';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withSequence } from 'react-native-reanimated';
-// ✅ AJOUTS SKIA : Blur, Mask, Paint pour gérer le style visuel complet
 import { Canvas, Rect, LinearGradient as SkiaGradient, vec, useImage, Image as SkiaImage, Group, Blur, Mask, Paint } from "@shopify/react-native-skia";
 
 // Types de réactions possibles
 type ReactionType = 'like' | 'smart' | 'beautiful' | 'crazy' | null;
 
-// --- COMPOSANT BACKGROUND : MIROIR + FLOU + FONDU ---
+// --- COMPOSANT BACKGROUND : MIROIR + FLOU + FONDU ÉTENDU ---
 const MirroredBackground = ({ uri, width, height, top }: { uri: string, width: number, height: number, top: number }) => {
     const image = useImage(uri);
     
     if (!image) return null;
 
     const bottom = top + height;
-    const BLUR_RADIUS = 25; // Intensité du flou pour l'arrière-plan
+    const BLUR_RADIUS = 25; 
+
+    // 🔥 CORRECTION BORDS BLANCS : 
+    // On dessine l'arrière-plan (couche floue) plus large que l'écran pour que le flou 
+    // ne crée pas de transparence sur les bords gauche/droite visibles.
+    const EXTRA_WIDTH = 100; // 50px de marge de chaque côté pour absorber le flou
+    const bgWidth = width + EXTRA_WIDTH;
+    const bgX = -EXTRA_WIDTH / 2; // On décale vers la gauche pour centrer l'image élargie
 
     return (
         <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
             
             {/* 
-                1. COUCHE ARRIÈRE-PLAN (FLOUTÉE & INFINIE)
-                Contient l'image centrale + les deux miroirs (haut et bas).
-                On applique un flou global à ce groupe pour créer la profondeur.
+                1. ARRIÈRE-PLAN : MIROIRS + FLOU (Remplissage total avec débordement)
+                On utilise bgX et bgWidth pour déborder de l'écran.
             */}
             <Group layer={<Paint><Blur blur={BLUR_RADIUS} /></Paint>}>
-                {/* Image de fond centrale (pour éviter les trous sous le fondu) */}
-                <SkiaImage image={image} x={0} y={top} width={width} height={height} fit="cover" />
+                {/* Image centrale */}
+                <SkiaImage image={image} x={bgX} y={top} width={bgWidth} height={height} fit="cover" />
 
-                {/* Miroir Haut (Part du haut et monte) */}
+                {/* Miroir Haut */}
                 <Group origin={vec(width / 2, top)} transform={[{ scaleY: -1 }]}>
-                    <SkiaImage image={image} x={0} y={top} width={width} height={height} fit="cover" />
+                    <SkiaImage image={image} x={bgX} y={top} width={bgWidth} height={height} fit="cover" />
                 </Group>
 
-                {/* Miroir Bas (Part du bas et descend) */}
+                {/* Miroir Bas */}
                 <Group origin={vec(width / 2, bottom)} transform={[{ scaleY: -1 }]}>
-                    <SkiaImage image={image} x={0} y={top} width={width} height={height} fit="cover" />
+                    <SkiaImage image={image} x={bgX} y={top} width={bgWidth} height={height} fit="cover" />
                 </Group>
             </Group>
 
             {/* 
-                2. COUCHE PREMIER-PLAN (NETTE AVEC FONDU)
-                C'est l'image qui s'aligne avec le DrawingViewer.
-                On utilise un MASQUE pour rendre ses bords (haut/bas) transparents.
-                
-                La transparence révèle la couche floutée juste en dessous, créant
-                une transition invisible : Net -> Fondu -> Flou.
+                2. PREMIER-PLAN : IMAGE NETTE AVEC MASQUE
+                Ici on reste à la taille exacte de l'écran (width) pour l'alignement parfait.
             */}
             <Mask
                 mode="luminance"
@@ -64,9 +65,10 @@ const MirroredBackground = ({ uri, width, height, top }: { uri: string, width: n
                             start={vec(0, top)}
                             end={vec(0, bottom)}
                             // Noir = Transparent, Blanc = Visible
-                            // On garde l'image visible sur 80% et on fond sur les 10% haut/bas
                             colors={["black", "white", "white", "black"]}
-                            positions={[0, 0.1, 0.9, 1]}
+                            // 🔥 CORRECTION FONDU : Zone agrandie à 20% (0.2) au lieu de 10%
+                            // positions correspond à : [début fondu haut, fin fondu haut, début fondu bas, fin fondu bas]
+                            positions={[0, 0.2, 0.8, 1]}
                         />
                     </Rect>
                 }
@@ -82,7 +84,8 @@ const MirroredBackground = ({ uri, width, height, top }: { uri: string, width: n
     );
 };
 
-// --- COMPOSANT BOUTON DE RÉACTION ANIMÉ ---
+// --- LE RESTE DU CODE (SANS CHANGEMENT MAJEUR) ---
+
 const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color }: any) => {
     const scale = useSharedValue(1);
 
@@ -465,10 +468,6 @@ export default function FeedPage() {
 
     return (
         <View style={styles.container}>
-            {/* 
-               🔥 BACKGROUND INTÉGRAL : MIROIRS + FLOU + FONDU
-               C'est ici que toute la logique visuelle est gérée via Skia.
-            */}
             {backgroundCloud && (
                 <MirroredBackground 
                     uri={optimizedBackground || backgroundCloud}
@@ -494,7 +493,6 @@ export default function FeedPage() {
                         scrollAnimationDuration={500}
                         onSnapToItem={(index) => {
                             setCurrentIndex(index);
-                            // 🔥 Désactive les flèches dès le premier swipe
                             setShowTutorialArrows(false);
                         }}
                         renderItem={({ item, index }) => (
@@ -514,7 +512,6 @@ export default function FeedPage() {
                     ) : null
                 )}
 
-                {/* 🔥 FLÈCHES DE TUTORIEL */}
                 {showTutorialArrows && drawings.length > 1 && (
                     <View style={[styles.tutorialArrowsContainer, { top: TOP_HEADER_SPACE, height: IMAGE_HEIGHT }]} pointerEvents="none">
                         <View style={styles.arrowBox}>
@@ -657,7 +654,6 @@ const styles = StyleSheet.create({
         fontWeight: '900'
     },
 
-    // 🔥 STYLES POUR LES FLÈCHES DE TUTORIEL
     tutorialArrowsContainer: {
         position: 'absolute',
         width: '100%',
