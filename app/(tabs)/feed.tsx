@@ -426,29 +426,27 @@ export default function FeedPage() {
     return (
         <View style={styles.container}>
              {/* 🔥 BACKGROUND SPLIT EN DEUX : 
-                - Top Half: Image normale
-                - Bottom Half: Image renversée (rotate 180deg)
+                - Top Half: Image "part du bas" (alignement bottom)
+                - Bottom Half: Image renversée "part du haut" (donc alignement bottom de l'image source)
              */}
              {backgroundCloud && (
                 <View style={StyleSheet.absoluteFill}>
                     {/* Partie Haute */}
-                    <View style={{ width: '100%', height: '50%', overflow: 'hidden' }}>
+                    <View style={{ width: '100%', height: '50%', overflow: 'hidden', justifyContent: 'flex-end' }}>
                         <Image 
                             source={{ uri: optimizedBackground || backgroundCloud }}
-                            style={{ width: '100%', height: '200%' }} // height 200% pour que l'image soit complète mais croppée par le conteneur 50%
+                            style={{ width: '100%', height: '200%' }} // On affiche une image 2x plus grande
                             resizeMode="cover"
                             blurRadius={20}
                         />
                     </View>
                     {/* Partie Basse (Renversée) */}
-                    <View style={{ width: '100%', height: '50%', overflow: 'hidden' }}>
+                    <View style={{ width: '100%', height: '50%', overflow: 'hidden', justifyContent: 'flex-end' }}>
                         <Image 
                             source={{ uri: optimizedBackground || backgroundCloud }}
                             style={{ 
                                 width: '100%', 
                                 height: '200%', 
-                                position: 'absolute', 
-                                bottom: 0,
                                 transform: [{ rotate: '180deg' }] // Rotation 180deg
                             }} 
                             resizeMode="cover"
