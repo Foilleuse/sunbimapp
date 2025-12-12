@@ -317,7 +317,7 @@ export default function FeedPage() {
     const [loading, setLoading] = useState(true);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [backgroundCloud, setBackgroundCloud] = useState<string | null>(null);
-    const { width: screenWidth } = Dimensions.get('window');
+    const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
     
     // 🔥 ETAT POUR AFFICHER LES FLÈCHES DE TUTO
     const [showTutorialArrows, setShowTutorialArrows] = useState(true);
@@ -425,13 +425,37 @@ export default function FeedPage() {
 
     return (
         <View style={styles.container}>
+             {/* 🔥 BACKGROUND SPLIT EN DEUX : 
+                - Top Half: Image normale
+                - Bottom Half: Image renversée (rotate 180deg)
+             */}
              {backgroundCloud && (
-                <Image 
-                    source={{ uri: optimizedBackground || backgroundCloud }}
-                    style={StyleSheet.absoluteFillObject}
-                    resizeMode="cover"
-                    blurRadius={20}
-                />
+                <View style={StyleSheet.absoluteFill}>
+                    {/* Partie Haute */}
+                    <View style={{ width: '100%', height: '50%', overflow: 'hidden' }}>
+                        <Image 
+                            source={{ uri: optimizedBackground || backgroundCloud }}
+                            style={{ width: '100%', height: '200%' }} // height 200% pour que l'image soit complète mais croppée par le conteneur 50%
+                            resizeMode="cover"
+                            blurRadius={20}
+                        />
+                    </View>
+                    {/* Partie Basse (Renversée) */}
+                    <View style={{ width: '100%', height: '50%', overflow: 'hidden' }}>
+                        <Image 
+                            source={{ uri: optimizedBackground || backgroundCloud }}
+                            style={{ 
+                                width: '100%', 
+                                height: '200%', 
+                                position: 'absolute', 
+                                bottom: 0,
+                                transform: [{ rotate: '180deg' }] // Rotation 180deg
+                            }} 
+                            resizeMode="cover"
+                            blurRadius={20}
+                        />
+                    </View>
+                </View>
             )}
 
             <SunbimHeader showCloseButton={false} transparent={true} />
