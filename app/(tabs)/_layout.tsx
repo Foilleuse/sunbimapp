@@ -1,4 +1,4 @@
-import { Tabs, useRouter } from 'expo-router';
+import { Tabs, useRouter, usePathname } from 'expo-router';
 import { View, Platform } from 'react-native';
 import { Home, Image as ImageIcon, Camera, Users, User } from 'lucide-react-native';
 import { Colors } from '../../constants/theme';
@@ -7,6 +7,10 @@ import { useColorScheme } from '../../hooks/use-color-scheme';
 export default function TabLayout() {
   const router = useRouter();
   const colorScheme = useColorScheme();
+  const pathname = usePathname();
+
+  // Détection de la page Feed pour adapter le style du bouton caméra
+  const isFeed = pathname === '/feed';
 
   return (
     <Tabs
@@ -56,20 +60,31 @@ export default function TabLayout() {
         }}
       />
 
-      {/* 3. CAMERA (Bouton central en relief) */}
+      {/* 3. CAMERA (Bouton central) */}
       <Tabs.Screen
         name="camera"
         options={{
           tabBarStyle: { display: 'none' },
           tabBarIcon: () => (
-            <View style={{
-              width: 56, height: 56, borderRadius: 28,
-              backgroundColor: '#000', 
-              justifyContent: 'center', alignItems: 'center',
-              marginBottom: Platform.OS === 'ios' ? 30 : 20,
-              shadowColor: "#000", shadowOffset: {width:0, height:4}, shadowOpacity:0.3, shadowRadius:4,
-              elevation: 5
-            }}>
+            <View style={[
+              {
+                width: 56, height: 56, borderRadius: 28,
+                justifyContent: 'center', alignItems: 'center',
+                marginBottom: Platform.OS === 'ios' ? 30 : 20,
+              },
+              isFeed ? {
+                // Style spécifique Feed : Pas de fond noir, fond transparent
+                backgroundColor: 'transparent',
+                // Pas d'ombre/elevation sur le Feed pour ne pas avoir d'artefacts
+                shadowColor: "transparent",
+                elevation: 0
+              } : {
+                // Style par défaut : Cercle noir avec ombre
+                backgroundColor: '#000', 
+                shadowColor: "#000", shadowOffset: {width:0, height:4}, shadowOpacity:0.3, shadowRadius:4,
+                elevation: 5
+              }
+            ]}>
               <Camera color="#FFF" size={28} />
             </View>
           ),
