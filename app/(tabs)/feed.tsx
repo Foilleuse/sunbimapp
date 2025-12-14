@@ -10,38 +10,82 @@ import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer';
 import Carousel from 'react-native-reanimated-carousel';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withSequence } from 'react-native-reanimated';
-import { Canvas, Rect, LinearGradient as SkiaGradient, vec, useImage, Image as SkiaImage } from "@shopify/react-native-skia";
+import { Canvas, Rect, LinearGradient as SkiaGradient, vec, useImage, Image as SkiaImage, Group, Blur, Mask, Paint } from "@shopify/react-native-skia";
 
 // Types de réactions possibles
 type ReactionType = 'like' | 'smart' | 'beautiful' | 'crazy' | null;
 
-// --- COMPOSANT IMAGE MASQUÉE (FONDU BORDS) ---
-const MaskedDayImage = ({ uri, width, height, top }: { uri: string, width: number, height: number, top: number }) => {
+// --- COMPOSANT BACKGROUND : MIROIR + FLOU + FONDU ÉTENDU ---
+const MirroredBackground = ({ uri, width, height, top }: { uri: string, width: number, height: number, top: number }) => {
     const image = useImage(uri);
     
     if (!image) return null;
 
+    const bottom = top + height;
+    const BLUR_RADIUS = 25; 
+
+    // 🔥 CORRECTION BORDS BLANCS : 
+    // On dessine l'arrière-plan (couche floue) plus large que l'écran pour que le flou 
+    // ne crée pas de transparence sur les bords gauche/droite visibles.
+    const EXTRA_WIDTH = 100; // 50px de marge de chaque côté pour absorber le flou
+    const bgWidth = width + EXTRA_WIDTH;
+    const bgX = -EXTRA_WIDTH / 2; // On décale vers la gauche pour centrer l'image élargie
+
     return (
-        <Canvas style={{ position: 'absolute', top, left: 0, width, height, zIndex: 0 }} pointerEvents="none">
-             <Rect x={0} y={0} width={width} height={height}>
-                <SkiaGradient
-                    start={vec(0, 0)}
-                    end={vec(0, height)}
-                    colors={["transparent", "white", "white", "transparent"]}
-                    positions={[0, 0.05, 0.95, 1]}
+        <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
+            
+            {/* 
+                1. ARRIÈRE-PLAN : MIROIRS + FLOU (Remplissage total avec débordement)
+                On utilise bgX et bgWidth pour déborder de l'écran.
+            */}
+            <Group layer={<Paint><Blur blur={BLUR_RADIUS} /></Paint>}>
+                {/* Image centrale */}
+                <SkiaImage image={image} x={bgX} y={top} width={bgWidth} height={height} fit="cover" />
+
+                {/* Miroir Haut */}
+                <Group origin={vec(width / 2, top)} transform={[{ scaleY: -1 }]}>
+                    <SkiaImage image={image} x={bgX} y={top} width={bgWidth} height={height} fit="cover" />
+                </Group>
+
+                {/* Miroir Bas */}
+                <Group origin={vec(width / 2, bottom)} transform={[{ scaleY: -1 }]}>
+                    <SkiaImage image={image} x={bgX} y={top} width={bgWidth} height={height} fit="cover" />
+                </Group>
+            </Group>
+
+            {/* 
+                2. PREMIER-PLAN : IMAGE NETTE AVEC MASQUE
+                Ici on reste à la taille exacte de l'écran (width) pour l'alignement parfait.
+            */}
+            <Mask
+                mode="luminance"
+                mask={
+                    <Rect x={0} y={top} width={width} height={height}>
+                        <SkiaGradient
+                            start={vec(0, top)}
+                            end={vec(0, bottom)}
+                            // Noir = Transparent, Blanc = Visible
+                            colors={["black", "white", "white", "black"]}
+                            // 🔥 CORRECTION FONDU : Zone agrandie à 20% (0.2) au lieu de 10%
+                            // positions correspond à : [début fondu haut, fin fondu haut, début fondu bas, fin fondu bas]
+                            positions={[0, 0.2, 0.8, 1]}
+                        />
+                    </Rect>
+                }
+            >
+                <SkiaImage
+                    image={image}
+                    x={0} y={top} width={width} height={height}
+                    fit="cover"
                 />
-            </Rect>
-            <SkiaImage
-                image={image}
-                x={0} y={0} width={width} height={height}
-                fit="cover"
-                blendMode="srcIn" 
-            />
+            </Mask>
+
         </Canvas>
     );
 };
 
-// --- COMPOSANT BOUTON DE RÉACTION ANIMÉ ---
+// --- LE RESTE DU CODE (SANS CHANGEMENT MAJEUR) ---
+
 const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color }: any) => {
     const scale = useSharedValue(1);
 
@@ -65,7 +109,6 @@ const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color }: any) => {
                 <Icon 
                     color={isActive ? color : "#FFF"} 
                     fill={isActive ? color : "transparent"} 
-                    // ✅ MODIFICATION : Taille réduite à 24
                     size={24} 
                 />
             </Animated.View>
@@ -329,7 +372,6 @@ export default function FeedPage() {
     const [selectedUser, setSelectedUser] = useState<any>(null);
     const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
 
-    // ✅ REVERSION : On remet l'espace pour le header pour la position du carrousel
     const TOP_HEADER_SPACE = 120;
 
     const IMAGE_HEIGHT = screenWidth * (4/3);
@@ -355,7 +397,6 @@ export default function FeedPage() {
             }
 
             if (user && !params.justPosted) { 
-                // Vérification stricte : l'utilisateur doit avoir participé AUJOURD'HUI pour voir le feed
                 const { data: myDrawing } = await supabase
                     .from('drawings')
                     .select('id')
@@ -372,18 +413,6 @@ export default function FeedPage() {
             if (cloudData) {
                 setBackgroundCloud(cloudData.image_url);
 
-                // ✅ NOUVEAU : Récupérer tous les IDs de clouds qui utilisent la même image
-                // Cela permet d'afficher les dessins historiques si le nuage revient
-                const { data: similarClouds } = await supabase
-                    .from('clouds')
-                    .select('id')
-                    .eq('image_url', cloudData.image_url);
-                
-                // Liste de tous les IDs de nuages correspondants (ou juste celui du jour s'il est seul)
-                const targetCloudIds = similarClouds && similarClouds.length > 0 
-                    ? similarClouds.map(c => c.id) 
-                    : [cloudData.id];
-
                 let blockedUserIds: string[] = [];
                 if (user) {
                     const { data: blocks } = await supabase
@@ -399,10 +428,10 @@ export default function FeedPage() {
                 let query = supabase
                     .from('drawings')
                     .select('*, users(id, display_name, avatar_url)') 
-                    .in('cloud_id', targetCloudIds) // ✅ On filtre sur TOUS les nuages identiques
+                    .eq('cloud_id', cloudData.id)
                     .eq('is_hidden', false) 
                     .order('created_at', { ascending: false })
-                    .limit(50); // Augmenté pour voir plus d'historique
+                    .limit(20);
 
                 if (blockedUserIds.length > 0) {
                     query = query.not('user_id', 'in', `(${blockedUserIds.join(',')})`);
@@ -439,36 +468,13 @@ export default function FeedPage() {
 
     return (
         <View style={styles.container}>
-             {/* 🔥 BACKGROUND RESTAURE : Image complète sur tout l'écran */}
-             {backgroundCloud && (
-                <View style={StyleSheet.absoluteFill}>
-                    {/* Partie Haute : s'arrête exactement au niveau du bouton œil */}
-                    <View style={{ height: eyeButtonTop, width: '100%', overflow: 'hidden', justifyContent: 'flex-end' }}>
-                        <Image 
-                            source={{ uri: optimizedBackground || backgroundCloud }}
-                            style={{ width: '100%', height: screenHeight }} 
-                            resizeMode="cover"
-                            blurRadius={20}
-                        />
-                    </View>
-                    
-                    {/* Écart invisible */}
-                    <View style={{ height: 100 }} />
-
-                    {/* Partie Basse (Effet Miroir) : commence après l'écart */}
-                    <View style={{ flex: 1, width: '100%', overflow: 'hidden', justifyContent: 'flex-start' }}>
-                        <Image 
-                            source={{ uri: optimizedBackground || backgroundCloud }}
-                            style={{ 
-                                width: '100%', 
-                                height: screenHeight, 
-                                transform: [{ scaleY: -1 }] // Effet Miroir vertical
-                            }} 
-                            resizeMode="cover"
-                            blurRadius={20}
-                        />
-                    </View>
-                </View>
+            {backgroundCloud && (
+                <MirroredBackground 
+                    uri={optimizedBackground || backgroundCloud}
+                    width={screenWidth}
+                    height={IMAGE_HEIGHT}
+                    top={TOP_HEADER_SPACE} 
+                />
             )}
 
             <SunbimHeader showCloseButton={false} transparent={true} />
@@ -477,15 +483,6 @@ export default function FeedPage() {
                 style={[styles.mainContent, { paddingTop: TOP_HEADER_SPACE }]} 
                 onLayout={(e) => setLayout(e.nativeEvent.layout)}
             >
-                {backgroundCloud && (
-                    <MaskedDayImage 
-                        uri={optimizedBackground || backgroundCloud}
-                        width={screenWidth}
-                        height={IMAGE_HEIGHT}
-                        top={TOP_HEADER_SPACE} 
-                    />
-                )}
-
                 {drawings.length > 0 && layout ? (
                     <Carousel
                         loop={true}
@@ -496,7 +493,6 @@ export default function FeedPage() {
                         scrollAnimationDuration={500}
                         onSnapToItem={(index) => {
                             setCurrentIndex(index);
-                            // 🔥 Désactive les flèches dès le premier swipe
                             setShowTutorialArrows(false);
                         }}
                         renderItem={({ item, index }) => (
@@ -516,7 +512,6 @@ export default function FeedPage() {
                     ) : null
                 )}
 
-                {/* 🔥 FLÈCHES DE TUTORIEL */}
                 {showTutorialArrows && drawings.length > 1 && (
                     <View style={[styles.tutorialArrowsContainer, { top: TOP_HEADER_SPACE, height: IMAGE_HEIGHT }]} pointerEvents="none">
                         <View style={styles.arrowBox}>
@@ -638,7 +633,6 @@ const styles = StyleSheet.create({
         justifyContent: 'center', 
         alignItems: 'center', 
         width: '100%',
-        // ✅ MODIFICATION : Espace entre icônes augmenté
         gap: 40,
         paddingHorizontal: 10,
         paddingBottom: 20,
@@ -660,7 +654,6 @@ const styles = StyleSheet.create({
         fontWeight: '900'
     },
 
-    // 🔥 STYLES POUR LES FLÈCHES DE TUTORIEL
     tutorialArrowsContainer: {
         position: 'absolute',
         width: '100%',
@@ -668,7 +661,7 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         paddingHorizontal: 15,
-        zIndex: 50, // Doit être au-dessus du carrousel mais sous le bouton Eye
+        zIndex: 50,
     },
     arrowBox: {
         opacity: 0.8,
