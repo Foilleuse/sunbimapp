@@ -96,6 +96,7 @@ export default function DrawPage() {
 
   // --- FONCTIONS SOCIAL LOGIN ---
   const handleGoogleLogin = async () => {
+    // 1. Sécurité anti-spam clic
     if (authLoading) return;
     if (!isGoogleConfigured) {
         Alert.alert("Erreur", "Google n'est pas encore prêt.");
@@ -103,12 +104,24 @@ export default function DrawPage() {
     }
     
     setAuthLoading(true);
+    
     try {
+      // 2. Vérification des services (Important pour Android)
       if (Platform.OS === 'android') {
-          await GoogleSignin.hasPlayServices();
+         await GoogleSignin.hasPlayServices();
       }
       
+      // ✅ FIX CRITIQUE : On force la déconnexion pour nettoyer toute session "coincée"
+      try {
+        await GoogleSignin.signOut();
+      } catch (error) {
+        // C'est normal d'échouer ici si l'utilisateur n'était pas connecté
+      }
+
+      // 3. On lance la connexion
       const userInfo = await GoogleSignin.signIn();
+      
+      // Gestion compatible avec les différentes versions de la librairie
       const token = userInfo.data?.idToken || userInfo.idToken;
 
       if (token) {
@@ -121,14 +134,26 @@ export default function DrawPage() {
            Alert.alert("Erreur Supabase", error.message);
            setAuthLoading(false);
         }
+        // Si tout est OK, le useEffect([user]) fermera la modale
       } else {
-        setAuthLoading(false);
+        throw new Error('Aucun token Google récupéré.');
       }
+
     } catch (error: any) {
-      setAuthLoading(false);
-      if (error.code !== statusCodes.SIGN_IN_CANCELLED && error.code !== statusCodes.IN_PROGRESS) {
-         Alert.alert("Erreur Google", error.message || "Une erreur est survenue.");
+      setAuthLoading(false); // IMPORTANT : On débloque le bouton
+      
+      if (error.code === statusCodes.SIGN_IN_CANCELLED) {
+         // L'utilisateur a annulé, on ne fait rien
+         return;
+      } 
+      if (error.code === statusCodes.IN_PROGRESS) {
+         Alert.alert("Patience", "La connexion est déjà en cours.");
+         return;
       }
+      
+      // Affichage de l'erreur réelle
+      console.error("Erreur Auth:", error);
+      Alert.alert("Erreur de connexion", error.message || "Une erreur est survenue.");
     }
   };
 
