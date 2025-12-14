@@ -22,8 +22,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
   const [loading, setLoading] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   
+  // --- NOUVEAUX ÉTATS POUR LE PROFIL ---
+  const [displayName, setDisplayName] = useState('');
+  const [bio, setBio] = useState('');
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [newPassword, setNewPassword] = useState('');
+
+  // --- SYNCHRONISATION INITIALE DU PROFIL ---
+  useEffect(() => {
+    if (profile) {
+      setDisplayName(profile.display_name || '');
+      setBio(profile.bio || '');
+    }
+  }, [profile]);
 
   // --- CONFIGURATION GOOGLE SIGNIN ---
   useEffect(() => {
@@ -37,6 +50,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
         console.log("Erreur config Google Signin (ignorer si non configuré):", e);
     }
   }, []);
+
+  // --- GESTION MISE A JOUR TEXTE PROFIL ---
+  const handleSaveProfile = async () => {
+    if (!user) return;
+    setIsSavingProfile(true);
+
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({
+          display_name: displayName,
+          bio: bio,
+        })
+        .eq('id', user.id);
+
+      if (error) throw error;
+
+      Alert.alert("Succès", "Profil mis à jour !");
+    } catch (error: any) {
+      Alert.alert("Erreur", error.message);
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
 
   // --- GESTION PHOTO DE PROFIL ---
   const handleAvatarPress = () => {
@@ -291,7 +328,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
 
             <ScrollView contentContainerStyle={styles.scrollContent}>
                 
-                {/* SECTION PROFIL */}
+                {/* SECTION PROFIL MODIFIÉE */}
                 <View style={styles.section}>
                     <View style={styles.profileHeader}>
                         <TouchableOpacity onPress={handleAvatarPress} disabled={loading} style={styles.avatarContainer}>
@@ -308,8 +345,38 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
                         </TouchableOpacity>
                         
                         <View style={styles.profileInfo}>
-                            <Text style={styles.name}>{profile?.display_name || "Utilisateur"}</Text>
+                            {/* Inputs modifiables */}
+                            <Text style={styles.label}>Nom d'affichage</Text>
+                            <TextInput
+                                value={displayName}
+                                onChangeText={setDisplayName}
+                                style={styles.input}
+                                placeholder="Nom d'affichage"
+                            />
+                            
+                            <Text style={styles.label}>Bio</Text>
+                            <TextInput
+                                value={bio}
+                                onChangeText={setBio}
+                                style={[styles.input, styles.bioInput]}
+                                placeholder="Votre bio..."
+                                multiline
+                                numberOfLines={3}
+                            />
+                            
                             <Text style={styles.email}>{user?.email}</Text>
+
+                            <TouchableOpacity 
+                                style={styles.saveProfileBtn} 
+                                onPress={handleSaveProfile}
+                                disabled={isSavingProfile}
+                            >
+                                {isSavingProfile ? (
+                                    <ActivityIndicator size="small" color="#FFF" />
+                                ) : (
+                                    <Text style={styles.saveProfileText}>Enregistrer le profil</Text>
+                                )}
+                            </TouchableOpacity>
                         </View>
                     </View>
                 </View>
@@ -438,7 +505,7 @@ const styles = StyleSheet.create({
       borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#E5E5EA'
   },
   
-  profileHeader: { flexDirection: 'row', alignItems: 'center' },
+  profileHeader: { flexDirection: 'row', alignItems: 'flex-start' }, // Changed to flex-start for form alignment
   avatarContainer: { position: 'relative', marginRight: 15 },
   avatar: { width: 70, height: 70, borderRadius: 35 },
   placeholderAvatar: { backgroundColor: '#F0F0F0', justifyContent: 'center', alignItems: 'center' },
@@ -448,8 +515,35 @@ const styles = StyleSheet.create({
       borderWidth: 2, borderColor: '#FFF'
   },
   profileInfo: { flex: 1 },
-  name: { fontSize: 20, fontWeight: '700', marginBottom: 2 },
-  email: { fontSize: 14, color: '#8E8E93' },
+  // Styles modifiés pour le formulaire
+  label: { fontSize: 12, color: '#8E8E93', marginBottom: 4, marginTop: 4 },
+  input: {
+      borderBottomWidth: 1,
+      borderBottomColor: '#E5E5EA',
+      paddingVertical: 4,
+      fontSize: 16,
+      fontWeight: '500',
+      marginBottom: 8,
+      color: '#000'
+  },
+  bioInput: {
+      height: 60,
+      textAlignVertical: 'top' // Android fix for multiline
+  },
+  saveProfileBtn: {
+      backgroundColor: '#000',
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderRadius: 6,
+      alignSelf: 'flex-start',
+      marginTop: 10
+  },
+  saveProfileText: {
+      color: '#FFF',
+      fontWeight: '600',
+      fontSize: 14
+  },
+  email: { fontSize: 14, color: '#8E8E93', marginTop: 4 },
 
   sectionTitleContainer: { paddingHorizontal: 15, marginBottom: 8 },
   sectionTitle: { fontSize: 13, fontWeight: '600', color: '#8E8E93' },

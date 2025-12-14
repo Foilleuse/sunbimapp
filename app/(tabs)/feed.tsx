@@ -24,13 +24,20 @@ const MirroredBackground = ({ uri, width, height, top }: { uri: string, width: n
     const bottom = top + height;
     const BLUR_RADIUS = 25; 
 
-    // 🔥 CORRECTION BORDS BLANCS
-    const EXTRA_WIDTH = 100; 
+    // 🔥 CORRECTION BORDS BLANCS : 
+    // On dessine l'arrière-plan (couche floue) plus large que l'écran pour que le flou 
+    // ne crée pas de transparence sur les bords gauche/droite visibles.
+    const EXTRA_WIDTH = 100; // 50px de marge de chaque côté pour absorber le flou
     const bgWidth = width + EXTRA_WIDTH;
-    const bgX = -EXTRA_WIDTH / 2; 
+    const bgX = -EXTRA_WIDTH / 2; // On décale vers la gauche pour centrer l'image élargie
 
     return (
         <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
+            
+            {/* 
+                1. ARRIÈRE-PLAN : MIROIRS + FLOU (Remplissage total avec débordement)
+                On utilise bgX et bgWidth pour déborder de l'écran.
+            */}
             <Group layer={<Paint><Blur blur={BLUR_RADIUS} /></Paint>}>
                 {/* Image centrale */}
                 <SkiaImage image={image} x={bgX} y={top} width={bgWidth} height={height} fit="cover" />
@@ -46,6 +53,10 @@ const MirroredBackground = ({ uri, width, height, top }: { uri: string, width: n
                 </Group>
             </Group>
 
+            {/* 
+                2. PREMIER-PLAN : IMAGE NETTE AVEC MASQUE
+                Ici on reste à la taille exacte de l'écran (width) pour l'alignement parfait.
+            */}
             <Mask
                 mode="luminance"
                 mask={
@@ -53,7 +64,10 @@ const MirroredBackground = ({ uri, width, height, top }: { uri: string, width: n
                         <SkiaGradient
                             start={vec(0, top)}
                             end={vec(0, bottom)}
+                            // Noir = Transparent, Blanc = Visible
                             colors={["black", "white", "white", "black"]}
+                            // 🔥 CORRECTION FONDU : Zone agrandie à 20% (0.2) au lieu de 10%
+                            // positions correspond à : [début fondu haut, fin fondu haut, début fondu bas, fin fondu bas]
                             positions={[0, 0.2, 0.8, 1]}
                         />
                     </Rect>
@@ -70,7 +84,8 @@ const MirroredBackground = ({ uri, width, height, top }: { uri: string, width: n
     );
 };
 
-// --- BOUTON RÉACTION ---
+// --- LE RESTE DU CODE (SANS CHANGEMENT MAJEUR) ---
+
 const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color }: any) => {
     const scale = useSharedValue(1);
 
@@ -101,7 +116,6 @@ const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color }: any) => {
     );
 };
 
-// --- FEED CARD ---
 const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, isHolding }: { drawing: any, canvasSize: number, index: number, currentIndex: number, onUserPress: (user: any) => void, isHolding: boolean }) => {
     const { user } = useAuth();
     
@@ -338,7 +352,6 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
            prev.isHolding === next.isHolding; 
 });
 
-// --- PAGE PRINCIPALE MODIFIÉE ---
 export default function FeedPage() {
     const { user } = useAuth();
     const router = useRouter();
@@ -367,51 +380,28 @@ export default function FeedPage() {
     
     const eyeButtonTop = TOP_HEADER_SPACE + IMAGE_HEIGHT - EYE_BUTTON_SIZE - MARGIN_BOTTOM;
 
-    // 🔥 MODIFICATION ICI : On ajoute params.cloud_id aux dépendances
     useFocusEffect(
         useCallback(() => {
-            fetchFeed();
-        }, [user, params.cloud_id]) 
+            fetchTodaysFeed();
+        }, [user])
     );
 
-    // 🔥 NOUVELLE FONCTION DE RÉCUPÉRATION
-    const fetchFeed = async () => {
+    const fetchTodaysFeed = async () => {
         try {
-            setLoading(true);
-            let cloudData = null;
-            
-            // 1. PRIORITÉ ABSOLUE : ID fourni (navigation, historique...)
-            if (params.cloud_id) {
-                const { data } = await supabase
-                    .from('clouds')
-                    .select('*')
-                    .eq('id', params.cloud_id)
-                    .maybeSingle();
-                cloudData = data;
-            } 
-            // 2. FALLBACK : Date du jour (comportement par défaut)
-            else {
-                const today = new Date().toISOString().split('T')[0];
-                const { data } = await supabase
-                    .from('clouds')
-                    .select('*')
-                    .eq('published_for', today)
-                    .maybeSingle();
-                cloudData = data;
-            }
+            const today = new Date().toISOString().split('T')[0];
+            const { data: cloudData } = await supabase.from('clouds').select('*').eq('published_for', today).maybeSingle();
             
             if (!cloudData) {
                 setLoading(false);
                 return;
             }
 
-            // Vérification de sécurité : l'utilisateur a-t-il participé à CE cloud ?
             if (user && !params.justPosted) { 
                 const { data: myDrawing } = await supabase
                     .from('drawings')
                     .select('id')
                     .eq('user_id', user.id)
-                    .eq('cloud_id', cloudData.id) // ✅ Lien correct sur l'ID
+                    .eq('cloud_id', cloudData.id)
                     .maybeSingle();
                 
                 if (!myDrawing) {
@@ -435,7 +425,6 @@ export default function FeedPage() {
                     }
                 }
 
-                // ✅ On récupère les dessins liés à CET ID (et pas à une date)
                 let query = supabase
                     .from('drawings')
                     .select('*, users(id, display_name, avatar_url)') 
@@ -453,11 +442,7 @@ export default function FeedPage() {
                 if (drawingsError) throw drawingsError;
                 setDrawings(drawingsData || []);
             }
-        } catch (e) { 
-            console.error(e); 
-        } finally { 
-            setLoading(false); 
-        }
+        } catch (e) { console.error(e); } finally { setLoading(false); }
     };
 
     const handleUserPress = (targetUser: any) => {
@@ -492,8 +477,7 @@ export default function FeedPage() {
                 />
             )}
 
-            {/* Affiche une croix pour fermer si on regarde une archive spécifique */}
-            <SunbimHeader showCloseButton={!!params.cloud_id} transparent={true} />
+            <SunbimHeader showCloseButton={false} transparent={true} />
             
             <View 
                 style={[styles.mainContent, { paddingTop: TOP_HEADER_SPACE }]} 
