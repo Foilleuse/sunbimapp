@@ -5,7 +5,7 @@ import { DrawingViewer } from './DrawingViewer';
 import { getOptimizedImageUrl } from '../utils/imageOptimizer';
 // Import du module d'enregistrement d'écran
 import RecordScreen from 'react-native-record-screen';
-import Share from 'react-native-share'; // Pour partager la vidéo (nécessite react-native-share si dispo, sinon on utilisera l'API Share de RN de base si possible, mais Share de RN ne gère pas toujours bien les fichiers vidéo sur Android sans content:// URI)
+// Pour partager la vidéo (nécessite react-native-share si dispo, sinon on utilisera l'API Share de RN de base si possible, mais Share de RN ne gère pas toujours bien les fichiers vidéo sur Android sans content:// URI)
 // NOTE : Le package.json mentionne "expo-sharing", donc on utilisera expo-sharing.
 import * as Sharing from 'expo-sharing';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -229,7 +229,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({ visible, onClose, drawin
                 </View>
 
                 {/* 4. INFOS (Sous la photo) */}
-                <View style={[styles.infoContainer, { top: geometry.topPosition + geometry.imgHeight + 20 }]}>
+                <View style={[styles.infoContainer, { top: geometry.topPosition + geometry.imgHeight - 10 }]}>
                     <Text style={styles.drawingTitle} numberOfLines={1}>
                         {drawing.label || "Sans titre"}
                     </Text>
@@ -257,7 +257,7 @@ const styles = StyleSheet.create({
   headerBar: {
     width: '100%',
     backgroundColor: 'transparent', 
-    paddingTop: 60, // Marge top similaire au SunbimHeader
+    paddingTop: 80, // Descendu un peu plus bas
     paddingBottom: 15,
     paddingHorizontal: 20,
     flexDirection: 'row',
