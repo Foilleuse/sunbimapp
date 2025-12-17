@@ -171,8 +171,9 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
     useEffect(() => {
         if (animated && !startVisible) {
             progress.value = 0;
+            // 🔥 MODIFICATION ICI : Durée ajustée à 2500ms (2.5s)
             progress.value = withTiming(1, {
-                duration: 3500, 
+                duration: 2500, 
                 easing: Easing.linear
             });
         } else {
