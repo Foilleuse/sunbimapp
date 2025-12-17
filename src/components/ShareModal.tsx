@@ -85,12 +85,15 @@ export const ShareModal: React.FC<ShareModalProps> = ({ visible, onClose, drawin
                 // 1. Démarrer l'enregistrement dès l'ouverture
                 try {
                     // console.log("Début enregistrement...");
-                    // Amélioration de la qualité : bitrate élevé, fps 60
+                    // Amélioration de la qualité : bitrate élevé, fps 60, dimensions réelles
+                    const widthPx = screenWidth * PixelRatio.get();
+                    const heightPx = screenHeight * PixelRatio.get();
+                    
                     const res = await RecordScreen.startRecording({ 
                         mic: false,
-                        width: screenWidth,
-                        height: screenHeight,
-                        bitrate: 6000000, // 6 Mbps pour meilleure qualité
+                        width: widthPx, // Utilisation des pixels réels pour la résolution native
+                        height: heightPx,
+                        bitrate: 10000000, // 10 Mbps pour très haute qualité
                         fps: 60
                     });
                     // console.log("Enregistrement démarré", res);
