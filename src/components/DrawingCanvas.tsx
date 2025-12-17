@@ -3,6 +3,7 @@ import { StyleSheet, View, Platform, Dimensions, PanResponder, ActivityIndicator
 import {
   Canvas, Path, useImage, Image as SkiaImage, Group, Skia, SkPath, Blur
 } from '@shopify/react-native-skia';
+import { getStroke } from 'perfect-freehand';
 
 interface DrawingCanvasProps {
   imageUri: string;
@@ -10,7 +11,7 @@ interface DrawingCanvasProps {
   strokeWidth: number;
   onClear?: () => void;
   isEraserMode?: boolean;
-  blurRadius?: number; // Nouvelle prop pour le flou
+  blurRadius?: number;
 }
 
 export interface DrawingCanvasRef {
@@ -21,11 +22,31 @@ export interface DrawingCanvasRef {
   getSnapshot: () => Promise<string | undefined>;
 }
 
-interface DrawingPath {
-  svgPath: string;
+// Nous enrichissons l'interface pour inclure les points (JSON)
+export interface DrawingPath {
+  points: number[][]; // Les points bruts [x, y, pressure]
+  svgPath: string;    // Le chemin SVG généré (contour)
   color: string;
   width: number;
   isEraser?: boolean;
+  isFilled?: boolean; // Indicateur pour savoir si on doit 'fill' ou 'stroke' (utile pour la rétrocompatibilité)
+}
+
+// Fonction utilitaire pour convertir le tableau de points généré par perfect-freehand en chemin SVG
+function getSvgPathFromStroke(stroke: number[][]): string {
+  if (!stroke.length) return "";
+  
+  const d = stroke.reduce(
+    (acc, [x0, y0], i, arr) => {
+      const [x1, y1] = arr[(i + 1) % arr.length];
+      acc.push(x0, y0, (x0 + x1) / 2, (y0 + y1) / 2);
+      return acc;
+    },
+    ["M", ...stroke[0], "Q"]
+  );
+  
+  d.push("Z");
+  return d.join(" ");
 }
 
 export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
@@ -43,9 +64,11 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
 
     const [paths, setPaths] = useState<DrawingPath[]>([]);
     const [redoStack, setRedoStack] = useState<DrawingPath[]>([]);
-    const [currentPathObj, setCurrentPathObj] = useState<SkPath | null>(null);
     
-    // Transform
+    // État pour le trait en cours de tracé
+    const [currentPoints, setCurrentPoints] = useState<number[][] | null>(null);
+    
+    // Transform pour le zoom/pan
     const transform = useRef({ scale: 1, translateX: 0, translateY: 0 });
     const [_, setTick] = useState(0);
     const forceUpdate = () => setTick(t => t + 1);
@@ -55,10 +78,9 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
 
     const mode = useRef<'NONE' | 'DRAWING' | 'ZOOMING'>('NONE');
     const gestureStart = useRef<any>(null);
-    const lastPoint = useRef<{ x: number, y: number } | null>(null);
 
     useImperativeHandle(ref, () => ({
-      clearCanvas: () => { setPaths([]); setRedoStack([]); setCurrentPathObj(null); },
+      clearCanvas: () => { setPaths([]); setRedoStack([]); setCurrentPoints(null); },
       undo: () => {
         setPaths(prev => {
           if (prev.length === 0) return prev;
@@ -110,8 +132,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
 
     const startZooming = (touches: any[]) => {
       mode.current = 'ZOOMING';
-      setCurrentPathObj(null); 
-      lastPoint.current = null;
+      setCurrentPoints(null); 
       
       const t1 = touches[0]; const t2 = touches[1];
       const dist = getDistance(t1, t2); 
@@ -134,16 +155,20 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
         } else if (touches.length === 1) {
           mode.current = 'DRAWING';
           const { locationX, locationY } = evt.nativeEvent;
+          // Conversion des coordonnées écran -> coordonnées papier (canvas)
           const x = (locationX - transform.current.translateX) / transform.current.scale;
           const y = (locationY - transform.current.translateY) / transform.current.scale;
-          const newPath = Skia.Path.Make(); newPath.moveTo(x, y);
-          setCurrentPathObj(newPath); lastPoint.current = { x, y };
+          
+          // Initialisation d'un nouveau trait avec le premier point
+          // Format [x, y, pressure]
+          setCurrentPoints([[x, y, 0.5]]);
         }
       },
 
       onPanResponderMove: (evt) => {
         const touches = evt.nativeEvent.touches;
 
+        // --- GESTION DU ZOOM / PAN ---
         if (touches.length === 2) {
             if (mode.current !== 'ZOOMING') startZooming(touches);
             const t1 = touches[0]; const t2 = touches[1];
@@ -172,37 +197,50 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
             return;
         }
 
-        if (mode.current === 'DRAWING' && touches.length === 1 && currentPathObj && lastPoint.current) {
+        // --- GESTION DU DESSIN (Perfect Freehand) ---
+        if (mode.current === 'DRAWING' && touches.length === 1 && currentPoints) {
           const { locationX, locationY } = evt.nativeEvent;
           const x = (locationX - transform.current.translateX) / transform.current.scale;
           const y = (locationY - transform.current.translateY) / transform.current.scale;
           
-          // EFFET BEZIER (Lissage)
-          // On utilise le point médian pour créer une courbe quadratique fluide
-          const xMid = (lastPoint.current.x + x) / 2;
-          const yMid = (lastPoint.current.y + y) / 2;
-          currentPathObj.quadTo(lastPoint.current.x, lastPoint.current.y, xMid, yMid);
-          
-          lastPoint.current = { x, y };
-          setCurrentPathObj(currentPathObj); forceUpdate();
+          // On ajoute simplement le point brut, perfect-freehand fera le lissage
+          const newPoint = [x, y, 0.5]; // On pourrait utiliser evt.nativeEvent.force si disponible
+          setCurrentPoints(prev => prev ? [...prev, newPoint] : [newPoint]);
         }
       },
 
       onPanResponderRelease: () => {
-        if (mode.current === 'DRAWING' && currentPathObj && lastPoint.current) {
-          currentPathObj.lineTo(lastPoint.current.x, lastPoint.current.y);
+        if (mode.current === 'DRAWING' && currentPoints && currentPoints.length > 0) {
+          // 1. Générer le contour final du trait
+          const options = {
+            size: strokeWidth / baseScaleRef.current, // Taille ajustée à l'échelle de base
+            thinning: 0.5,
+            smoothing: 0.5,
+            streamline: 0.5,
+            easing: (t: number) => t,
+            simulatePressure: true,
+            last: true, // Indique que le trait est fini
+          };
+          
+          const outlinePoints = getStroke(currentPoints, options);
+          const svgPathData = getSvgPathFromStroke(outlinePoints);
+
+          // 2. Sauvegarder le résultat final
           setPaths(prev => [...prev, {
-            svgPath: currentPathObj.toSVGString(),
+            points: currentPoints, // On garde les points bruts (JSON)
+            svgPath: svgPathData,  // On garde le SVG généré pour l'affichage facile
             color: strokeColor,
             width: strokeWidth,
-            isEraser: isEraserMode
+            isEraser: isEraserMode,
+            isFilled: true // Important : C'est une forme pleine, pas un trait
           }]);
+          
           setRedoStack([]);
         }
-        mode.current = 'NONE'; setCurrentPathObj(null); lastPoint.current = null; gestureStart.current = null;
+        mode.current = 'NONE'; setCurrentPoints(null); gestureStart.current = null;
       },
-      onPanResponderTerminate: () => { mode.current = 'NONE'; setCurrentPathObj(null); }
-    }), [strokeColor, strokeWidth, currentPathObj, screenWidth, screenHeight, image, isEraserMode]);
+      onPanResponderTerminate: () => { mode.current = 'NONE'; setCurrentPoints(null); }
+    }), [strokeColor, strokeWidth, currentPoints, screenWidth, screenHeight, image, isEraserMode]);
 
     if (!image) return <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#fff" /></View>;
 
@@ -211,6 +249,23 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
       { translateY: transform.current.translateY },
       { scale: transform.current.scale }
     ];
+
+    // Calcul du path en temps réel pour le trait en cours
+    let currentSvgPath = "";
+    if (currentPoints && currentPoints.length > 0) {
+        const options = {
+            size: strokeWidth / baseScaleRef.current,
+            thinning: 0.5,
+            smoothing: 0.5,
+            streamline: 0.5,
+            easing: (t: number) => t,
+            simulatePressure: true,
+            last: false,
+        };
+        const outline = getStroke(currentPoints, options);
+        currentSvgPath = getSvgPathFromStroke(outline);
+    }
+    const currentSkiaPath = currentSvgPath ? Skia.Path.MakeFromSVGString(currentSvgPath) : null;
 
     return (
       <View style={{ width: screenWidth, height: screenHeight, backgroundColor: 'black', overflow: 'hidden' }} {...panResponder.panHandlers}>
@@ -225,7 +280,6 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
                   height={PAPER_HEIGHT} 
                   fit="cover" 
               >
-                {/* Ajout du filtre de flou dynamique */}
                 {blurRadius > 0 && <Blur blur={blurRadius} />}
               </SkiaImage>
               
@@ -233,13 +287,35 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
                 {paths.map((p, index) => {
                   const path = Skia.Path.MakeFromSVGString(p.svgPath);
                   if (!path) return null;
-                  const adjustedWidth = p.width / baseScaleRef.current;
+                  
+                  // Si c'est un path "filled" (perfect-freehand), on utilise style="fill" (par défaut)
+                  // Si c'est un ancien path (retro-compatibilité), on utiliserait style="stroke"
+                  const isFilled = p.isFilled ?? false; // Par défaut false pour les anciens dessins si pas spécifié
+
+                  // Note : p.width est déjà intégré dans la géométrie du SVG pour perfect-freehand
+                  
                   return (
-                    <Path key={index} path={path} color={p.isEraser ? "#000" : p.color} style="stroke" strokeWidth={adjustedWidth} strokeCap="round" strokeJoin="round" blendMode={p.isEraser ? "clear" : "srcOver"} />
+                    <Path 
+                        key={index} 
+                        path={path} 
+                        color={p.isEraser ? "#000" : p.color} 
+                        style={isFilled ? "fill" : "stroke"} 
+                        strokeWidth={isFilled ? 0 : (p.width / baseScaleRef.current)} // Ignoré si fill
+                        strokeCap="round" 
+                        strokeJoin="round" 
+                        blendMode={p.isEraser ? "clear" : "srcOver"} 
+                    />
                   );
                 })}
-                {currentPathObj && (
-                  <Path path={currentPathObj} color={isEraserMode ? "#000" : strokeColor} style="stroke" strokeWidth={strokeWidth / baseScaleRef.current} strokeCap="round" strokeJoin="round" blendMode={isEraserMode ? "clear" : "srcOver"} />
+
+                {/* Trait en cours de dessin */}
+                {currentSkiaPath && (
+                  <Path 
+                    path={currentSkiaPath} 
+                    color={isEraserMode ? "#000" : strokeColor} 
+                    style="fill" // Perfect Freehand est toujours un fill
+                    blendMode={isEraserMode ? "clear" : "srcOver"} 
+                  />
                 )}
               </Group>
             </Group>

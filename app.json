@@ -4,7 +4,7 @@
     "slug": "sunbimapp",
     "owner": "foilleuse",
     "version": "1.0.0",
-    "runtimeVersion": "exposdk:51.0.0", 
+    "runtimeVersion": "exposdk:51.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/nyola.jpeg",
     "userInterfaceStyle": "light",
@@ -16,7 +16,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.foilleuse.sunbimapp",
-      "buildNumber": "18",
+      "buildNumber": "19",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
@@ -67,17 +67,7 @@
           "iosUrlScheme": "com.googleusercontent.apps.296503578118-pdqa6300t0r1l315e94nn07uuj8fdepq"
         }
       ],
-      [
-        "@config-plugins/ffmpeg-kit-react-native",
-        {
-          "ios": {
-            "package": "min-gpl"
-          },
-          "android": {
-            "package": "min-gpl"
-          }
-        }
-      ]
+      "./plugins/withReplayKit"
     ],
     "extra": {
       "router": {
