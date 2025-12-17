@@ -584,7 +584,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                             contentContainerStyle={{ flexGrow: 1, alignItems: 'center' }}
                             showsVerticalScrollIndicator={false}
                         >
-                            <View style={[styles.header, { paddingVertical: 0, paddingTop: 10, paddingHorizontal: 15, backgroundColor: 'transparent', width: '100%' }]}> 
+                            <View style={[styles.header, { height: 60, paddingVertical: 0, paddingTop: 10, paddingHorizontal: 15, backgroundColor: 'transparent', width: '100%', justifyContent: 'center' }]}> 
                                 <TouchableOpacity onPress={closeDrawing} style={styles.closeBtnTransparent} hitSlop={15}>
                                     <X color="#FFF" size={28} />
                                 </TouchableOpacity>
