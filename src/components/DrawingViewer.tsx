@@ -1,7 +1,7 @@
-import React, { useEffect, useRef, useMemo } from 'react';
+import React, { useEffect, useRef, useMemo, useState } from 'react';
 import { View, StyleSheet, Dimensions, PixelRatio, Platform } from 'react-native';
 import { Canvas, Path, useImage, Image as SkiaImage, Skia, Group } from '@shopify/react-native-skia';
-import Animated, { useSharedValue, useAnimatedStyle, withTiming, withDelay, Easing, runOnJS } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, withDelay, Easing, runOnJS, useDerivedValue } from 'react-native-reanimated';
 
 // Définition de l'interface DrawingPath pour inclure les nouveaux champs
 interface DrawingPath {
@@ -24,30 +24,45 @@ interface DrawingViewerProps {
     autoCenter?: boolean; // Si true, tente de centrer le dessin dans le viewer
 }
 
-// Fonction utilitaire pour ajuster l'échelle et la position
-const getTransform = (
-    srcWidth: number, srcHeight: number, 
-    targetWidth: number, targetHeight: number, 
-    autoCenter: boolean
-) => {
-    // Par défaut (sans autoCenter), on scale juste pour fit la largeur
-    // On suppose que le dessin original a été fait sur un écran de largeur srcWidth (souvent ~390-430)
-    // et hauteur srcHeight (souvent ~ratio 4:3)
+// Composant interne pour gérer l'animation d'un chemin individuel
+// Cela permet d'optimiser le rendu si nécessaire, mais ici on va gérer l'affichage global
+const AnimatedPath = ({ path, color, width, isEraser, isFilled, index, progress, totalCount }: any) => {
+    // Calcul de l'opacité ou de la visibilité basé sur le progrès global
+    // Si progress (0..1) * totalCount > index, alors ce trait doit être visible.
     
-    // Pour simplifier : on se base sur la largeur.
-    // Scale = targetWidth / srcWidth.
-    // Cependant, srcWidth n'est pas stocké dans canvasData. 
-    // On assume une largeur de référence standard (ex: iPhone 390px) si on ne connait pas la source,
-    // MAIS ici le viewerSize est souvent passé comme étant la largeur de l'écran actuel.
+    // Note: Dans le contexte Skia React Native, utiliser des valeurs dérivées complexes dans une boucle map
+    // peut être lourd. Une approche simple est d'utiliser un opacité animée.
     
-    // Cas simple : On remplit la largeur cible.
-    // L'échelle est relative. Les coordonnées SVG sont absolues par rapport au device de création.
-    // C'est une limitation actuelle : si on dessine sur iPad et regarde sur iPhone, ça peut déborder.
-    // Idéalement il faudrait stocker la taille du canvas d'origine avec le dessin.
+    // ASTUCE: Pour simuler le tracé, on peut simplement switcher l'opacité de 0 à 1 quand c'est le tour du trait.
+    // Le trait apparaît "pop", ce qui est moins fluide que le tracé progressif, mais c'est le mieux pour des fills.
+    // Pour améliorer, on pourrait faire un fade-in rapide.
     
-    // Hack : On détecte les bornes du dessin pour centrer si demandé
-    return { scale: 1, translateX: 0, translateY: 0 };
+    const opacity = useDerivedValue(() => {
+        const threshold = index / totalCount;
+        const nextThreshold = (index + 1) / totalCount;
+        
+        if (progress.value > threshold) {
+            // Le trait est en cours d'apparition ou déjà apparu
+            // On peut faire un fade-in rapide entre threshold et threshold + petit epsilon
+             return 1;
+        }
+        return 0;
+    });
+
+    return (
+        <Path
+            path={path}
+            color={isEraser ? "#000" : color} // La couleur noire pour l'effaceur sera gérée par blendMode
+            style={isFilled ? "fill" : "stroke"}
+            strokeWidth={isFilled ? 0 : width}
+            strokeCap="round"
+            strokeJoin="round"
+            blendMode={isEraser ? "clear" : "srcOver"}
+            opacity={opacity}
+        />
+    );
 };
+
 
 export const DrawingViewer: React.FC<DrawingViewerProps> = ({ 
     imageUri, 
@@ -65,13 +80,6 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
     const targetWidth = viewerSize || screenWidth;
     // Ratio 4:3 par défaut pour l'affichage si hauteur non fournie
     const targetHeight = viewerHeight || targetWidth * (4/3); 
-    
-    // On suppose que le dessin a été fait sur un écran standard mobile (~390-430px large)
-    // Pour l'instant, on applique une échelle de 1 si on est sur la même taille d'écran,
-    // ou un ratio si on veut adapter.
-    // NOTE: Pour une vraie adaptation multi-device, il faudrait normaliser les coordonnées à l'enregistrement (0..1).
-    // Ici on va tenter de fitter si le dessin dépasse trop ou est trop petit ? 
-    // Pour l'instant on garde l'échelle 1:1 par défaut car c'est le comportement attendu sur des devices similaires.
     
     const image = useImage(imageUri);
 
@@ -100,7 +108,6 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
     }, [canvasData]);
 
     // On calcule l'échelle pour centrer le dessin si nécessaire (autoCenter)
-    // C'est utile pour la page de partage où on veut voir tout le dessin centré
     const scaleTransform = useMemo(() => {
         if (!autoCenter || skiaPaths.length === 0) return { translateX: 0, translateY: 0, scale: 1 };
 
@@ -123,10 +130,9 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
         const centerX = minX + drawingWidth / 2;
         const centerY = minY + drawingHeight / 2;
 
-        // On ajoute une marge
         const scaleX = (targetWidth * 0.9) / drawingWidth;
         const scaleY = (targetHeight * 0.9) / drawingHeight;
-        const scale = Math.min(scaleX, scaleY, 1); // On ne grossit pas plus que x1 pour éviter le flou
+        const scale = Math.min(scaleX, scaleY, 1); 
 
         const translateX = (targetWidth / 2) - (centerX * scale);
         const translateY = (targetHeight / 2) - (centerY * scale);
@@ -135,20 +141,6 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
 
     }, [skiaPaths, autoCenter, targetWidth, targetHeight]);
 
-    
-    // Calcul du path animé (pour l'effet "tracé en direct")
-    // C'est complexe avec perfect-freehand car c'est des formes pleines (fill) et pas des lignes.
-    // L'animation de "trim" (strokeStart/End) ne marche bien que sur des strokes.
-    // Pour des fills, on peut simuler une révélation progressive en jouant sur l'opacité ou en masquant ?
-    // SOLUTION SIMPLE : On révèle les chemins un par un selon le progrès global.
-    
-    // Pour DrawingViewer, on va simplifier :
-    // Si animated est true, on affiche les chemins progressivement index par index.
-    
-    // Utilisation d'un state dérivé pour l'animation n'est pas possible directement dans Skia sans Reanimated.
-    // Mais Skia a ses propres hooks d'animation ou on peut passer des valeurs dérivées.
-    // Ici on va faire simple : tout afficher (l'animation complexe de stroke est désactivée pour perfect-freehand pour l'instant)
-    // TODO: Implémenter une animation de masque pour perfect-freehand si besoin.
     
     return (
         <View style={{ width: targetWidth, height: targetHeight, overflow: 'hidden' }}>
@@ -176,26 +168,19 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
                     {skiaPaths.map((p, index) => {
                         if (!p.skiaPath) return null;
                         
-                        // Détection du mode de rendu
-                        // Nouveau format (Perfect Freehand) -> isFilled = true -> style="fill"
-                        // Ancien format -> isFilled = undefined/false -> style="stroke"
                         const isFilled = p.isFilled ?? false; 
                         
-                        // Pour l'animation :
-                        // Si on veut animer, on peut utiliser l'opacité ou le end de path.
-                        // Pour l'instant on affiche tout statique si startVisible=true,
-                        // ou on pourrait implémenter une logique d'apparition progressive simple.
-                        
                         return (
-                            <Path
+                            <AnimatedPath
                                 key={index}
                                 path={p.skiaPath}
                                 color={p.isEraser ? (transparentMode ? "transparent" : "#000") : p.color}
-                                style={isFilled ? "fill" : "stroke"}
-                                strokeWidth={isFilled ? 0 : p.width}
-                                strokeCap="round"
-                                strokeJoin="round"
-                                blendMode={p.isEraser ? "clear" : "srcOver"}
+                                width={p.width}
+                                isEraser={p.isEraser}
+                                isFilled={isFilled}
+                                index={index}
+                                totalCount={skiaPaths.length}
+                                progress={progress}
                             />
                         );
                     })}
