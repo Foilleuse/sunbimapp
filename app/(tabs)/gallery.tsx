@@ -48,30 +48,35 @@ const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color, count }: an
 const GalleryItem = memo(({ item, itemSize, showClouds, onPress }: any) => {
     
     // 🔥 VIGNETTE : On force le ratio 3:4
+    // Calcul de la hauteur cible pour le viewer (ratio 3:4 = largeur * 1.333)
+    const targetHeight = itemSize * (4/3);
+
     const optimizedUri = useMemo(() => {
         if (!item.cloud_image_url) return null;
         
         // 1. Dimensions réelles
         const physicalWidth = Math.round(itemSize * PixelRatio.get());
         // 2. Calcul de la hauteur 3:4
-        const physicalHeight = Math.round((physicalWidth / 3) * 4);
+        const physicalHeight = Math.round(targetHeight * PixelRatio.get()); // Utiliser la hauteur calculée
 
         // 3. On passe width ET height ➔ L'optimiseur active le "Crop"
         return getOptimizedImageUrl(item.cloud_image_url, physicalWidth, physicalHeight);
-    }, [item.cloud_image_url, itemSize]);
+    }, [item.cloud_image_url, itemSize, targetHeight]);
 
     return (
         <TouchableOpacity 
             activeOpacity={0.9} onPress={() => onPress(item)}
-            style={{ width: itemSize, aspectRatio: 3/4, marginBottom: 1, backgroundColor: '#F9F9F9', overflow: 'hidden' }}
+            style={{ width: itemSize, height: targetHeight, marginBottom: 1, backgroundColor: '#F9F9F9', overflow: 'hidden' }}
         >
             <DrawingViewer
                 imageUri={optimizedUri || item.cloud_image_url} 
                 canvasData={item.canvas_data} 
                 viewerSize={itemSize}
+                viewerHeight={targetHeight} // Ajout explicite de la hauteur
                 transparentMode={!showClouds} 
                 startVisible={true} 
                 animated={false} 
+                autoCenter={false} // Pas d'auto-center pour respecter le cadrage original
             />
         </TouchableOpacity>
     );
@@ -333,6 +338,7 @@ export default function GalleryPage() {
                                         transparentMode={true} 
                                         startVisible={false} 
                                         animated={true}
+                                        autoCenter={false} // Désactivé aussi ici pour être cohérent
                                     />
                                 </View>
                                 <Text style={styles.hintText}>Maintenir pour voir l'original</Text>
