@@ -34,8 +34,7 @@ const MirroredBackground = ({ uri, width, height, top }: { uri: string, width: n
     return (
         <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
             
-            {/* 
-                1. ARRIÈRE-PLAN : MIROIRS + FLOU (Remplissage total avec débordement)
+            {/* 1. ARRIÈRE-PLAN : MIROIRS + FLOU (Remplissage total avec débordement)
                 On utilise bgX et bgWidth pour déborder de l'écran.
             */}
             <Group layer={<Paint><Blur blur={BLUR_RADIUS} /></Paint>}>
@@ -53,8 +52,7 @@ const MirroredBackground = ({ uri, width, height, top }: { uri: string, width: n
                 </Group>
             </Group>
 
-            {/* 
-                2. PREMIER-PLAN : IMAGE NETTE AVEC MASQUE
+            {/* 2. PREMIER-PLAN : IMAGE NETTE AVEC MASQUE
                 Ici on reste à la taille exacte de l'écran (width) pour l'alignement parfait.
             */}
             <Mask
@@ -273,6 +271,10 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
 
     return (
         <View style={styles.cardContainer}>
+            {/* 🔥 CORRECTION PETITS ÉCRANS : 
+               On s'assure que le conteneur du dessin a une taille fixe ou relative qui ne déborde pas.
+               Dans le carrousel, on utilise width=canvasSize.
+            */}
             <View style={{ width: canvasSize, height: canvasSize * (4/3), backgroundColor: 'transparent', position: 'relative' }}>
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
@@ -360,7 +362,7 @@ export default function FeedPage() {
     const [loading, setLoading] = useState(true);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [backgroundCloud, setBackgroundCloud] = useState<string | null>(null);
-    const { width: screenWidth } = Dimensions.get('window');
+    const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
     
     // 🔥 ETAT POUR AFFICHER LES FLÈCHES DE TUTO
     const [showTutorialArrows, setShowTutorialArrows] = useState(true);
@@ -372,13 +374,28 @@ export default function FeedPage() {
     const [selectedUser, setSelectedUser] = useState<any>(null);
     const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
 
-    const TOP_HEADER_SPACE = 120;
+    // Ajustement dynamique de l'espace haut pour petits écrans
+    const isSmallScreen = screenHeight < 700;
+    const TOP_HEADER_SPACE = isSmallScreen ? 80 : 120;
 
-    const IMAGE_HEIGHT = screenWidth * (4/3);
+    // Calcul hauteur image : si 4/3 dépasse l'écran dispo, on réduit
+    // L'écran dispo = screenHeight - TOP_HEADER_SPACE - Bottom nav (approx 80)
+    // On veut garder un peu de marge en bas pour les infos
+    const MAX_IMAGE_HEIGHT = screenHeight - TOP_HEADER_SPACE - 150; // 150px pour infos + marge
+    const IDEAL_HEIGHT = screenWidth * (4/3);
+    
+    const FINAL_IMAGE_HEIGHT = Math.min(IDEAL_HEIGHT, MAX_IMAGE_HEIGHT);
+    // Si on réduit la hauteur, on doit ajuster la largeur pour garder le ratio, 
+    // OU accepter que l'image soit plus petite (contain)
+    // Ici on va ajuster le carrousel. 
+    // Si l'image est plus petite que screenWidth en largeur, on centre.
+    
+    const FINAL_IMAGE_WIDTH = FINAL_IMAGE_HEIGHT * (3/4);
+    
+    // Position du bouton oeil relative à la nouvelle hauteur
     const EYE_BUTTON_SIZE = 44;
     const MARGIN_BOTTOM = 25; 
-    
-    const eyeButtonTop = TOP_HEADER_SPACE + IMAGE_HEIGHT - EYE_BUTTON_SIZE - MARGIN_BOTTOM;
+    const eyeButtonTop = TOP_HEADER_SPACE + FINAL_IMAGE_HEIGHT - EYE_BUTTON_SIZE - MARGIN_BOTTOM;
 
     useFocusEffect(
         useCallback(() => {
@@ -472,7 +489,7 @@ export default function FeedPage() {
                 <MirroredBackground 
                     uri={optimizedBackground || backgroundCloud}
                     width={screenWidth}
-                    height={IMAGE_HEIGHT}
+                    height={FINAL_IMAGE_HEIGHT} // On utilise la hauteur calculée
                     top={TOP_HEADER_SPACE} 
                 />
             )}
@@ -484,10 +501,11 @@ export default function FeedPage() {
                 onLayout={(e) => setLayout(e.nativeEvent.layout)}
             >
                 {drawings.length > 0 && layout ? (
+                    <View style={{ alignItems: 'center' }}>
                     <Carousel
                         loop={true}
-                        width={layout.width}
-                        height={layout.height}
+                        width={screenWidth} // Le carrousel prend toute la largeur
+                        height={FINAL_IMAGE_HEIGHT + 150} // Hauteur image + espace infos
                         autoPlay={false}
                         data={drawings}
                         scrollAnimationDuration={500}
@@ -496,16 +514,20 @@ export default function FeedPage() {
                             setShowTutorialArrows(false);
                         }}
                         renderItem={({ item, index }) => (
-                            <FeedCard 
-                                drawing={item} 
-                                canvasSize={layout.width} 
-                                index={index}
-                                currentIndex={currentIndex}
-                                onUserPress={handleUserPress}
-                                isHolding={isGlobalHolding && index === currentIndex}
-                            />
+                            <View style={{ alignItems: 'center' }}>
+                                {/* On centre la carte dans le carrousel */}
+                                <FeedCard 
+                                    drawing={item} 
+                                    canvasSize={FINAL_IMAGE_WIDTH} // On passe la largeur adaptée
+                                    index={index}
+                                    currentIndex={currentIndex}
+                                    onUserPress={handleUserPress}
+                                    isHolding={isGlobalHolding && index === currentIndex}
+                                />
+                            </View>
                         )}
                     />
+                    </View>
                 ) : (
                     !loading && drawings.length === 0 ? (
                         <View style={styles.centerBox}><Text style={styles.text}>La galerie est vide.</Text></View>
@@ -513,7 +535,7 @@ export default function FeedPage() {
                 )}
 
                 {showTutorialArrows && drawings.length > 1 && (
-                    <View style={[styles.tutorialArrowsContainer, { top: TOP_HEADER_SPACE, height: IMAGE_HEIGHT }]} pointerEvents="none">
+                    <View style={[styles.tutorialArrowsContainer, { top: TOP_HEADER_SPACE, height: FINAL_IMAGE_HEIGHT }]} pointerEvents="none">
                         <View style={styles.arrowBox}>
                             <ChevronLeft color="rgba(255,255,255,0.7)" size={48} />
                         </View>
@@ -560,11 +582,15 @@ const styles = StyleSheet.create({
     mainContent: {
         flex: 1,
         position: 'relative',
+        alignItems: 'center' // Centrer le contenu horizontalement
     },
 
-    cardContainer: { flex: 1, justifyContent: 'flex-start' }, 
+    cardContainer: { 
+        justifyContent: 'flex-start',
+        alignItems: 'center' 
+    }, 
     cardInfo: {
-        flex: 1, 
+        width: '100%', 
         backgroundColor: 'transparent', 
         marginTop: 0, 
         paddingHorizontal: 20, 
