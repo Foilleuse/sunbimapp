@@ -1,20 +1,25 @@
-import React, { useMemo, useState, useEffect } from 'react';
-import { View, StyleSheet, Modal, Dimensions, PixelRatio, StatusBar, Text, TouchableOpacity, Alert, Platform } from 'react-native';
-import { Canvas, Rect, LinearGradient as SkiaGradient, vec, useImage, Image as SkiaImage, Group, Blur, Mask, Paint } from "@shopify/react-native-skia";
+import React, { useState, useEffect, useMemo, memo } from 'react';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, Dimensions, Alert, Pressable, Platform, ScrollView, PixelRatio } from 'react-native';
+import { X, Heart, Lightbulb, Palette, Zap, MoreHorizontal, Share2 } from 'lucide-react-native';
+import { supabase } from '../lib/supabaseClient';
 import { DrawingViewer } from './DrawingViewer';
+import { useAuth } from '../contexts/AuthContext';
 import { getOptimizedImageUrl } from '../utils/imageOptimizer';
-// Import du module d'enregistrement d'écran
-import RecordScreen from 'react-native-record-screen';
-// Pour partager la vidéo (nécessite react-native-share si dispo, sinon on utilisera l'API Share de RN de base si possible, mais Share de RN ne gère pas toujours bien les fichiers vidéo sur Android sans content:// URI)
-// NOTE : Le package.json mentionne "expo-sharing", donc on utilisera expo-sharing.
-import * as Sharing from 'expo-sharing';
-import { SafeAreaView } from 'react-native-safe-area-context';
+// Ajout des imports d'animation et Skia
+import Animated, { useSharedValue, useAnimatedStyle, withSpring, withSequence } from 'react-native-reanimated';
+import { Canvas, Rect, LinearGradient as SkiaGradient, vec, useImage, Image as SkiaImage, Group, Blur, Mask, Paint } from "@shopify/react-native-skia";
+import { ShareModal } from './ShareModal';
 
-interface ShareModalProps {
-    visible: boolean;
-    onClose: () => void;
-    drawing: any;
+interface DrawingDetailModalProps {
+  visible: boolean;
+  onClose: () => void;
+  drawing: any;
+  userProfile?: any; // Optionnel, si on veut forcer l'affichage d'un profil spécifique (ex: UserProfileModal)
+  isUnlocked?: boolean; // Pour savoir si on peut voir le dessin original
 }
+
+// Types de réactions possibles
+type ReactionType = 'like' | 'smart' | 'beautiful' | 'crazy' | null;
 
 // --- COMPOSANT BACKGROUND : MIROIR + FLOU + FONDU ÉTENDU ---
 const MirroredBackground = ({ uri, width, height, top }: { uri: string, width: number, height: number, top: number }) => {
@@ -25,7 +30,7 @@ const MirroredBackground = ({ uri, width, height, top }: { uri: string, width: n
     const bottom = top + height;
     const BLUR_RADIUS = 25; 
 
-    const EXTRA_WIDTH = 100;
+    const EXTRA_WIDTH = 100; 
     const bgWidth = width + EXTRA_WIDTH;
     const bgX = -EXTRA_WIDTH / 2;
 
@@ -64,269 +69,379 @@ const MirroredBackground = ({ uri, width, height, top }: { uri: string, width: n
     );
 };
 
-export const ShareModal: React.FC<ShareModalProps> = ({ visible, onClose, drawing }) => {
-    const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
-    const [animationReady, setAnimationReady] = useState(false);
+// --- COMPOSANT BOUTON DE RÉACTION ANIMÉ ---
+const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color, count }: any) => {
+    const scale = useSharedValue(1);
 
-    // Durée de l'animation du dessin (doit correspondre à celle dans DrawingViewer)
-    const DRAWING_ANIMATION_DURATION = 3000; 
-    // Délai avant le début de l'animation (ex: 1s)
-    const ANIMATION_START_DELAY = 1000;
-    // Délai après la fin de l'animation pour couper l'enregistrement (ex: 1s)
-    const RECORDING_END_BUFFER = 1000;
-
-    // Gestion de l'animation et de l'enregistrement
-    useEffect(() => {
-        let startTimer: NodeJS.Timeout;
-        let stopTimer: NodeJS.Timeout;
-
-        const startRecordingSequence = async () => {
-            if (visible && drawing) {
-                // 1. Démarrer l'enregistrement dès l'ouverture
-                try {
-                    // console.log("Début enregistrement...");
-                    // Amélioration de la qualité : bitrate élevé, fps 60, dimensions réelles
-                    // Note: Sur iOS, react-native-record-screen utilise ReplayKit qui a ses propres contraintes.
-                    // Sur Android, on peut spécifier width/height/bitrate.
-                    
-                    const widthPx = Math.round(screenWidth * PixelRatio.get());
-                    const heightPx = Math.round(screenHeight * PixelRatio.get());
-                    
-                    const res = await RecordScreen.startRecording({ 
-                        mic: false,
-                        width: widthPx, // Utilisation des pixels réels pour la résolution native (Android)
-                        height: heightPx, // (Android)
-                        bitrate: 20000000, // 20 Mbps pour très haute qualité (Android)
-                        fps: 60 // (Android)
-                    });
-                    // console.log("Enregistrement démarré", res);
-                } catch (e) {
-                    console.warn("Erreur démarrage enregistrement:", e);
-                }
-
-                setAnimationReady(false);
-                
-                // 2. Lancer l'animation après le délai défini
-                startTimer = setTimeout(() => {
-                    setAnimationReady(true); // Déclenche l'animation dans DrawingViewer
-
-                    // 3. Arrêter l'enregistrement après (Durée animation + Buffer de fin)
-                    stopTimer = setTimeout(async () => {
-                        try {
-                            // console.log("Fin enregistrement...");
-                            const res = await RecordScreen.stopRecording();
-                            // console.log("Vidéo enregistrée:", res);
-                            
-                            if (res?.result?.outputURL) {
-                                const videoUri = res.result.outputURL;
-                                
-                                // Vérifier si le partage est possible
-                                if (await Sharing.isAvailableAsync()) {
-                                    await Sharing.shareAsync(videoUri, {
-                                        mimeType: 'video/mp4',
-                                        dialogTitle: 'Partager mon dessin Sunbim',
-                                        UTI: 'public.movie' // Pour iOS
-                                    });
-                                    // Une fois le partage terminé (ou la feuille de partage fermée), on ferme la modale
-                                    // Note : shareAsync attend la fin de l'action sur certaines plateformes, mais pas toujours sur d'autres.
-                                    // On ferme la modale juste après pour revenir au feed.
-                                    onClose();
-                                } else {
-                                    Alert.alert("Erreur", "Le partage n'est pas disponible sur cet appareil");
-                                    onClose();
-                                }
-                            } else {
-                                // Pas d'URL de sortie, on ferme quand même
-                                onClose();
-                            }
-                            
-                        } catch (e) {
-                            console.warn("Erreur arrêt enregistrement:", e);
-                            Alert.alert("Erreur", "Impossible d'enregistrer la vidéo");
-                            onClose();
-                        }
-                    }, DRAWING_ANIMATION_DURATION + RECORDING_END_BUFFER);
-
-                }, ANIMATION_START_DELAY);
-            } else {
-                setAnimationReady(false);
-                // Si la modale se ferme, on s'assure d'arrêter l'enregistrement s'il est en cours
-                // RecordScreen.stopRecording().catch(() => {}); 
-            }
+    const animatedStyle = useAnimatedStyle(() => {
+        return {
+            transform: [{ scale: scale.value }],
         };
+    });
 
-        startRecordingSequence();
-
-        return () => {
-            clearTimeout(startTimer);
-            clearTimeout(stopTimer);
-            // Sécurité : arrêter l'enregistrement si on ferme la modale prématurément ou quitte le composant
-            RecordScreen.stopRecording().catch(() => {});
-        };
-    }, [visible, drawing]);
-
-    // Calculs de géométrie pour alignement parfait
-    const geometry = useMemo(() => {
-        const imgWidth = screenWidth;
-        const imgHeight = screenWidth * (4/3);
-        // Centrage vertical exact
-        const topPosition = (screenHeight - imgHeight) / 2;
-        
-        return { imgWidth, imgHeight, topPosition };
-    }, [screenWidth, screenHeight]);
-
-    // Optimisation de l'image
-    const optimizedModalImageUri = useMemo(() => {
-        if (!drawing?.cloud_image_url) return null;
-        const w = Math.round(geometry.imgWidth * PixelRatio.get());
-        const h = Math.round(geometry.imgHeight * PixelRatio.get());
-        return getOptimizedImageUrl(drawing.cloud_image_url, w, h);
-    }, [drawing, geometry]);
-
-    const author = drawing?.users;
-
-    if (!drawing) return null;
+    const handlePress = () => {
+        scale.value = withSequence(
+            withSpring(1.6, { damping: 10, stiffness: 200 }),
+            withSpring(1, { damping: 10, stiffness: 200 })
+        );
+        onPress();
+    };
 
     return (
-        <Modal
-            visible={visible}
-            animationType="fade"
-            transparent={false}
-            onRequestClose={onClose}
-            statusBarTranslucent={true}
-        >
-            <StatusBar hidden={true} />
-            
-            <View style={styles.modalContainer}>
-                
-                {/* 1. BACKGROUND MIROIR (Positionné via `top`) */}
-                <MirroredBackground 
-                    uri={optimizedModalImageUri || drawing.cloud_image_url}
-                    width={geometry.imgWidth}
-                    height={geometry.imgHeight}
-                    top={geometry.topPosition} 
+        <Pressable onPress={handlePress} style={styles.reactionBtn}>
+            <Animated.View style={animatedStyle}>
+                <Icon
+                    color={isActive ? color : "#FFF"}
+                    fill={isActive ? color : "transparent"}
+                    size={24}
                 />
-
-                {/* 2. DESSIN/PHOTO (Positionné absolument au même endroit que le background pour alignement) */}
-                <View style={[styles.drawingLayer, { 
-                    top: geometry.topPosition, 
-                    width: geometry.imgWidth, 
-                    height: geometry.imgHeight 
-                }]}>
-                    {animationReady ? (
-                        <DrawingViewer
-                            imageUri={optimizedModalImageUri || drawing.cloud_image_url} 
-                            canvasData={drawing.canvas_data}
-                            viewerSize={geometry.imgWidth} 
-                            viewerHeight={geometry.imgHeight} 
-                            transparentMode={true} 
-                            startVisible={false} 
-                            animated={true}
-                            autoCenter={false} 
-                        />
-                    ) : (
-                        // Placeholder transparent pendant le délai
-                        <View style={{ width: '100%', height: '100%' }} /> 
-                    )}
-                </View>
-
-                {/* 3. HEADER "nyola" STYLE SUNBIMHEADER */}
-                {/* Positionné dynamiquement au-dessus de l'image mais descendu encore plus bas (100px au lieu de 80px) */}
-                <View style={[styles.headerBar, { top: geometry.topPosition - 100 }]}>
-                    <View style={styles.titleContainer}>
-                        <Text style={styles.headerText}>nyola</Text>
-                        <Text style={styles.headerSubtitle}>And you, what do you see ?</Text>
-                    </View>
-                </View>
-
-                {/* 4. INFOS (Sous la photo) */}
-                {/* Remonté un peu plus haut pour être plus proche de l'image */}
-                <View style={[styles.infoContainer, { top: geometry.topPosition + geometry.imgHeight - 30 }]}>
-                    <Text style={styles.drawingTitle} numberOfLines={1}>
-                        {drawing.label || "Sans titre"}
-                    </Text>
-                    <Text style={styles.authorName}>
-                        by {author?.display_name || "Anonyme"}
-                    </Text>
-                </View>
-
-            </View>
-        </Modal>
+            </Animated.View>
+        </Pressable>
     );
 };
 
-const styles = StyleSheet.create({
-  modalContainer: { 
-      flex: 1, 
-      backgroundColor: '#000',
-  },
-  drawingLayer: {
-      position: 'absolute',
-      left: 0,
-      // Top, Width, Height sont définis dynamiquement
-  },
-  // --- NOUVEAUX STYLES HEADER INSPIRÉS DE SUNBIMHEADER ---
-  headerBar: {
-    width: '100%',
-    backgroundColor: 'transparent', 
-    // Suppression du paddingTop fixe pour le positionnement dynamique
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    flexDirection: 'row',
-    justifyContent: 'center', 
-    alignItems: 'center',
-    position: 'absolute', // Flottant
-    // top est défini dynamiquement
-    left: 0,
-    right: 0,
-    zIndex: 20,
-  },
-  titleContainer: {
-      alignItems: 'center',
-  },
-  headerText: {
-    fontSize: 32,
-    fontWeight: '900',
-    color: '#ffffffff', 
-    textShadowColor: 'rgba(0,0,0,0.5)',
-    textShadowOffset: { width: 2, height: 2 }, 
-    textShadowRadius: 0,
-    lineHeight: 34,
-  },
-  headerSubtitle: {
-      fontSize: 14, 
-      fontWeight: '600',
-      color: 'rgba(255,255,255,0.7)', 
-      marginTop: 2,
-      fontStyle: 'italic',
-      textShadowColor: 'rgba(0,0,0,0.5)',
-      textShadowOffset: { width: 1, height: 1 },
-      textShadowRadius: 2,
-  },
+export const DrawingDetailModal: React.FC<DrawingDetailModalProps> = ({ visible, onClose, drawing, userProfile, isUnlocked = true }) => {
+  const { user: currentUser } = useAuth();
   
-  infoContainer: {
-      position: 'absolute',
+  const [isHolding, setIsHolding] = useState(false);
+  const [animationReady, setAnimationReady] = useState(false);
+  const [isShareModalVisible, setShareModalVisible] = useState(false);
+  
+  const [userReaction, setUserReaction] = useState<ReactionType>(null);
+  const [reactionCounts, setReactionCounts] = useState({
+      like: 0,
+      smart: 0,
+      beautiful: 0,
+      crazy: 0
+  });
+
+  const { width: screenWidth } = Dimensions.get('window');
+
+  // Si userProfile n'est pas passé, on essaie de le prendre depuis drawing.users (cas standard)
+  const author = userProfile || drawing?.users;
+
+  useEffect(() => {
+    if (visible && drawing) {
+        fetchReactionsState();
+        setAnimationReady(false);
+        const timer = setTimeout(() => {
+            setAnimationReady(true);
+        }, 500); 
+        return () => clearTimeout(timer);
+    } else {
+        setAnimationReady(false);
+        setUserReaction(null);
+        setReactionCounts({ like: 0, smart: 0, beautiful: 0, crazy: 0 });
+    }
+  }, [visible, drawing]);
+
+  const optimizedModalImageUri = useMemo(() => {
+    if (!drawing?.cloud_image_url) return null;
+    const w = Math.round(screenWidth * PixelRatio.get());
+    const h = Math.round(w * (4/3));
+    return getOptimizedImageUrl(drawing.cloud_image_url, w, h);
+  }, [drawing, screenWidth]);
+
+  const fetchReactionsState = async () => {
+        if (!drawing) return;
+        try {
+            const { data: allReactions, error } = await supabase
+                .from('reactions')
+                .select('reaction_type, user_id')
+                .eq('drawing_id', drawing.id);
+
+            if (error) throw error;
+
+            const counts = { like: 0, smart: 0, beautiful: 0, crazy: 0 };
+            let myReaction: ReactionType = null;
+
+            allReactions?.forEach((r: any) => {
+                if (counts.hasOwnProperty(r.reaction_type)) {
+                    counts[r.reaction_type as keyof typeof counts]++;
+                }
+                if (currentUser && r.user_id === currentUser.id) {
+                    myReaction = r.reaction_type as ReactionType;
+                }
+            });
+
+            setReactionCounts(counts);
+            setUserReaction(myReaction);
+
+        } catch (e) {
+            console.error("Erreur chargement réactions:", e);
+        }
+  };
+
+  const handleReaction = async (type: ReactionType) => {
+        if (!currentUser || !type || !drawing) return;
+
+        const previousReaction = userReaction;
+        const previousCounts = { ...reactionCounts };
+
+        // Optimistic UI update
+        if (userReaction === type) {
+            setUserReaction(null);
+            setReactionCounts(prev => ({
+                ...prev,
+                [type]: Math.max(0, prev[type] - 1)
+            }));
+            
+            try {
+                await supabase.from('reactions').delete().eq('user_id', currentUser.id).eq('drawing_id', drawing.id);
+            } catch (e) {
+                setUserReaction(previousReaction);
+                setReactionCounts(previousCounts);
+            }
+        } 
+        else {
+            setUserReaction(type);
+            setReactionCounts(prev => {
+                const newCounts = { ...prev };
+                if (previousReaction) {
+                    newCounts[previousReaction] = Math.max(0, newCounts[previousReaction] - 1);
+                }
+                newCounts[type]++;
+                return newCounts;
+            });
+
+            try {
+                const { error } = await supabase
+                    .from('reactions')
+                    .upsert({
+                        user_id: currentUser.id,
+                        drawing_id: drawing.id,
+                        reaction_type: type
+                    }, { onConflict: 'user_id, drawing_id' });
+                
+                if (error) throw error;
+            } catch (e) {
+                console.error(e);
+                setUserReaction(previousReaction);
+                setReactionCounts(previousCounts);
+            }
+        }
+  };
+
+  const handleReport = () => {
+    if (!drawing) return;
+    Alert.alert(
+        "Options",
+        "Que souhaitez-vous faire ?",
+        [
+            { text: "Annuler", style: "cancel" },
+            { 
+                text: "Signaler le contenu", 
+                onPress: async () => {
+                    if (!currentUser) return Alert.alert("Erreur", "Vous devez être connecté pour signaler.");
+                    try {
+                        const { error } = await supabase
+                            .from('reports')
+                            .insert({ reporter_id: currentUser.id, drawing_id: drawing.id, reason: 'Contenu inapproprié' });
+                        
+                        if (error) throw error;
+                        Alert.alert("Signalement envoyé", "Nous allons examiner cette image. Merci de votre vigilance.");
+                    } catch (e) {
+                        console.error(e);
+                        Alert.alert("Erreur", "Impossible d'envoyer le signalement.");
+                    }
+                }
+            }
+        ]
+    );
+  };
+
+  const openShareModal = () => {
+      setShareModalVisible(true);
+  };
+
+  if (!drawing) return null;
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+        <View style={styles.modalContainer}>
+            
+            {/* FOND MIROIR GLOBAL */}
+            <MirroredBackground 
+                uri={optimizedModalImageUri || drawing.cloud_image_url}
+                width={screenWidth}
+                height={screenWidth * (4/3)}
+                top={60} 
+            />
+
+            <ScrollView 
+                contentContainerStyle={{ flexGrow: 1, alignItems: 'center' }}
+                showsVerticalScrollIndicator={false}
+            >
+                {/* Header avec bouton fermer - Hauteur fixe 60 pour alignement */}
+                <View style={[styles.header, { height: 60, paddingVertical: 0, paddingTop: 10, paddingHorizontal: 15, backgroundColor: 'transparent', width: '100%', justifyContent: 'center' }]}> 
+                    <TouchableOpacity onPress={onClose} style={styles.closeBtnTransparent} hitSlop={15}>
+                        <X color="#FFF" size={28} />
+                    </TouchableOpacity>
+                </View>
+
+                {/* Zone Image + Dessin */}
+                <View style={{ width: screenWidth, alignItems: 'center' }}> 
+                    <Pressable 
+                        onPressIn={() => {
+                            if (isUnlocked) setIsHolding(true);
+                        }} 
+                        onPressOut={() => setIsHolding(false)}
+                        style={{ width: screenWidth, aspectRatio: 3/4, backgroundColor: 'transparent', marginTop: 0 }}
+                    >
+                        <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
+                            {animationReady ? (
+                                <DrawingViewer
+                                    imageUri={optimizedModalImageUri || drawing.cloud_image_url} 
+                                    canvasData={isUnlocked ? drawing.canvas_data : []}
+                                    viewerSize={screenWidth} 
+                                    viewerHeight={screenWidth * (4/3)} 
+                                    transparentMode={true} 
+                                    startVisible={false} 
+                                    animated={true}
+                                    autoCenter={false} 
+                                />
+                            ) : (
+                                <View style={{ width: '100%', height: '100%' }} /> 
+                            )}
+                        </View>
+                        {isUnlocked && <Text style={styles.hintText}>Maintenir pour voir l'original</Text>}
+                    </Pressable>
+                </View>
+
+                {/* Infos Dessin & Auteur */}
+                <View style={styles.infoCard}>
+                    <View style={styles.infoContent}>
+                        <View style={styles.titleRow}>
+                            {/* BOUTON PARTAGE */}
+                            <TouchableOpacity onPress={openShareModal} style={styles.iconBtnLeft} hitSlop={15}>
+                                <Share2 color="#CCC" size={24} />
+                            </TouchableOpacity>
+
+                            <Text style={styles.drawingTitle} numberOfLines={1}>
+                                {drawing.label || "Sans titre"}
+                            </Text>
+                            
+                            <TouchableOpacity onPress={handleReport} style={styles.iconBtnRight} hitSlop={15}>
+                                <MoreHorizontal color="#CCC" size={24} />
+                            </TouchableOpacity>
+                        </View>
+                        
+                        <Text style={styles.userName}>{author?.display_name || "Anonyme"}</Text>
+
+                        {/* Barre de réactions */}
+                        <View style={styles.reactionBar}>
+                            <AnimatedReactionBtn
+                                icon={Heart}
+                                color="#FF3B30"
+                                isActive={userReaction === 'like'}
+                                count={reactionCounts.like}
+                                onPress={() => handleReaction('like')}
+                            />
+                            <AnimatedReactionBtn
+                                icon={Lightbulb}
+                                color="#FFCC00"
+                                isActive={userReaction === 'smart'}
+                                count={reactionCounts.smart}
+                                onPress={() => handleReaction('smart')}
+                            />
+                            <AnimatedReactionBtn
+                                icon={Palette}
+                                color="#5856D6"
+                                isActive={userReaction === 'beautiful'}
+                                count={reactionCounts.beautiful}
+                                onPress={() => handleReaction('beautiful')}
+                            />
+                            <AnimatedReactionBtn
+                                icon={Zap}
+                                color="#FF2D55"
+                                isActive={userReaction === 'crazy'}
+                                count={reactionCounts.crazy}
+                                onPress={() => handleReaction('crazy')}
+                            />
+                        </View>
+                    </View>
+                </View>
+            </ScrollView>
+
+            {/* MODALE DE PARTAGE */}
+            <ShareModal 
+                visible={isShareModalVisible}
+                onClose={() => setShareModalVisible(false)}
+                drawing={drawing}
+                author={author} // Passage explicite de l'auteur pour éviter "Anonyme"
+            />
+        </View>
+    </Modal>
+  );
+};
+
+const styles = StyleSheet.create({
+  modalContainer: { flex: 1, backgroundColor: '#FFF' },
+  header: { alignItems: 'flex-end', borderBottomWidth: 0, borderColor: '#eee' }, 
+  closeBtnTransparent: { padding: 5, backgroundColor: 'transparent' },
+  
+  hintText: { position: 'absolute', bottom: 10, alignSelf: 'center', color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width:1, height:1}, textShadowRadius: 1 },
+
+  infoCard: {
       width: '100%',
-      alignItems: 'center',
-      paddingHorizontal: 20,
+      padding: 20, 
+      backgroundColor: 'transparent',
+      borderTopWidth: 0,
+      marginTop: 10 
+  },
+  infoContent: {
+      alignItems: 'center'
+  },
+  titleRow: { 
+      width: '100%',
+      flexDirection: 'row', 
+      justifyContent: 'center', 
+      alignItems: 'center', 
+      marginBottom: 2,
+      position: 'relative'
   },
   drawingTitle: { 
       fontSize: 26, 
       fontWeight: '900', 
-      color: '#FFF', 
+      color: '#FFF',
       letterSpacing: -0.5, 
       textAlign: 'center',
-      marginBottom: 5,
-      textShadowColor: 'rgba(0,0,0,0.5)',
-      textShadowOffset: { width: 0, height: 1 },
-      textShadowRadius: 2,
+      maxWidth: '70%' 
   },
-  authorName: { 
-      fontSize: 16, 
-      fontWeight: '600', 
-      color: 'rgba(255,255,255,0.8)', 
-      textShadowColor: 'rgba(0,0,0,0.5)',
-      textShadowOffset: { width: 0, height: 1 },
-      textShadowRadius: 2,
-  }
+  iconBtnLeft: {
+      position: 'absolute',
+      left: 0,
+      top: 5,
+      padding: 5
+  },
+  iconBtnRight: { 
+      position: 'absolute',
+      right: 0,
+      top: 5,
+      padding: 5 
+  },
+  moreBtnAbsolute: { 
+      position: 'absolute',
+      right: 0,
+      top: 5,
+      padding: 5 
+  },
+  userName: { 
+      fontSize: 13, 
+      fontWeight: '500', 
+      color: 'rgba(255,255,255,0.8)',
+      marginBottom: 10
+  },
+  reactionBar: { 
+      flexDirection: 'row', 
+      justifyContent: 'space-around', 
+      alignItems: 'center', 
+      width: '100%',
+      paddingHorizontal: 10
+  },
+  reactionBtn: { 
+      alignItems: 'center', 
+      justifyContent: 'center',
+      padding: 8
+  },
 });
