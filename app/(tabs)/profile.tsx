@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ActivityIndicator, Alert, Image, FlatList, Dimensions, Modal, Pressable, KeyboardAvoidingView, Platform, SafeAreaView, PixelRatio } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ActivityIndicator, Alert, Image, FlatList, Dimensions, Modal, Pressable, KeyboardAvoidingView, Platform, SafeAreaView, PixelRatio, ScrollView } from 'react-native';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'expo-router';
 import { supabase } from '../../src/lib/supabaseClient';
@@ -439,81 +439,90 @@ export default function ProfilePage() {
                       top={60} 
                   />
 
-                  <View style={styles.modalHeader}>
-                      <TouchableOpacity onPress={closeDrawing} style={styles.closeBtnTransparent} hitSlop={15}>
-                          <X color="#FFF" size={28} />
-                      </TouchableOpacity>
-                  </View>
-                  
-                  <Pressable 
-                    onPressIn={() => setIsHolding(true)} 
-                    onPressOut={() => setIsHolding(false)}
-                    style={{ width: screenWidth, aspectRatio: 3/4, backgroundColor: 'transparent', marginTop: 0 }}
+                  {/* ✅ AJOUT SCROLLVIEW POUR PETITS ÉCRANS */}
+                  <ScrollView 
+                      contentContainerStyle={{ flexGrow: 1, alignItems: 'center' }}
+                      showsVerticalScrollIndicator={false}
                   >
-                      {/* Image de fond gérée par DrawingViewer ou MirroredBackground, ici DrawingViewer */}
-                      
-                      <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
-                        <DrawingViewer 
-                            imageUri={optimizedModalImageUri || selectedDrawing.cloud_image_url}
-                            canvasData={selectedDrawing.canvas_data}
-                            viewerSize={screenWidth}
-                            viewerHeight={screenWidth * (4/3)} 
-                            transparentMode={true}
-                            animated={true}
-                            startVisible={false}
-                            autoCenter={false} 
-                        />
+                      <View style={[styles.header, { paddingVertical: 0, paddingTop: 10, paddingHorizontal: 15, backgroundColor: 'transparent', width: '100%' }]}>
+                          <TouchableOpacity onPress={closeDrawing} style={styles.closeBtnTransparent} hitSlop={15}>
+                              <X color="#FFF" size={28} />
+                          </TouchableOpacity>
                       </View>
-                  </Pressable>
+                      
+                      <View style={{ width: screenWidth, alignItems: 'center' }}>
+                          <Pressable 
+                            onPressIn={() => setIsHolding(true)} 
+                            onPressOut={() => setIsHolding(false)}
+                            style={{ width: screenWidth, aspectRatio: 3/4, backgroundColor: 'transparent', marginTop: 0 }}
+                          >
+                              {/* Image de fond gérée par DrawingViewer ou MirroredBackground, ici DrawingViewer */}
+                              
+                              <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
+                                <DrawingViewer 
+                                    imageUri={optimizedModalImageUri || selectedDrawing.cloud_image_url}
+                                    canvasData={selectedDrawing.canvas_data}
+                                    viewerSize={screenWidth}
+                                    viewerHeight={screenWidth * (4/3)} 
+                                    transparentMode={true}
+                                    animated={true}
+                                    startVisible={false}
+                                    autoCenter={false} 
+                                />
+                              </View>
+                              <Text style={styles.hintText}>Maintenir pour voir l'original</Text>
+                          </Pressable>
+                      </View>
 
-                  {/* INFO CARD TRANSPARENT AVEC TEXTE BLANC */}
-                  <View style={styles.infoCard}>
-                    <View style={styles.infoContent}>
-                        <View style={styles.titleRow}>
-                            <Text style={styles.drawingTitle} numberOfLines={1}>
-                                {selectedDrawing.label || "Sans titre"}
-                            </Text>
+                      {/* INFO CARD TRANSPARENT AVEC TEXTE BLANC */}
+                      <View style={styles.infoCard}>
+                        <View style={styles.infoContent}>
+                            <View style={styles.titleRow}>
+                                <Text style={styles.drawingTitle} numberOfLines={1}>
+                                    {selectedDrawing.label || "Sans titre"}
+                                </Text>
+                                
+                                <TouchableOpacity onPress={handleReport} style={styles.moreBtnAbsolute} hitSlop={15}>
+                                    <MoreHorizontal color="#CCC" size={24} />
+                                </TouchableOpacity>
+                            </View>
                             
-                            <TouchableOpacity onPress={handleReport} style={styles.moreBtnAbsolute} hitSlop={15}>
-                                <MoreHorizontal color="#CCC" size={24} />
-                            </TouchableOpacity>
-                        </View>
-                        
-                        <Text style={styles.userName}>{profile?.display_name || "Anonyme"}</Text>
+                            <Text style={styles.userName}>{profile?.display_name || "Anonyme"}</Text>
 
-                        {/* ✅ BARRE DE RÉACTIONS ANIMÉE */}
-                        <View style={styles.reactionBar}>
-                            <AnimatedReactionBtn
-                                icon={Heart}
-                                color="#FF3B30"
-                                isActive={userReaction === 'like'}
-                                count={reactionCounts.like}
-                                onPress={() => handleReaction('like')}
-                            />
-                            <AnimatedReactionBtn
-                                icon={Lightbulb}
-                                color="#FFCC00"
-                                isActive={userReaction === 'smart'}
-                                count={reactionCounts.smart}
-                                onPress={() => handleReaction('smart')}
-                            />
-                            <AnimatedReactionBtn
-                                icon={Palette}
-                                color="#5856D6"
-                                isActive={userReaction === 'beautiful'}
-                                count={reactionCounts.beautiful}
-                                onPress={() => handleReaction('beautiful')}
-                            />
-                            <AnimatedReactionBtn
-                                icon={Zap}
-                                color="#FF2D55"
-                                isActive={userReaction === 'crazy'}
-                                count={reactionCounts.crazy}
-                                onPress={() => handleReaction('crazy')}
-                            />
+                            {/* ✅ BARRE DE RÉACTIONS ANIMÉE */}
+                            <View style={styles.reactionBar}>
+                                <AnimatedReactionBtn
+                                    icon={Heart}
+                                    color="#FF3B30"
+                                    isActive={userReaction === 'like'}
+                                    count={reactionCounts.like}
+                                    onPress={() => handleReaction('like')}
+                                />
+                                <AnimatedReactionBtn
+                                    icon={Lightbulb}
+                                    color="#FFCC00"
+                                    isActive={userReaction === 'smart'}
+                                    count={reactionCounts.smart}
+                                    onPress={() => handleReaction('smart')}
+                                />
+                                <AnimatedReactionBtn
+                                    icon={Palette}
+                                    color="#5856D6"
+                                    isActive={userReaction === 'beautiful'}
+                                    count={reactionCounts.beautiful}
+                                    onPress={() => handleReaction('beautiful')}
+                                />
+                                <AnimatedReactionBtn
+                                    icon={Zap}
+                                    color="#FF2D55"
+                                    isActive={userReaction === 'crazy'}
+                                    count={reactionCounts.crazy}
+                                    onPress={() => handleReaction('crazy')}
+                                />
+                            </View>
                         </View>
-                    </View>
-                  </View>
+                      </View>
+                  </ScrollView>
 
               </View>
           )}
