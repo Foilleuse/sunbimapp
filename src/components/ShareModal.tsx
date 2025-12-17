@@ -224,7 +224,8 @@ export const ShareModal: React.FC<ShareModalProps> = ({ visible, onClose, drawin
                 </View>
 
                 {/* 3. HEADER "nyola" STYLE SUNBIMHEADER */}
-                <View style={styles.headerBar}>
+                {/* Positionné dynamiquement au-dessus de l'image */}
+                <View style={[styles.headerBar, { top: geometry.topPosition - 90 }]}>
                     <View style={styles.titleContainer}>
                         <Text style={styles.headerText}>nyola</Text>
                         <Text style={styles.headerSubtitle}>And you, what do you see ?</Text>
@@ -232,7 +233,8 @@ export const ShareModal: React.FC<ShareModalProps> = ({ visible, onClose, drawin
                 </View>
 
                 {/* 4. INFOS (Sous la photo) */}
-                <View style={[styles.infoContainer, { top: geometry.topPosition + geometry.imgHeight - 10 }]}>
+                {/* Remonté un peu plus haut pour être plus proche de l'image */}
+                <View style={[styles.infoContainer, { top: geometry.topPosition + geometry.imgHeight - 30 }]}>
                     <Text style={styles.drawingTitle} numberOfLines={1}>
                         {drawing.label || "Sans titre"}
                     </Text>
@@ -260,14 +262,14 @@ const styles = StyleSheet.create({
   headerBar: {
     width: '100%',
     backgroundColor: 'transparent', 
-    paddingTop: 80, // Descendu un peu plus bas
-    paddingBottom: 15,
+    // Suppression du paddingTop fixe pour le positionnement dynamique
+    paddingVertical: 10,
     paddingHorizontal: 20,
     flexDirection: 'row',
     justifyContent: 'center', 
     alignItems: 'center',
     position: 'absolute', // Flottant
-    top: 0,
+    // top est défini dynamiquement
     left: 0,
     right: 0,
     zIndex: 20,
