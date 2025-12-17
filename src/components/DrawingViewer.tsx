@@ -41,13 +41,13 @@ function getSvgPathFromStroke(stroke: number[][]): string {
 }
 
 // Composant interne pour gérer l'animation d'un chemin individuel
-const AnimatedPath = ({ pathData, index, progress, totalCount }: { pathData: DrawingPath, index: number, progress: Animated.SharedValue<number>, totalCount: number }) => {
-    // CORRECTION CRASH : Initialisation sécurisée
+const AnimatedPath = ({ pathData, index, progress, totalCount, startVisible }: { pathData: DrawingPath, index: number, progress: Animated.SharedValue<number>, totalCount: number, startVisible: boolean }) => {
+    
+    // CORRECTION VISIBILITÉ : Si on doit animer, on commence vide.
     const [currentPath, setCurrentPath] = useState<SkPath | null>(() => {
-        // Si filled (nouveau), on attend l'animation sauf si points manquants
-        if (pathData.isFilled && pathData.points) return null;
+        if (!startVisible) return null; // Si animation prévue, on commence invisible
         
-        // Fallback immédiat ou ancien format
+        // Sinon (startVisible=true), on affiche tout de suite
         try {
             if (pathData.svgPath && pathData.svgPath.length > 0) {
                 return Skia.Path.MakeFromSVGString(pathData.svgPath);
@@ -67,8 +67,9 @@ const AnimatedPath = ({ pathData, index, progress, totalCount }: { pathData: Dra
         const start = index / totalCount;
         const end = (index + 1) / totalCount;
 
-        if (currentProgress < start) {
-            setCurrentPath(null);
+        if (currentProgress <= start) {
+            // Pas encore commencé -> null
+            if (currentPath !== null) setCurrentPath(null);
         } else if (currentProgress >= end) {
             // Animation terminée pour ce trait -> on met le path final
             try {
@@ -115,20 +116,27 @@ const AnimatedPath = ({ pathData, index, progress, totalCount }: { pathData: Dra
     useAnimatedReaction(
         () => progress.value,
         (val) => {
-            // On délègue tout le calcul lourd au thread JS
-            runOnJS(updatePathOnJS)(val);
+            // Si startVisible est true, pas besoin de calculer l'animation
+            if (!startVisible) {
+                runOnJS(updatePathOnJS)(val);
+            }
         },
-        [progress, pathData]
+        [progress, pathData, startVisible]
     );
 
     const opacity = useDerivedValue(() => {
+        if (startVisible) return 1;
+        
+        // Pour les paths "filled" (nouveaux), la visibilité est gérée par currentPath (null ou pas)
         if (isFilled && pathData.points) return 1; 
+        
+        // Pour les anciens paths (stroke), on utilise l'opacité car on ne recalcule pas la géométrie
         const threshold = index / totalCount;
         return progress.value > threshold ? 1 : 0;
     });
 
     const displayPath = currentPath || 
-        (!isFilled && pathData.svgPath ? (() => {
+        (startVisible && !isFilled && pathData.svgPath ? (() => {
             try { return Skia.Path.MakeFromSVGString(pathData.svgPath); } catch(e) { return null; }
         })() : null);
 
@@ -167,10 +175,15 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
     
     const image = useImage(imageUri);
 
-    const progress = useSharedValue(startVisible ? 1 : 0);
+    // Initialisation conditionnelle
+    // Si animated=true et startVisible=false -> on commence à 0
+    // Sinon -> on commence à 1
+    const initialProgress = (animated && !startVisible) ? 0 : 1;
+    const progress = useSharedValue(initialProgress);
     
     useEffect(() => {
         if (animated && !startVisible) {
+            // Reset impératif pour être sûr
             progress.value = 0;
             progress.value = withTiming(1, {
                 duration: 3500, 
@@ -186,22 +199,12 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
         return canvasData.filter(p => p && (p.svgPath || (p.points && p.points.length > 0)));
     }, [canvasData]);
 
-    // 🔥 CORRECTION SCALE : Gestion de la mise à l'échelle pour la galerie
     const scaleTransform = useMemo(() => {
-        // Mode 1: Auto-Center (Fit bounds) -> Utilisé pour centrer un dessin isolé
         if (autoCenter && validPaths.length > 0) {
-            // ... (logique de centrage si besoin, mais pas utilisée dans la galerie pour l'instant)
-            // Pour l'instant on garde le fallback standard si autoCenter n'est pas utilisé
             return { translateX: 0, translateY: 0, scale: 1 }; 
         }
-
-        // Mode 2: Cadrage original (Galerie)
-        // On doit adapter le dessin (coordonnées écran) à la taille du viewer (vignette)
-        // Ratio = largeur_viewer / largeur_ecran_originale
         const scale = targetWidth / screenWidth;
-        
         return { translateX: 0, translateY: 0, scale }; 
-
     }, [validPaths, autoCenter, targetWidth, screenWidth]);
 
     
@@ -219,11 +222,6 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
                     />
                 )}
 
-                {/* 🔥 CORRECTION GOMME : 
-                   On isole les traits dans un Group avec layer={true}.
-                   Ainsi, le blendMode="clear" de la gomme n'effacera que les traits à l'intérieur de ce calque,
-                   et ne "percera" pas jusqu'à l'image de fond qui est dessinée en dessous (hors du groupe).
-                */}
                 <Group 
                     layer={true}
                     transform={[
@@ -239,6 +237,7 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
                             index={index}
                             totalCount={validPaths.length}
                             progress={progress}
+                            startVisible={startVisible} // On passe la prop
                         />
                     ))}
                 </Group>
