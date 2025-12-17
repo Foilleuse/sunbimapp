@@ -135,6 +135,9 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
       crazy: 0
   });
 
+  // Ajout d'un état pour retarder l'animation
+  const [animationReady, setAnimationReady] = useState(false);
+
   const { width: screenWidth } = Dimensions.get('window');
   const SPACING = 1; 
   const NUM_COLS = 2;
@@ -178,6 +181,12 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
   useEffect(() => {
     if (selectedDrawing) {
         fetchReactionsState();
+        // Délai pour l'animation
+        setAnimationReady(false);
+        const timer = setTimeout(() => setAnimationReady(true), 300);
+        return () => clearTimeout(timer);
+    } else {
+        setAnimationReady(false);
     }
   }, [selectedDrawing]);
 
@@ -563,20 +572,41 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                                         if (isSelectedUnlocked) setIsHolding(true);
                                     }} 
                                     onPressOut={() => setIsHolding(false)}
-                                    style={{ width: screenWidth, aspectRatio: 3/4, backgroundColor: 'transparent' }}
+                                    style={{ width: screenWidth, aspectRatio: 3/4, backgroundColor: 'transparent', marginTop: 0 }}
                                 >
-                                    {/* L'image est gérée par DrawingViewer ou MirroredBackground */}
+                                    {/* ✅ CORRECTION ALIGNEMENT : 
+                                        On retire l'Image React Native redondante.
+                                        Le DrawingViewer affiche déjà l'image de fond (nuage) ET le dessin
+                                        avec les mêmes coordonnées Skia, garantissant un alignement parfait.
+                                    */}
+                                    
                                     <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
-                                        <DrawingViewer
-                                            imageUri={selectedDrawingImageOptimized || selectedDrawing.cloud_image_url} 
-                                            canvasData={isSelectedUnlocked ? selectedDrawing.canvas_data : []}
-                                            viewerSize={screenWidth} 
-                                            viewerHeight={screenWidth * (4/3)} 
-                                            transparentMode={true} 
-                                            startVisible={false} 
-                                            animated={true}
-                                            autoCenter={false} 
-                                        />
+                                        {/* Animation retardée pour éviter les saccades */}
+                                        {animationReady && (
+                                            <DrawingViewer
+                                                imageUri={selectedDrawingImageOptimized || selectedDrawing.cloud_image_url} 
+                                                canvasData={isSelectedUnlocked ? selectedDrawing.canvas_data : []}
+                                                viewerSize={screenWidth} 
+                                                viewerHeight={screenWidth * (4/3)} 
+                                                transparentMode={false} // On remet en false pour qu'il affiche le nuage lui-même
+                                                startVisible={false} 
+                                                animated={true}
+                                                autoCenter={false} 
+                                            />
+                                        )}
+                                        {/* Preview statique immédiate */}
+                                        {!animationReady && (
+                                            <DrawingViewer
+                                                imageUri={selectedDrawingImageOptimized || selectedDrawing.cloud_image_url} 
+                                                canvasData={isSelectedUnlocked ? selectedDrawing.canvas_data : []}
+                                                viewerSize={screenWidth} 
+                                                viewerHeight={screenWidth * (4/3)} 
+                                                transparentMode={false}
+                                                startVisible={true} 
+                                                animated={false}
+                                                autoCenter={false} 
+                                            />
+                                        )}
                                     </View>
                                     {isSelectedUnlocked && <Text style={styles.hintText}>Maintenir pour voir l'original</Text>}
                                 </Pressable>
