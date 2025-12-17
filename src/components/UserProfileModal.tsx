@@ -599,75 +599,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                                     style={{ width: screenWidth, aspectRatio: 3/4, backgroundColor: 'transparent', marginTop: 0 }}
                                 >
                                     {/* DrawingViewer gère UNIQUEMENT le dessin par-dessus (transparentMode=true).
-                                        L'image de fond (flou + net) est gérée par MirroredBackground en absolute derrière le ScrollView.
-                                        
-                                        ATTENTION : Dans Gallery.tsx, le MirroredBackground EST en absolute derrière.
-                                        Donc l'image nette ne scrolle PAS avec le dessin si le ScrollView bouge.
-                                        Si on veut que l'image nette scrolle AVEC le dessin, il faut l'inclure ici.
-                                        
-                                        MAIS : L'utilisateur a demandé "exactement la même chose que gallery.tsx".
-                                        Dans gallery.tsx, le background est fixe.
-                                        Donc on laisse le background fixe et on scroll le dessin par dessus ?
-                                        Non, gallery.tsx n'a pas de ScrollView sur le dessin, c'est fixe.
-                                        
-                                        ICI, on a ajouté un ScrollView pour les petits écrans.
-                                        Si on scrolle, le dessin monte, mais le fond (MirroredBackground) reste fixe.
-                                        Cela va désaligner le dessin du fond.
-                                        
-                                        POUR CORRIGER CELA et garder l'aspect "Gallery" tout en scrollant :
-                                        On doit afficher l'image nette masquée DANS le ScrollView, SOUS le dessin.
-                                        Et le fond flou reste fixe derrière.
+                                        Le MirroredBackground en fond s'occupe de l'image (nette avec dégradé + floue).
                                     */}
-                                    
-                                    {/* On n'affiche PAS l'image nette ici car MirroredBackground s'en occupe.
-                                        Si on veut scroller, il faut que MirroredBackground ne soit pas utilisé tel quel
-                                        ou que l'image nette soit séparée.
-                                        
-                                        Toutefois, la demande est "exactement comme gallery".
-                                        Dans gallery, ça ne scrolle pas (sauf la liste). La modale est fixe.
-                                        
-                                        Je vais donc suivre STRICTEMENT la demande :
-                                        MirroredBackground (fixe) + DrawingViewer (Transparent).
-                                        Si ça scrolle, ça désaligne. C'est le compromis du "exactement comme gallery".
-                                        
-                                        Pour éviter le désalignement, je vais supprimer le décalage 'top' du MirroredBackground
-                                        et l'intégrer dans le scrollview ? Non, MirroredBackground est complexe.
-                                        
-                                        Je vais réutiliser la solution "MirroredBackgroundBlur (fixe) + MaskedImage (scrollable)"
-                                        que j'avais proposée juste avant, car c'est la seule façon d'avoir le visuel de la galerie ET le scroll.
-                                        
-                                        Mais l'utilisateur a dit "Tu n'as pas repris exactement... les bords flous disparaissent".
-                                        C'est parce que MaskedImage n'avait pas les bons paramètres de masque ou que DrawingViewer cachait tout.
-                                        
-                                        Je vais donc utiliser DrawingViewer en transparentMode=TRUE.
-                                        Et dessous, une image qui imite PARFAITEMENT la partie centrale de MirroredBackground.
-                                    */}
-                                    
-                                    {/* Image Nette Masquée (Doit scroller avec le dessin) */}
-                                    <View style={StyleSheet.absoluteFill}>
-                                        <Canvas style={{ flex: 1 }} pointerEvents="none">
-                                            <Mask
-                                                mode="luminance"
-                                                mask={
-                                                    <Rect x={0} y={0} width={screenWidth} height={screenWidth * (4/3)}>
-                                                        <SkiaGradient
-                                                            start={vec(0, 0)}
-                                                            end={vec(0, screenWidth * (4/3))}
-                                                            colors={["black", "white", "white", "black"]}
-                                                            positions={[0, 0.2, 0.8, 1]} // Mêmes positions que MirroredBackground
-                                                        />
-                                                    </Rect>
-                                                }
-                                            >
-                                                <SkiaImage
-                                                    image={useImage(selectedDrawingImageOptimized || selectedDrawing.cloud_image_url)}
-                                                    x={0} y={0} width={screenWidth} height={screenWidth * (4/3)}
-                                                    fit="cover"
-                                                />
-                                            </Mask>
-                                        </Canvas>
-                                    </View>
-
                                     <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                                         {animationReady && (
                                             <DrawingViewer
@@ -698,6 +631,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                                 </Pressable>
                             </View>
 
+                            {/* INFO CARD TRANSPARENT AVEC TEXTE BLANC */}
                             <View style={styles.infoCard}>
                                 <View style={styles.infoContent}>
                                     <View style={styles.titleRow}>
@@ -712,6 +646,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                                     
                                     <Text style={styles.userName}>{userProfile?.display_name || "Anonyme"}</Text>
 
+                                    {/* BARRE DE RÉACTIONS */}
                                     <View style={styles.reactionBar}>
                                         <AnimatedReactionBtn
                                             icon={Heart}
