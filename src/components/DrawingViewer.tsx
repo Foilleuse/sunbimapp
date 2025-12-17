@@ -43,11 +43,11 @@ function getSvgPathFromStroke(stroke: number[][]): string {
 // Composant interne pour gérer l'animation d'un chemin individuel
 const AnimatedPath = ({ pathData, index, progress, totalCount, startVisible }: { pathData: DrawingPath, index: number, progress: Animated.SharedValue<number>, totalCount: number, startVisible: boolean }) => {
     
-    // CORRECTION VISIBILITÉ : Si on doit animer, on commence vide.
+    // CORRECTION CRITIQUE : Si on doit animer (startVisible=false), on initialise currentPath à null pour être sûr qu'il ne s'affiche pas
     const [currentPath, setCurrentPath] = useState<SkPath | null>(() => {
-        if (!startVisible) return null; // Si animation prévue, on commence invisible
+        if (!startVisible) return null; // Invisible au départ si on anime
         
-        // Sinon (startVisible=true), on affiche tout de suite
+        // Si startVisible=true, on affiche tout de suite le chemin final
         try {
             if (pathData.svgPath && pathData.svgPath.length > 0) {
                 return Skia.Path.MakeFromSVGString(pathData.svgPath);
@@ -67,19 +67,23 @@ const AnimatedPath = ({ pathData, index, progress, totalCount, startVisible }: {
         const start = index / totalCount;
         const end = (index + 1) / totalCount;
 
+        // Si l'animation n'a pas encore atteint ce trait, on le cache
         if (currentProgress <= start) {
-            // Pas encore commencé -> null
             if (currentPath !== null) setCurrentPath(null);
-        } else if (currentProgress >= end) {
-            // Animation terminée pour ce trait -> on met le path final
+        } 
+        // Si l'animation a dépassé ce trait, on affiche le trait final
+        else if (currentProgress >= end) {
             try {
                 if (pathData.svgPath) {
                     const finalPath = Skia.Path.MakeFromSVGString(pathData.svgPath);
+                    // On ne met à jour que si ce n'est pas déjà le final path (pour éviter re-render)
+                    // Note: Skia object comparison is not direct, but setting it again is safe-ish
                     if (finalPath) setCurrentPath(finalPath);
                 }
             } catch (e) { console.warn("Error creating final path", e); }
-        } else {
-            // En cours de tracé
+        } 
+        // Si on est en train de tracer ce trait
+        else {
             const localProgress = (currentProgress - start) / (end - start);
             const pointsCount = Math.floor(pathData.points.length * localProgress);
             
@@ -116,7 +120,7 @@ const AnimatedPath = ({ pathData, index, progress, totalCount, startVisible }: {
     useAnimatedReaction(
         () => progress.value,
         (val) => {
-            // Si startVisible est true, pas besoin de calculer l'animation
+            // On ne lance le calcul que si l'animation est active (startVisible=false)
             if (!startVisible) {
                 runOnJS(updatePathOnJS)(val);
             }
@@ -125,16 +129,22 @@ const AnimatedPath = ({ pathData, index, progress, totalCount, startVisible }: {
     );
 
     const opacity = useDerivedValue(() => {
+        // Si startVisible est true, opacité à 1 tout de suite
         if (startVisible) return 1;
         
-        // Pour les paths "filled" (nouveaux), la visibilité est gérée par currentPath (null ou pas)
+        // Pour les nouveaux paths "filled" (avec points), la visibilité est gérée par currentPath (qui est null au début)
+        // Donc on peut laisser l'opacité à 1, car null ne s'affiche pas.
         if (isFilled && pathData.points) return 1; 
         
-        // Pour les anciens paths (stroke), on utilise l'opacité car on ne recalcule pas la géométrie
+        // Pour les anciens paths "stroke" (sans points), on utilise l'opacité pour les révéler
+        // car on ne peut pas recalculer leur géométrie partielle.
         const threshold = index / totalCount;
         return progress.value > threshold ? 1 : 0;
     });
 
+    // Fallback d'affichage :
+    // 1. currentPath (calculé dynamiquement ou null)
+    // 2. Si startVisible=true et pas de currentPath encore, on essaie de charger le SVG statique
     const displayPath = currentPath || 
         (startVisible && !isFilled && pathData.svgPath ? (() => {
             try { return Skia.Path.MakeFromSVGString(pathData.svgPath); } catch(e) { return null; }
@@ -175,15 +185,12 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
     
     const image = useImage(imageUri);
 
-    // Initialisation conditionnelle
-    // Si animated=true et startVisible=false -> on commence à 0
-    // Sinon -> on commence à 1
-    const initialProgress = (animated && !startVisible) ? 0 : 1;
-    const progress = useSharedValue(initialProgress);
+    // Initialisation : on commence à 0 si on doit animer, sinon 1
+    const progress = useSharedValue(startVisible ? 1 : 0);
     
     useEffect(() => {
         if (animated && !startVisible) {
-            // Reset impératif pour être sûr
+            // On force le reset à 0 avant de lancer l'animation
             progress.value = 0;
             progress.value = withTiming(1, {
                 duration: 3500, 
@@ -201,8 +208,11 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
 
     const scaleTransform = useMemo(() => {
         if (autoCenter && validPaths.length > 0) {
+            // Centrage auto désactivé pour la galerie (car géré par layout externe)
+            // Mais dispo si besoin pour d'autres vues
             return { translateX: 0, translateY: 0, scale: 1 }; 
         }
+        // Mise à l'échelle standard pour adapter le canvas original à la vue cible
         const scale = targetWidth / screenWidth;
         return { translateX: 0, translateY: 0, scale }; 
     }, [validPaths, autoCenter, targetWidth, screenWidth]);
@@ -237,7 +247,7 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
                             index={index}
                             totalCount={validPaths.length}
                             progress={progress}
-                            startVisible={startVisible} // On passe la prop
+                            startVisible={startVisible} 
                         />
                     ))}
                 </Group>
