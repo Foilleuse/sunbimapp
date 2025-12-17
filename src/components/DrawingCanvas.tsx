@@ -214,10 +214,12 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
           // 1. Générer le contour final du trait
           const options = {
             size: strokeWidth / baseScaleRef.current, // Taille ajustée à l'échelle de base
-            thinning: 0.5,
-            smoothing: 0.5,
-            streamline: 0.5,
+            thinning: 0.37,
+            smoothing: 0.47,
+            streamline: 0.81,
             easing: (t: number) => t,
+            start: { taper: 0, cap: true },
+            end: { taper: 0, cap: true },
             simulatePressure: true,
             last: true, // Indique que le trait est fini
           };
@@ -255,10 +257,12 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
     if (currentPoints && currentPoints.length > 0) {
         const options = {
             size: strokeWidth / baseScaleRef.current,
-            thinning: 0.5,
-            smoothing: 0.5,
-            streamline: 0.5,
+            thinning: 0.37,
+            smoothing: 0.47,
+            streamline: 0.81,
             easing: (t: number) => t,
+            start: { taper: 0, cap: true },
+            end: { taper: 0, cap: true },
             simulatePressure: true,
             last: false,
         };
