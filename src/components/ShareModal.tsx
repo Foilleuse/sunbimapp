@@ -1,14 +1,13 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { View, StyleSheet, Modal, Dimensions, PixelRatio, StatusBar, Text, TouchableOpacity, NativeModules } from 'react-native';
+import { View, StyleSheet, Modal, Dimensions, PixelRatio, StatusBar, Text, TouchableOpacity, Alert } from 'react-native';
 import { Canvas, Rect, LinearGradient as SkiaGradient, vec, useImage, Image as SkiaImage, Group, Blur, Mask, Paint } from "@shopify/react-native-skia";
 import { DrawingViewer } from './DrawingViewer';
 import { getOptimizedImageUrl } from '../utils/imageOptimizer';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { X } from 'lucide-react-native';
-
-// Module natif hypothétique pour l'enregistrement (basé sur la présence de configuration ReplayKit)
-// Si une librairie spécifique est utilisée (ex: react-native-record-screen), il faudrait l'importer ici.
-const { ScreenRecorder } = NativeModules; 
+// Import du module d'enregistrement d'écran
+import RecordScreen from 'react-native-record-screen';
+import Share from 'react-native-share'; // Pour partager la vidéo (nécessite react-native-share si dispo, sinon on utilisera l'API Share de RN de base si possible, mais Share de RN ne gère pas toujours bien les fichiers vidéo sur Android sans content:// URI)
+// NOTE : Le package.json mentionne "expo-sharing", donc on utilisera expo-sharing.
+import * as Sharing from 'expo-sharing';
 
 interface ShareModalProps {
     visible: boolean;
@@ -82,10 +81,11 @@ export const ShareModal: React.FC<ShareModalProps> = ({ visible, onClose, drawin
 
         const startRecordingSequence = async () => {
             if (visible && drawing) {
-                // 1. Démarrer l'enregistrement dès l'ouverture (ou avec un très léger délai pour s'assurer que le rendu est prêt)
+                // 1. Démarrer l'enregistrement dès l'ouverture
                 try {
                     // console.log("Début enregistrement...");
-                    // await ScreenRecorder?.startRecording(); 
+                    const res = await RecordScreen.startRecording({ mic: false });
+                    // console.log("Enregistrement démarré", res);
                 } catch (e) {
                     console.warn("Erreur démarrage enregistrement:", e);
                 }
@@ -100,17 +100,37 @@ export const ShareModal: React.FC<ShareModalProps> = ({ visible, onClose, drawin
                     stopTimer = setTimeout(async () => {
                         try {
                             // console.log("Fin enregistrement...");
-                            // const res = await ScreenRecorder?.stopRecording();
+                            const res = await RecordScreen.stopRecording();
                             // console.log("Vidéo enregistrée:", res);
-                            // Ici vous pourriez ouvrir la feuille de partage système avec la vidéo
+                            
+                            if (res?.result?.outputURL) {
+                                const videoUri = res.result.outputURL;
+                                
+                                // Vérifier si le partage est possible
+                                if (await Sharing.isAvailableAsync()) {
+                                    await Sharing.shareAsync(videoUri, {
+                                        mimeType: 'video/mp4',
+                                        dialogTitle: 'Partager mon dessin Sunbim',
+                                        UTI: 'public.movie' // Pour iOS
+                                    });
+                                } else {
+                                    Alert.alert("Erreur", "Le partage n'est pas disponible sur cet appareil");
+                                }
+                            }
+                            
+                            // Fermer la modale après l'action de partage (optionnel)
+                            // onClose(); 
                         } catch (e) {
                             console.warn("Erreur arrêt enregistrement:", e);
+                            Alert.alert("Erreur", "Impossible d'enregistrer la vidéo");
                         }
                     }, DRAWING_ANIMATION_DURATION + RECORDING_END_BUFFER);
 
                 }, ANIMATION_START_DELAY);
             } else {
                 setAnimationReady(false);
+                // Si la modale se ferme, on s'assure d'arrêter l'enregistrement s'il est en cours
+                // RecordScreen.stopRecording().catch(() => {}); 
             }
         };
 
@@ -119,8 +139,8 @@ export const ShareModal: React.FC<ShareModalProps> = ({ visible, onClose, drawin
         return () => {
             clearTimeout(startTimer);
             clearTimeout(stopTimer);
-            // Sécurité : arrêter l'enregistrement si on ferme la modale prématurément
-            // ScreenRecorder?.stopRecording().catch(() => {});
+            // Sécurité : arrêter l'enregistrement si on ferme la modale prématurément ou quitte le composant
+            RecordScreen.stopRecording().catch(() => {});
         };
     }, [visible, drawing]);
 
