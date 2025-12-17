@@ -8,6 +8,7 @@ import RecordScreen from 'react-native-record-screen';
 import Share from 'react-native-share'; // Pour partager la vidéo (nécessite react-native-share si dispo, sinon on utilisera l'API Share de RN de base si possible, mais Share de RN ne gère pas toujours bien les fichiers vidéo sur Android sans content:// URI)
 // NOTE : Le package.json mentionne "expo-sharing", donc on utilisera expo-sharing.
 import * as Sharing from 'expo-sharing';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 interface ShareModalProps {
     visible: boolean;
@@ -84,7 +85,14 @@ export const ShareModal: React.FC<ShareModalProps> = ({ visible, onClose, drawin
                 // 1. Démarrer l'enregistrement dès l'ouverture
                 try {
                     // console.log("Début enregistrement...");
-                    const res = await RecordScreen.startRecording({ mic: false });
+                    // Amélioration de la qualité : bitrate élevé, fps 60
+                    const res = await RecordScreen.startRecording({ 
+                        mic: false,
+                        width: screenWidth,
+                        height: screenHeight,
+                        bitrate: 6000000, // 6 Mbps pour meilleure qualité
+                        fps: 60
+                    });
                     // console.log("Enregistrement démarré", res);
                 } catch (e) {
                     console.warn("Erreur démarrage enregistrement:", e);
