@@ -169,7 +169,9 @@ export const ShareModal: React.FC<ShareModalProps> = ({ visible, onClose, drawin
     }, [drawing, geometry]);
 
     // Utiliser la prop author si disponible, sinon fallback sur drawing.users
+    // Vérification approfondie pour éviter "Anonyme" si les données sont partielles
     const author = propAuthor || drawing?.users;
+    const authorName = author?.display_name || "Anonyme";
 
     if (!drawing) return null;
 
@@ -230,7 +232,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({ visible, onClose, drawin
                         {drawing.label || "Sans titre"}
                     </Text>
                     <Text style={styles.authorName}>
-                        by {author?.display_name || "Anonyme"}
+                        by {authorName}
                     </Text>
                 </View>
 
