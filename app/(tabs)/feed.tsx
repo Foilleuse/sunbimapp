@@ -12,6 +12,8 @@ import Animated, { useSharedValue, useAnimatedStyle, withSpring, withSequence } 
 import { Canvas, Rect, LinearGradient as SkiaGradient, vec, useImage, Image as SkiaImage, Group, Blur, Mask, Paint } from "@shopify/react-native-skia";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
+// Import du nouveau composant ShareModal
+import { ShareModal } from '../../src/components/ShareModal';
 
 // Types de réactions possibles
 type ReactionType = 'like' | 'smart' | 'beautiful' | 'crazy' | null;
@@ -106,6 +108,8 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
         crazy: 0
     });
     
+    const [isShareModalVisible, setShareModalVisible] = useState(false);
+
     const author = drawing.users;
     const isActive = index === currentIndex; 
     const shouldRenderDrawing = isActive;
@@ -250,20 +254,9 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
         );
     };
 
-    // 🔥 GESTION DU PARTAGE (SHARE) DANS LA CARTE
-    const handleShare = async () => {
-        // On partage l'image de fond (nuage) associée à ce dessin pour l'instant
-        // Idéalement on partagerait l'image composée (nuage + dessin) si on la générait côté serveur ou local
-        // Mais pour l'instant, partageons le lien de l'image du nuage.
-        if (!drawing.cloud_image_url) return;
-        try {
-          await Share.share({
-            message: `Regarde ce dessin "${drawing.label || 'Sans titre'}" sur Sunbim !`,
-            url: drawing.cloud_image_url, 
-          });
-        } catch (error: any) {
-          console.log(error.message);
-        }
+    // 🔥 GESTION DU PARTAGE (SHARE) DANS LA CARTE AVEC MODALE IMMERSIVE
+    const handleShare = () => {
+        setShareModalVisible(true);
     };
 
     return (
@@ -289,7 +282,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
             <View style={styles.cardInfo}>
                 <View style={styles.headerInfo}>
                     <View style={styles.titleRow}>
-                        {/* 🔥 AJOUT DU BOUTON PARTAGE À GAUCHE */}
+                        {/* 🔥 BOUTON PARTAGE OUVRE LA MODALE IMMERSIVE */}
                         <TouchableOpacity onPress={handleShare} style={styles.iconBtnLeft} hitSlop={15}>
                             <Share2 color="#CCC" size={24} />
                         </TouchableOpacity>
@@ -343,6 +336,13 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
                     </View>
                 </View>
             </View>
+
+            {/* Utilisation de la nouvelle modale de partage */}
+            <ShareModal 
+                visible={isShareModalVisible} 
+                onClose={() => setShareModalVisible(false)} 
+                drawing={drawing} 
+            />
         </View>
     );
 }, (prev, next) => {
@@ -475,7 +475,6 @@ export default function FeedPage() {
                 />
             )}
 
-            {/* HEADER SIMPLIFIÉ (Sans bouton partage ici, déplacé dans la carte) */}
             <SunbimHeader showCloseButton={false} transparent={true} />
             
             <View 
