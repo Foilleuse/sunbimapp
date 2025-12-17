@@ -9,8 +9,57 @@ import { useAuth } from '../../src/contexts/AuthContext';
 import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer';
 // Ajout des imports d'animation
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withSequence } from 'react-native-reanimated';
+import { Canvas, Rect, LinearGradient as SkiaGradient, vec, useImage, Image as SkiaImage, Group, Blur, Mask, Paint } from "@shopify/react-native-skia";
 
 type ReactionType = 'like' | 'smart' | 'beautiful' | 'crazy' | null;
+
+// --- COMPOSANT BACKGROUND : MIROIR + FLOU + FONDU ÉTENDU (Copie de feed.tsx) ---
+const MirroredBackground = ({ uri, width, height, top }: { uri: string, width: number, height: number, top: number }) => {
+    const image = useImage(uri);
+    
+    if (!image) return null;
+
+    const bottom = top + height;
+    const BLUR_RADIUS = 25; 
+
+    const EXTRA_WIDTH = 100;
+    const bgWidth = width + EXTRA_WIDTH;
+    const bgX = -EXTRA_WIDTH / 2;
+
+    return (
+        <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
+            <Group layer={<Paint><Blur blur={BLUR_RADIUS} /></Paint>}>
+                <SkiaImage image={image} x={bgX} y={top} width={bgWidth} height={height} fit="cover" />
+                <Group origin={vec(width / 2, top)} transform={[{ scaleY: -1 }]}>
+                    <SkiaImage image={image} x={bgX} y={top} width={bgWidth} height={height} fit="cover" />
+                </Group>
+                <Group origin={vec(width / 2, bottom)} transform={[{ scaleY: -1 }]}>
+                    <SkiaImage image={image} x={bgX} y={top} width={bgWidth} height={height} fit="cover" />
+                </Group>
+            </Group>
+
+            <Mask
+                mode="luminance"
+                mask={
+                    <Rect x={0} y={top} width={width} height={height}>
+                        <SkiaGradient
+                            start={vec(0, top)}
+                            end={vec(0, bottom)}
+                            colors={["black", "white", "white", "black"]}
+                            positions={[0, 0.2, 0.8, 1]}
+                        />
+                    </Rect>
+                }
+            >
+                <SkiaImage
+                    image={image}
+                    x={0} y={top} width={width} height={height}
+                    fit="cover"
+                />
+            </Mask>
+        </Canvas>
+    );
+};
 
 // --- COMPOSANT BOUTON DE RÉACTION ANIMÉ ---
 const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color, count }: any) => {
@@ -39,7 +88,6 @@ const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color, count }: an
                     size={24}
                 />
             </Animated.View>
-            {/* Compteur supprimé comme demandé */}
         </Pressable>
     );
 };
@@ -315,32 +363,44 @@ export default function GalleryPage() {
                 {/* MODALE STYLE FEED/PROFIL */}
                 <Modal visible={!!selectedDrawing} animationType="slide" presentationStyle="pageSheet" onRequestClose={closeViewer}>
                     {selectedDrawing && (
-                        <SafeAreaView style={styles.modalContainer}>
+                        <View style={styles.modalContainer}>
+                             {/* FOND MIROIR AJOUTÉ */}
+                             <MirroredBackground 
+                                uri={optimizedModalImageUri || selectedDrawing.cloud_image_url}
+                                width={screenWidth}
+                                height={screenWidth * (4/3)}
+                                top={60} 
+                            />
+
                              <View style={styles.modalHeader}>
                                   <TouchableOpacity onPress={closeViewer} style={styles.closeModalBtn}>
                                       <X color="#000" size={30} />
                                   </TouchableOpacity>
                               </View>
 
-                            <Pressable onPressIn={() => setIsHolding(true)} onPressOut={() => setIsHolding(false)} style={{ width: screenWidth, aspectRatio: 3/4, backgroundColor: '#F0F0F0' }}>
-                                {/* Image de fond statique optimisée et croppée */}
-                                <Image 
-                                    source={{ uri: optimizedModalImageUri || selectedDrawing.cloud_image_url }}
-                                    style={[StyleSheet.absoluteFill, { opacity: 1 }]}
-                                    resizeMode="cover" 
-                                />
+                            {/* Le fond gris #F0F0F0 est remplacé par transparent pour voir le mirroir */}
+                            <Pressable onPressIn={() => setIsHolding(true)} onPressOut={() => setIsHolding(false)} style={{ width: screenWidth, aspectRatio: 3/4, backgroundColor: 'transparent', marginTop: 0 }}>
+                                
+                                {/* On ne met PAS d'Image ici car MirroredBackground gère l'affichage,
+                                    SAUF si on veut l'effet "isHolding" pour voir l'original net.
+                                    Le DrawingViewer a son propre imageUri, donc il affiche l'image de fond.
+                                    MirroredBackground est en arrière-plan global.
+                                    DrawingViewer gère l'image "nette" principale.
+                                */}
+
                                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                                     <DrawingViewer
                                         imageUri={optimizedModalImageUri || selectedDrawing.cloud_image_url} 
                                         canvasData={selectedDrawing.canvas_data}
                                         viewerSize={screenWidth} 
                                         viewerHeight={screenWidth * (4/3)}
-                                        transparentMode={true} 
+                                        transparentMode={true} // Mode transparent pour que MirroredBackground soit visible autour si besoin, mais ici DrawingViewer couvre tout
                                         startVisible={false} 
                                         animated={true}
-                                        autoCenter={false} // Désactivé aussi ici pour être cohérent
+                                        autoCenter={false} 
                                     />
                                 </View>
+                                {/* Texte maintenu visible */}
                                 <Text style={styles.hintText}>Maintenir pour voir l'original</Text>
                             </Pressable>
 
@@ -387,7 +447,7 @@ export default function GalleryPage() {
                                     </View>
                                 </View>
                             </View>
-                        </SafeAreaView>
+                        </View>
                     )}
                 </Modal>
             </View>
@@ -407,8 +467,8 @@ const styles = StyleSheet.create({
     emptyState: { marginTop: 100, alignItems: 'center' },
     emptyText: { color: '#999' },
     hintText: { position: 'absolute', bottom: 10, alignSelf: 'center', color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width:1, height:1}, textShadowRadius: 1 },
-    modalContainer: { flex: 1, backgroundColor: '#FFF' },
-    modalHeader: { width: '100%', height: 60, justifyContent: 'center', alignItems: 'flex-end', paddingRight: 20, paddingTop: 10, backgroundColor: '#FFF', zIndex: 20 },
+    modalContainer: { flex: 1, backgroundColor: '#FFF' }, // Changé en blanc pour éviter transparence indésirable si pas d'image
+    modalHeader: { width: '100%', height: 60, justifyContent: 'center', alignItems: 'flex-end', paddingRight: 20, paddingTop: 10, backgroundColor: 'transparent', zIndex: 20 }, // Fond transparent
     closeModalBtn: { padding: 5 },
     infoCard: { width: '100%', padding: 20, backgroundColor: '#FFF', borderTopWidth: 1, borderTopColor: '#F0F0F0', marginTop: 10 },
     infoContent: { alignItems: 'center' },
