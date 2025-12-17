@@ -368,7 +368,7 @@ export const DrawingDetailModal: React.FC<DrawingDetailModalProps> = ({ visible,
                 visible={isShareModalVisible}
                 onClose={() => setShareModalVisible(false)}
                 drawing={drawing}
-                author={author} // Passage explicite de l'auteur pour éviter "Anonyme"
+                author={author} 
             />
         </View>
     </Modal>
