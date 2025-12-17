@@ -5,9 +5,8 @@ import { supabase } from '../lib/supabaseClient';
 import { DrawingViewer } from './DrawingViewer';
 import { useAuth } from '../contexts/AuthContext';
 import { getOptimizedImageUrl } from '../utils/imageOptimizer';
-// Ajout des imports d'animation et Skia
-import Animated, { useSharedValue, useAnimatedStyle, withSpring, withSequence } from 'react-native-reanimated';
-import { Canvas, Rect, LinearGradient as SkiaGradient, vec, useImage, Image as SkiaImage, Group, Blur, Mask, Paint } from "@shopify/react-native-skia";
+// Import du nouveau composant
+import { DrawingDetailModal } from './DrawingDetailModal';
 
 interface UserProfileModalProps {
   visible: boolean;
@@ -15,93 +14,6 @@ interface UserProfileModalProps {
   userId: string;
   initialUser?: any; 
 }
-
-// Types de réactions possibles
-type ReactionType = 'like' | 'smart' | 'beautiful' | 'crazy' | null;
-
-// --- COMPOSANT BACKGROUND : MIROIR + FLOU + FONDU ÉTENDU ---
-// Copié EXACTEMENT de gallery.tsx pour garantir l'uniformité
-const MirroredBackground = ({ uri, width, height, top }: { uri: string, width: number, height: number, top: number }) => {
-    const image = useImage(uri);
-    
-    if (!image) return null;
-
-    const bottom = top + height;
-    const BLUR_RADIUS = 25; 
-
-    // 🔥 CORRECTION BORDS BLANCS (comme dans feed/gallery)
-    const EXTRA_WIDTH = 100; 
-    const bgWidth = width + EXTRA_WIDTH;
-    const bgX = -EXTRA_WIDTH / 2;
-
-    return (
-        <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
-            {/* 1. ARRIÈRE-PLAN : MIROIRS + FLOU */}
-            <Group layer={<Paint><Blur blur={BLUR_RADIUS} /></Paint>}>
-                <SkiaImage image={image} x={bgX} y={top} width={bgWidth} height={height} fit="cover" />
-                <Group origin={vec(width / 2, top)} transform={[{ scaleY: -1 }]}>
-                    <SkiaImage image={image} x={bgX} y={top} width={bgWidth} height={height} fit="cover" />
-                </Group>
-                <Group origin={vec(width / 2, bottom)} transform={[{ scaleY: -1 }]}>
-                    <SkiaImage image={image} x={bgX} y={top} width={bgWidth} height={height} fit="cover" />
-                </Group>
-            </Group>
-
-            {/* 2. PREMIER-PLAN : IMAGE NETTE AVEC MASQUE (Dégradé haut/bas) */}
-            <Mask
-                mode="luminance"
-                mask={
-                    <Rect x={0} y={top} width={width} height={height}>
-                        <SkiaGradient
-                            start={vec(0, top)}
-                            end={vec(0, bottom)}
-                            // Noir = Transparent, Blanc = Visible
-                            colors={["black", "white", "white", "black"]}
-                            positions={[0, 0.2, 0.8, 1]}
-                        />
-                    </Rect>
-                }
-            >
-                <SkiaImage
-                    image={image}
-                    x={0} y={top} width={width} height={height}
-                    fit="cover"
-                />
-            </Mask>
-        </Canvas>
-    );
-};
-
-// --- COMPOSANT BOUTON DE RÉACTION ANIMÉ ---
-const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color, count }: any) => {
-    const scale = useSharedValue(1);
-
-    const animatedStyle = useAnimatedStyle(() => {
-        return {
-            transform: [{ scale: scale.value }],
-        };
-    });
-
-    const handlePress = () => {
-        scale.value = withSequence(
-            withSpring(1.6, { damping: 10, stiffness: 200 }),
-            withSpring(1, { damping: 10, stiffness: 200 })
-        );
-        onPress();
-    };
-
-    return (
-        <Pressable onPress={handlePress} style={styles.reactionBtn}>
-            <Animated.View style={animatedStyle}>
-                <Icon
-                    color={isActive ? color : "#FFF"}
-                    fill={isActive ? color : "transparent"}
-                    size={24}
-                />
-            </Animated.View>
-        </Pressable>
-    );
-};
 
 // --- COMPOSANT MÉMORISÉ POUR LA GRILLE ---
 const DrawingGridItem = memo(({ item, size, isUnlocked, onPress, spacing }: any) => {
@@ -154,18 +66,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
   const [isBlocked, setIsBlocked] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
 
+  // État pour la modale de détail
   const [selectedDrawing, setSelectedDrawing] = useState<any | null>(null);
-  const [isHolding, setIsHolding] = useState(false);
-  
-  const [userReaction, setUserReaction] = useState<ReactionType>(null);
-  const [reactionCounts, setReactionCounts] = useState({
-      like: 0,
-      smart: 0,
-      beautiful: 0,
-      crazy: 0
-  });
-
-  const [animationReady, setAnimationReady] = useState(false);
 
   const { width: screenWidth } = Dimensions.get('window');
   const SPACING = 1; 
@@ -205,134 +107,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
 
     return () => { isMounted = false; };
   }, [visible, userId, currentUser]);
-
-  useEffect(() => {
-    if (selectedDrawing) {
-        fetchReactionsState();
-        // 🔥 CORRECTION: On force un délai clair et on reset l'état
-        setAnimationReady(false);
-        const timer = setTimeout(() => {
-            setAnimationReady(true);
-        }, 500); // Délai légèrement augmenté pour être sûr que la modale est stable
-        return () => clearTimeout(timer);
-    } else {
-        setAnimationReady(false);
-    }
-  }, [selectedDrawing]);
-
-  const selectedDrawingImageOptimized = useMemo(() => {
-    if (!selectedDrawing?.cloud_image_url) return null;
-    const w = Math.round(screenWidth * PixelRatio.get());
-    const h = Math.round(w * (4/3));
-    return getOptimizedImageUrl(selectedDrawing.cloud_image_url, w, h);
-  }, [selectedDrawing, screenWidth]);
-
-  const fetchReactionsState = async () => {
-        if (!selectedDrawing) return;
-        try {
-            const { data: allReactions, error } = await supabase
-                .from('reactions')
-                .select('reaction_type, user_id')
-                .eq('drawing_id', selectedDrawing.id);
-
-            if (error) throw error;
-
-            const counts = { like: 0, smart: 0, beautiful: 0, crazy: 0 };
-            let myReaction: ReactionType = null;
-
-            allReactions?.forEach((r: any) => {
-                if (counts.hasOwnProperty(r.reaction_type)) {
-                    counts[r.reaction_type as keyof typeof counts]++;
-                }
-                if (currentUser && r.user_id === currentUser.id) {
-                    myReaction = r.reaction_type as ReactionType;
-                }
-            });
-
-            setReactionCounts(counts);
-            setUserReaction(myReaction);
-
-        } catch (e) {
-            console.error("Erreur chargement réactions:", e);
-        }
-  };
-
-  const handleReaction = async (type: ReactionType) => {
-        if (!currentUser || !type || !selectedDrawing) return;
-
-        const previousReaction = userReaction;
-        const previousCounts = { ...reactionCounts };
-
-        if (userReaction === type) {
-            setUserReaction(null);
-            setReactionCounts(prev => ({
-                ...prev,
-                [type]: Math.max(0, prev[type] - 1)
-            }));
-            
-            try {
-                await supabase.from('reactions').delete().eq('user_id', currentUser.id).eq('drawing_id', selectedDrawing.id);
-            } catch (e) {
-                setUserReaction(previousReaction);
-                setReactionCounts(previousCounts);
-            }
-        } 
-        else {
-            setUserReaction(type);
-            setReactionCounts(prev => {
-                const newCounts = { ...prev };
-                if (previousReaction) {
-                    newCounts[previousReaction] = Math.max(0, newCounts[previousReaction] - 1);
-                }
-                newCounts[type]++;
-                return newCounts;
-            });
-
-            try {
-                const { error } = await supabase
-                    .from('reactions')
-                    .upsert({
-                        user_id: currentUser.id,
-                        drawing_id: selectedDrawing.id,
-                        reaction_type: type
-                    }, { onConflict: 'user_id, drawing_id' });
-                
-                if (error) throw error;
-            } catch (e) {
-                console.error(e);
-                setUserReaction(previousReaction);
-                setReactionCounts(previousCounts);
-            }
-        }
-  };
-
-  const handleReport = () => {
-    if (!selectedDrawing) return;
-    Alert.alert(
-        "Options",
-        "Que souhaitez-vous faire ?",
-        [
-            { text: "Annuler", style: "cancel" },
-            { 
-                text: "Signaler le contenu", 
-                onPress: async () => {
-                    if (!currentUser) return Alert.alert("Erreur", "Vous devez être connecté pour signaler.");
-                    try {
-                        const { error } = await supabase
-                            .from('reports')
-                            .insert({ reporter_id: currentUser.id, drawing_id: selectedDrawing.id, reason: 'Contenu inapproprié' });
-                        
-                        if (error) throw error;
-                        Alert.alert("Signalement envoyé", "Nous allons examiner cette image. Merci de votre vigilance.");
-                    } catch (e) {
-                        console.error(e);
-                        Alert.alert("Erreur", "Impossible d'envoyer le signalement.");
-                    }
-                }
-            }
-        ]
-    );
-  };
 
   const checkFollowStatus = async () => {
       try {
@@ -458,8 +232,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
   
   const closeDrawing = () => {
       setSelectedDrawing(null);
-      setUserReaction(null);
-      setReactionCounts({ like: 0, smart: 0, beautiful: 0, crazy: 0 });
   };
 
   const renderDrawingItem = useCallback(({ item }: { item: any }) => {
@@ -570,117 +342,16 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                 )
             )}
 
-            {/* MODALE D'AGRANDISSEMENT IDENTIQUE A GALLERY */}
-            <Modal visible={!!selectedDrawing} animationType="slide" presentationStyle="pageSheet" onRequestClose={closeDrawing}>
-                {selectedDrawing && (
-                    <View style={styles.modalContainer}>
-                        {/* FOND MIROIR GLOBAL + IMAGE NETTE MASQUÉE INTÉGRÉS */}
-                        <MirroredBackground 
-                            uri={selectedDrawingImageOptimized || selectedDrawing.cloud_image_url}
-                            width={screenWidth}
-                            height={screenWidth * (4/3)}
-                            top={60} 
-                        />
-
-                        {/* ✅ AJOUT SCROLLVIEW POUR PETITS ÉCRANS */}
-                        <ScrollView 
-                            contentContainerStyle={{ flexGrow: 1, alignItems: 'center' }}
-                            showsVerticalScrollIndicator={false}
-                        >
-                            <View style={[styles.header, { height: 60, paddingVertical: 0, paddingTop: 10, paddingHorizontal: 15, backgroundColor: 'transparent', width: '100%', justifyContent: 'center' }]}> 
-                                <TouchableOpacity onPress={closeDrawing} style={styles.closeBtnTransparent} hitSlop={15}>
-                                    <X color="#FFF" size={28} />
-                                </TouchableOpacity>
-                            </View>
-
-                            <View style={{ width: screenWidth, alignItems: 'center' }}> 
-                                <Pressable 
-                                    onPressIn={() => {
-                                        if (isSelectedUnlocked) setIsHolding(true);
-                                    }} 
-                                    onPressOut={() => setIsHolding(false)}
-                                    style={{ width: screenWidth, aspectRatio: 3/4, backgroundColor: 'transparent', marginTop: 0 }}
-                                >
-                                    {/* DrawingViewer gère UNIQUEMENT le dessin par-dessus (transparentMode=true).
-                                        Le MirroredBackground en fond s'occupe de l'image (nette avec dégradé + floue).
-                                    */}
-                                    <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
-                                        {/* 🔥 CORRECTION : On attend TOUJOURS animationReady pour afficher le viewer,
-                                            et on passe startVisible={false} pour forcer l'animation. 
-                                            On évite le rendu "prématuré" statique. 
-                                        */}
-                                        {animationReady ? (
-                                            <DrawingViewer
-                                                imageUri={selectedDrawingImageOptimized || selectedDrawing.cloud_image_url} 
-                                                canvasData={isSelectedUnlocked ? selectedDrawing.canvas_data : []}
-                                                viewerSize={screenWidth} 
-                                                viewerHeight={screenWidth * (4/3)} 
-                                                transparentMode={true} 
-                                                startVisible={false} 
-                                                animated={true}
-                                                autoCenter={false} 
-                                            />
-                                        ) : (
-                                            // Place holder invisible ou spinner si besoin pendant le délai
-                                            <View style={{ width: '100%', height: '100%' }} /> 
-                                        )}
-                                    </View>
-                                    {isSelectedUnlocked && <Text style={styles.hintText}>Maintenir pour voir l'original</Text>}
-                                </Pressable>
-                            </View>
-
-                            {/* INFO CARD TRANSPARENT AVEC TEXTE BLANC */}
-                            <View style={styles.infoCard}>
-                                <View style={styles.infoContent}>
-                                    <View style={styles.titleRow}>
-                                        <Text style={styles.drawingTitle} numberOfLines={1}>
-                                            {selectedDrawing.label || "Sans titre"}
-                                        </Text>
-                                        
-                                        <TouchableOpacity onPress={handleReport} style={styles.moreBtnAbsolute} hitSlop={15}>
-                                            <MoreHorizontal color="#CCC" size={24} />
-                                        </TouchableOpacity>
-                                    </View>
-                                    
-                                    <Text style={styles.userName}>{userProfile?.display_name || "Anonyme"}</Text>
-
-                                    {/* BARRE DE RÉACTIONS */}
-                                    <View style={styles.reactionBar}>
-                                        <AnimatedReactionBtn
-                                            icon={Heart}
-                                            color="#FF3B30"
-                                            isActive={userReaction === 'like'}
-                                            count={reactionCounts.like}
-                                            onPress={() => handleReaction('like')}
-                                        />
-                                        <AnimatedReactionBtn
-                                            icon={Lightbulb}
-                                            color="#FFCC00"
-                                            isActive={userReaction === 'smart'}
-                                            count={reactionCounts.smart}
-                                            onPress={() => handleReaction('smart')}
-                                        />
-                                        <AnimatedReactionBtn
-                                            icon={Palette}
-                                            color="#5856D6"
-                                            isActive={userReaction === 'beautiful'}
-                                            count={reactionCounts.beautiful}
-                                            onPress={() => handleReaction('beautiful')}
-                                        />
-                                        <AnimatedReactionBtn
-                                            icon={Zap}
-                                            color="#FF2D55"
-                                            isActive={userReaction === 'crazy'}
-                                            count={reactionCounts.crazy}
-                                            onPress={() => handleReaction('crazy')}
-                                        />
-                                    </View>
-                                </View>
-                            </View>
-                        </ScrollView>
-                    </View>
-                )}
-            </Modal>
+            {/* NOUVELLE MODALE DE DÉTAIL */}
+            {selectedDrawing && (
+                <DrawingDetailModal
+                    visible={!!selectedDrawing}
+                    onClose={closeDrawing}
+                    drawing={selectedDrawing}
+                    userProfile={userProfile} // On passe le profil chargé ici
+                    isUnlocked={isSelectedUnlocked}
+                />
+            )}
 
         </View>
     </Modal>
@@ -689,10 +360,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFF' },
-  safeAreaContainer: { flex: 1, backgroundColor: '#FFF' },
   header: { paddingHorizontal: 15, paddingVertical: 10, alignItems: 'flex-end', borderBottomWidth: 0, borderColor: '#eee' }, 
   closeBtn: { padding: 5, backgroundColor: '#F0F0F0', borderRadius: 20 },
-  closeBtnTransparent: { padding: 5, backgroundColor: 'transparent' },
   
   profileBlock: { 
       paddingBottom: 20, 
@@ -784,71 +453,4 @@ const styles = StyleSheet.create({
       borderRadius: 4, 
       overflow: 'hidden' 
   },
-
-  hintText: { position: 'absolute', bottom: 10, alignSelf: 'center', color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width:1, height:1}, textShadowRadius: 1 },
-  
-  modalContainer: { flex: 1, backgroundColor: '#FFF' }, // Base blanche mais modale interne transparente
-  modalHeader: { width: '100%', height: 60, justifyContent: 'center', alignItems: 'flex-end', paddingRight: 20, paddingTop: 10, backgroundColor: 'transparent', zIndex: 20 },
-
-  // Styles Feed Card pour l'uniformité (Blanc sur fond sombre)
-  infoCard: {
-      width: '100%',
-      padding: 20, 
-      backgroundColor: 'transparent', // Fond transparent
-      borderTopWidth: 0, // Plus de bordure
-      marginTop: 10 
-  },
-  infoContent: {
-      alignItems: 'center'
-  },
-  titleRow: { 
-      width: '100%',
-      flexDirection: 'row', 
-      justifyContent: 'center', 
-      alignItems: 'center', 
-      marginBottom: 2,
-      position: 'relative'
-  },
-  drawingTitle: { 
-      fontSize: 26, 
-      fontWeight: '900', 
-      color: '#FFF', // Titre blanc
-      letterSpacing: -0.5, 
-      textAlign: 'center',
-      maxWidth: '80%' 
-  },
-  moreBtnAbsolute: { 
-      position: 'absolute',
-      right: 0,
-      top: 5,
-      padding: 5 
-  },
-  userName: { 
-      fontSize: 13, 
-      fontWeight: '500', 
-      color: 'rgba(255,255,255,0.8)', // Nom gris clair
-      marginBottom: 10
-  },
-  reactionBar: { 
-      flexDirection: 'row', 
-      justifyContent: 'space-around', 
-      alignItems: 'center', 
-      width: '100%',
-      paddingHorizontal: 10
-  },
-  reactionBtn: { 
-      alignItems: 'center', 
-      justifyContent: 'center',
-      padding: 8
-  },
-  reactionText: { 
-      fontSize: 12, 
-      fontWeight: '700', 
-      color: '#999',
-      marginTop: 4 
-  },
-  activeText: {
-      color: '#000',
-      fontWeight: '900'
-  }
-});     
+});
