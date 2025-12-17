@@ -67,19 +67,23 @@ export const ShareModal: React.FC<ShareModalProps> = ({ visible, onClose, drawin
     // Calcul des dimensions pour l'image centrale en respectant le ratio 3:4 (comme sur le feed)
     // On veut qu'elle soit aussi grande que possible, mais sans dépasser l'écran.
     const { viewerWidth, viewerHeight } = useMemo(() => {
-        const targetRatio = 3 / 4;
+        // Ratio cible 3:4 (largeur / hauteur)
+        const targetRatio = 3 / 4; 
         
-        // Essayer de remplir la largeur
+        // On part de la largeur maximale possible (largeur écran)
         let w = screenWidth;
-        let h = w / targetRatio; // h = w * (4/3)
+        // On calcule la hauteur théorique correspondant à cette largeur pour respecter le ratio 3:4
+        let h = w / targetRatio; // = w * (4/3)
 
-        // Si la hauteur dépasse l'écran, on limite par la hauteur
+        // Si la hauteur calculée dépasse la hauteur de l'écran, on est contraint par la hauteur.
+        // On ajuste alors la hauteur à la hauteur de l'écran, et on recalcule la largeur.
         if (h > screenHeight) {
             h = screenHeight;
             w = h * targetRatio;
         }
 
-        return { viewerWidth: w, viewerHeight: h };
+        // On arrondit pour éviter les demi-pixels
+        return { viewerWidth: Math.floor(w), viewerHeight: Math.floor(h) };
     }, [screenWidth, screenHeight]);
 
 
@@ -124,45 +128,19 @@ export const ShareModal: React.FC<ShareModalProps> = ({ visible, onClose, drawin
 
                 {/* 2. Zone de dessin centrée (Image nette + Dessin) */}
                 <View style={styles.centeredContent}>
-                    <View style={{ width: viewerWidth, height: viewerHeight }}>
+                    {/* Conteneur avec taille explicite 3:4 */}
+                    <View style={{ width: viewerWidth, height: viewerHeight, overflow: 'hidden' }}>
                         <DrawingViewer
                             imageUri={centerImageUri || drawing.cloud_image_url}
                             canvasData={drawing.canvas_data}
                             viewerSize={viewerWidth}
                             viewerHeight={viewerHeight}
-                            transparentMode={true} // IMPORTANT: true pour voir le MirroredBackground derrière?
-                            // ATTENTION: Si transparentMode=true, on voit le fond flou à travers le dessin.
-                            // Si on veut voir l'image NETTE sous le dessin (comme sur le feed), il faut :
-                            // Soit transparentMode=false (DrawingViewer affiche l'image)
-                            // Soit transparentMode=true ET on affiche l'image nette ici manuellement.
-                            // Comme DrawingViewer gère bien l'affichage de l'image avec 'resizeMode="cover"',
-                            // le plus simple est de mettre transparentMode={false} pour avoir l'image nette DANS le viewer.
-                            // MAIS le MirroredBackground du feed utilise un Mask pour fondre les bords haut/bas.
-                            // Ici, on est en mode "plein écran" ou "focus".
-                            // Si on veut EXACTEMENT comme le feed (image nette au centre qui se fond dans le flou),
-                            // alors le MirroredBackground s'en occupe déjà (partie "PREMIER-PLAN").
-                            // DANS CE CAS : le MirroredBackground affiche DÉJÀ l'image nette au centre (si on lui passe les bonnes dims).
-                            // SAUF QUE MirroredBackground prend 'width' et 'height' de l'écran ici.
-                            // Donc il affiche l'image nette sur TOUT l'écran avec un masque haut/bas.
-                            
-                            // Si on veut le rectangle 3:4 spécifique visible au centre par dessus le flou :
-                            // Option A : Le MirroredBackground fait tout le travail de fond. On met juste le dessin par dessus (transparentMode=true).
-                            // Cela veut dire que l'image "nette" est celle du background.
-                            // Si le ratio de l'écran n'est pas 3:4, l'image de fond sera cropée différemment de l'image 3:4 attendue.
-                            
-                            // Option B (Recommandée pour "comme sur le feed") :
-                            // On garde le MirroredBackground pour l'ambiance.
-                            // On affiche le DrawingViewer avec transparentMode={false} (donc avec l'image) au centre, format 3:4.
-                            // Cela crée un "cadre" net 3:4 au centre, par dessus le fond flou.
-                             
+                            transparentMode={false} // 🔥 CORRECTION : false pour afficher l'image du nuage dans le viewer (cadre net)
+                            // Si transparentMode est true, on verrait à travers, donc le flou derrière (pas ce qu'on veut pour le cadre central)
+                            // En mettant false, DrawingViewer affiche l'imageUri en fond, créant le cadre net 3:4.
                             animated={true}
                             startVisible={false}
                             autoCenter={false}
-                            // On force transparentMode={false} pour voir l'image nette 3:4 DANS le cadre
-                            // (contrairement au feed où on superpose parfois sur un fond global)
-                            // Ici on veut être sûr de voir l'image cadrée 3:4.
-                            // Essayons transparentMode={false} pour avoir l'image 3:4 explicite.
-                            // Si le background derrière est visible sur les bords (si écran > 3:4), c'est parfait.
                         />
                     </View>
                 </View>
