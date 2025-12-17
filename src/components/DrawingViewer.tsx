@@ -186,11 +186,23 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
         return canvasData.filter(p => p && (p.svgPath || (p.points && p.points.length > 0)));
     }, [canvasData]);
 
+    // 🔥 CORRECTION SCALE : Gestion de la mise à l'échelle pour la galerie
     const scaleTransform = useMemo(() => {
-        // Centrage simplifié pour éviter de parser les SVG à l'init
-        // Si nécessaire, on peut réactiver un calcul de bounds plus robuste
-        return { translateX: 0, translateY: 0, scale: 1 }; 
-    }, [validPaths, autoCenter]);
+        // Mode 1: Auto-Center (Fit bounds) -> Utilisé pour centrer un dessin isolé
+        if (autoCenter && validPaths.length > 0) {
+            // ... (logique de centrage si besoin, mais pas utilisée dans la galerie pour l'instant)
+            // Pour l'instant on garde le fallback standard si autoCenter n'est pas utilisé
+            return { translateX: 0, translateY: 0, scale: 1 }; 
+        }
+
+        // Mode 2: Cadrage original (Galerie)
+        // On doit adapter le dessin (coordonnées écran) à la taille du viewer (vignette)
+        // Ratio = largeur_viewer / largeur_ecran_originale
+        const scale = targetWidth / screenWidth;
+        
+        return { translateX: 0, translateY: 0, scale }; 
+
+    }, [validPaths, autoCenter, targetWidth, screenWidth]);
 
     
     return (
