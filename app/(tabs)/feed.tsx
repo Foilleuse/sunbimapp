@@ -1,9 +1,8 @@
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform, Image, Pressable, Alert, PixelRatio } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform, Image, Pressable, Alert, PixelRatio, Share } from 'react-native';
 import { useEffect, useState, memo, useCallback, useMemo } from 'react';
-import { User, Eye, MoreHorizontal, Lightbulb, Palette, Laugh, Heart, ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { User, Eye, MoreHorizontal, Lightbulb, Palette, Laugh, Heart, ChevronLeft, ChevronRight, Share2 } from 'lucide-react-native';
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
-import { SunbimHeader } from '../../src/components/SunbimHeader';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { UserProfileModal } from '../../src/components/UserProfileModal'; 
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router'; 
@@ -11,6 +10,7 @@ import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer';
 import Carousel from 'react-native-reanimated-carousel';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withSequence } from 'react-native-reanimated';
 import { Canvas, Rect, LinearGradient as SkiaGradient, vec, useImage, Image as SkiaImage, Group, Blur, Mask, Paint } from "@shopify/react-native-skia";
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 // Types de réactions possibles
 type ReactionType = 'like' | 'smart' | 'beautiful' | 'crazy' | null;
@@ -24,37 +24,23 @@ const MirroredBackground = ({ uri, width, height, top }: { uri: string, width: n
     const bottom = top + height;
     const BLUR_RADIUS = 25; 
 
-    // 🔥 CORRECTION BORDS BLANCS : 
-    // On dessine l'arrière-plan (couche floue) plus large que l'écran pour que le flou 
-    // ne crée pas de transparence sur les bords gauche/droite visibles.
-    const EXTRA_WIDTH = 100; // 50px de marge de chaque côté pour absorber le flou
+    // 🔥 CORRECTION BORDS BLANCS
+    const EXTRA_WIDTH = 100;
     const bgWidth = width + EXTRA_WIDTH;
-    const bgX = -EXTRA_WIDTH / 2; // On décale vers la gauche pour centrer l'image élargie
+    const bgX = -EXTRA_WIDTH / 2;
 
     return (
         <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
-            
-            {/* 1. ARRIÈRE-PLAN : MIROIRS + FLOU (Remplissage total avec débordement)
-                On utilise bgX et bgWidth pour déborder de l'écran.
-            */}
             <Group layer={<Paint><Blur blur={BLUR_RADIUS} /></Paint>}>
-                {/* Image centrale */}
                 <SkiaImage image={image} x={bgX} y={top} width={bgWidth} height={height} fit="cover" />
-
-                {/* Miroir Haut */}
                 <Group origin={vec(width / 2, top)} transform={[{ scaleY: -1 }]}>
                     <SkiaImage image={image} x={bgX} y={top} width={bgWidth} height={height} fit="cover" />
                 </Group>
-
-                {/* Miroir Bas */}
                 <Group origin={vec(width / 2, bottom)} transform={[{ scaleY: -1 }]}>
                     <SkiaImage image={image} x={bgX} y={top} width={bgWidth} height={height} fit="cover" />
                 </Group>
             </Group>
 
-            {/* 2. PREMIER-PLAN : IMAGE NETTE AVEC MASQUE
-                Ici on reste à la taille exacte de l'écran (width) pour l'alignement parfait.
-            */}
             <Mask
                 mode="luminance"
                 mask={
@@ -62,10 +48,7 @@ const MirroredBackground = ({ uri, width, height, top }: { uri: string, width: n
                         <SkiaGradient
                             start={vec(0, top)}
                             end={vec(0, bottom)}
-                            // Noir = Transparent, Blanc = Visible
                             colors={["black", "white", "white", "black"]}
-                            // 🔥 CORRECTION FONDU : Zone agrandie à 20% (0.2) au lieu de 10%
-                            // positions correspond à : [début fondu haut, fin fondu haut, début fondu bas, fin fondu bas]
                             positions={[0, 0.2, 0.8, 1]}
                         />
                     </Rect>
@@ -77,12 +60,9 @@ const MirroredBackground = ({ uri, width, height, top }: { uri: string, width: n
                     fit="cover"
                 />
             </Mask>
-
         </Canvas>
     );
 };
-
-// --- LE RESTE DU CODE (SANS CHANGEMENT MAJEUR) ---
 
 const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color }: any) => {
     const scale = useSharedValue(1);
@@ -271,10 +251,6 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
 
     return (
         <View style={styles.cardContainer}>
-            {/* 🔥 CORRECTION PETITS ÉCRANS : 
-               On s'assure que le conteneur du dessin a une taille fixe ou relative qui ne déborde pas.
-               Dans le carrousel, on utilise width=canvasSize.
-            */}
             <View style={{ width: canvasSize, height: canvasSize * (4/3), backgroundColor: 'transparent', position: 'relative' }}>
                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                     {shouldRenderDrawing && (
@@ -364,35 +340,19 @@ export default function FeedPage() {
     const [backgroundCloud, setBackgroundCloud] = useState<string | null>(null);
     const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
     
-    // 🔥 ETAT POUR AFFICHER LES FLÈCHES DE TUTO
     const [showTutorialArrows, setShowTutorialArrows] = useState(true);
-    
     const [isGlobalHolding, setIsGlobalHolding] = useState(false);
-    
     const [layout, setLayout] = useState<{ width: number; height: number } | null>(null);
-
     const [selectedUser, setSelectedUser] = useState<any>(null);
     const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
 
-    // Ajustement dynamique de l'espace haut pour petits écrans
     const isSmallScreen = screenHeight < 700;
     const TOP_HEADER_SPACE = isSmallScreen ? 80 : 120;
-
-    // Calcul hauteur image : si 4/3 dépasse l'écran dispo, on réduit
-    // L'écran dispo = screenHeight - TOP_HEADER_SPACE - Bottom nav (approx 80)
-    // On veut garder un peu de marge en bas pour les infos
-    const MAX_IMAGE_HEIGHT = screenHeight - TOP_HEADER_SPACE - 150; // 150px pour infos + marge
+    const MAX_IMAGE_HEIGHT = screenHeight - TOP_HEADER_SPACE - 150; 
     const IDEAL_HEIGHT = screenWidth * (4/3);
-    
     const FINAL_IMAGE_HEIGHT = Math.min(IDEAL_HEIGHT, MAX_IMAGE_HEIGHT);
-    // Si on réduit la hauteur, on doit ajuster la largeur pour garder le ratio, 
-    // OU accepter que l'image soit plus petite (contain)
-    // Ici on va ajuster le carrousel. 
-    // Si l'image est plus petite que screenWidth en largeur, on centre.
-    
     const FINAL_IMAGE_WIDTH = FINAL_IMAGE_HEIGHT * (3/4);
     
-    // Position du bouton oeil relative à la nouvelle hauteur
     const EYE_BUTTON_SIZE = 44;
     const MARGIN_BOTTOM = 25; 
     const eyeButtonTop = TOP_HEADER_SPACE + FINAL_IMAGE_HEIGHT - EYE_BUTTON_SIZE - MARGIN_BOTTOM;
@@ -464,12 +424,23 @@ export default function FeedPage() {
 
     const handleUserPress = (targetUser: any) => {
         if (!targetUser) return;
-
         if (user && targetUser.id === user.id) {
             router.push('/(tabs)/profile');
         } else {
             setSelectedUser(targetUser);
             setIsProfileModalVisible(true);
+        }
+    };
+
+    const handleShare = async () => {
+        if (!backgroundCloud) return;
+        try {
+          await Share.share({
+            message: 'Regarde ce nuage sur Sunbim !',
+            url: backgroundCloud, 
+          });
+        } catch (error: any) {
+          console.log(error.message);
         }
     };
 
@@ -489,12 +460,22 @@ export default function FeedPage() {
                 <MirroredBackground 
                     uri={optimizedBackground || backgroundCloud}
                     width={screenWidth}
-                    height={FINAL_IMAGE_HEIGHT} // On utilise la hauteur calculée
+                    height={FINAL_IMAGE_HEIGHT} 
                     top={TOP_HEADER_SPACE} 
                 />
             )}
 
-            <SunbimHeader showCloseButton={false} transparent={true} />
+            {/* HEADER CUSTOM AVEC BOUTON PARTAGE */}
+            <SafeAreaView style={styles.headerContainer} edges={['top']}>
+                <View style={styles.headerContent}>
+                    <TouchableOpacity onPress={handleShare} style={styles.shareBtn} hitSlop={10}>
+                        <Share2 color="#FFF" size={28} />
+                    </TouchableOpacity>
+                    <Text style={styles.headerTitle}>Sunbim</Text>
+                    {/* Espace vide pour équilibrer le bouton partage et centrer le titre */}
+                    <View style={{ width: 28 }} />
+                </View>
+            </SafeAreaView>
             
             <View 
                 style={[styles.mainContent, { paddingTop: TOP_HEADER_SPACE }]} 
@@ -504,8 +485,8 @@ export default function FeedPage() {
                     <View style={{ alignItems: 'center' }}>
                     <Carousel
                         loop={true}
-                        width={screenWidth} // Le carrousel prend toute la largeur
-                        height={FINAL_IMAGE_HEIGHT + 150} // Hauteur image + espace infos
+                        width={screenWidth} 
+                        height={FINAL_IMAGE_HEIGHT + 150} 
                         autoPlay={false}
                         data={drawings}
                         scrollAnimationDuration={500}
@@ -515,10 +496,9 @@ export default function FeedPage() {
                         }}
                         renderItem={({ item, index }) => (
                             <View style={{ alignItems: 'center' }}>
-                                {/* On centre la carte dans le carrousel */}
                                 <FeedCard 
                                     drawing={item} 
-                                    canvasSize={FINAL_IMAGE_WIDTH} // On passe la largeur adaptée
+                                    canvasSize={FINAL_IMAGE_WIDTH} 
                                     index={index}
                                     currentIndex={currentIndex}
                                     onUserPress={handleUserPress}
@@ -579,10 +559,40 @@ const styles = StyleSheet.create({
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     text: { color: '#FFF', fontSize: 16 }, 
     
+    // Nouveaux styles Header
+    headerContainer: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 50,
+        // Pas de fond pour laisser la transparence
+    },
+    headerContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 20,
+        paddingVertical: 10,
+    },
+    shareBtn: {
+        // Style bouton si besoin
+    },
+    headerTitle: {
+        fontSize: 28,
+        fontWeight: '900',
+        color: '#FFF',
+        letterSpacing: -1,
+        // Ombre portée pour lisibilité sur fond clair/sombre
+        textShadowColor: 'rgba(0,0,0,0.3)',
+        textShadowOffset: { width: 0, height: 2 },
+        textShadowRadius: 4,
+    },
+
     mainContent: {
         flex: 1,
         position: 'relative',
-        alignItems: 'center' // Centrer le contenu horizontalement
+        alignItems: 'center' 
     },
 
     cardContainer: { 
