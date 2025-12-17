@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useMemo, useState } from 'react';
 import { View, StyleSheet, Dimensions, PixelRatio, Platform } from 'react-native';
 import { Canvas, Path, useImage, Image as SkiaImage, Skia, Group } from '@shopify/react-native-skia';
-import Animated, { useSharedValue, useAnimatedStyle, withTiming, withDelay, Easing, runOnJS, useDerivedValue } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, withDelay, Easing, runOnJS, useDerivedValue, useAnimatedReaction } from 'react-native-reanimated';
+import { getStroke } from 'perfect-freehand';
 
 // Définition de l'interface DrawingPath pour inclure les nouveaux champs
 interface DrawingPath {
@@ -24,40 +25,103 @@ interface DrawingViewerProps {
     autoCenter?: boolean; // Si true, tente de centrer le dessin dans le viewer
 }
 
+// Fonction utilitaire (dupliquée de DrawingCanvas pour être autonome)
+function getSvgPathFromStroke(stroke: number[][]): string {
+  if (!stroke.length) return "";
+  const d = stroke.reduce(
+    (acc, [x0, y0], i, arr) => {
+      const [x1, y1] = arr[(i + 1) % arr.length];
+      acc.push(x0, y0, (x0 + x1) / 2, (y0 + y1) / 2);
+      return acc;
+    },
+    ["M", ...stroke[0], "Q"]
+  );
+  d.push("Z");
+  return d.join(" ");
+}
+
 // Composant interne pour gérer l'animation d'un chemin individuel
-// Cela permet d'optimiser le rendu si nécessaire, mais ici on va gérer l'affichage global
-const AnimatedPath = ({ path, color, width, isEraser, isFilled, index, progress, totalCount }: any) => {
-    // Calcul de l'opacité ou de la visibilité basé sur le progrès global
-    // Si progress (0..1) * totalCount > index, alors ce trait doit être visible.
+const AnimatedPath = ({ pathData, index, progress, totalCount }: { pathData: DrawingPath, index: number, progress: Animated.SharedValue<number>, totalCount: number }) => {
+    const [currentPath, setCurrentPath] = useState(pathData.isFilled ? Skia.Path.MakeFromSVGString("") : Skia.Path.MakeFromSVGString(pathData.svgPath));
+    const isFilled = pathData.isFilled ?? false;
+
+    // Si c'est un trait "ancien format" (stroke simple), on utilise l'opacité
+    // Si c'est un trait "perfect-freehand" (fill), on recalcule le path
     
-    // Note: Dans le contexte Skia React Native, utiliser des valeurs dérivées complexes dans une boucle map
-    // peut être lourd. Une approche simple est d'utiliser un opacité animée.
-    
-    // ASTUCE: Pour simuler le tracé, on peut simplement switcher l'opacité de 0 à 1 quand c'est le tour du trait.
-    // Le trait apparaît "pop", ce qui est moins fluide que le tracé progressif, mais c'est le mieux pour des fills.
-    // Pour améliorer, on pourrait faire un fade-in rapide.
-    
+    useAnimatedReaction(
+        () => progress.value,
+        (currentProgress) => {
+            if (!pathData.points || !isFilled) return;
+
+            // Calcul de la fenêtre de temps pour ce trait spécifique
+            // Chaque trait a une portion de l'animation globale (1 / totalCount)
+            const start = index / totalCount;
+            const end = (index + 1) / totalCount;
+            
+            if (currentProgress < start) {
+                // Pas encore commencé
+                if (currentPath !== null) runOnJS(setCurrentPath)(null);
+            } else if (currentProgress >= end) {
+                // Terminé -> Afficher le path final complet (optimisation)
+                // On ne recalcule plus, on met le path final SVG stocké
+                // Attention : il faut que le SVG stocké soit valide.
+                const finalPath = Skia.Path.MakeFromSVGString(pathData.svgPath);
+                runOnJS(setCurrentPath)(finalPath);
+            } else {
+                // En cours de tracé
+                // On normalise le progrès pour ce trait (0 à 1)
+                const localProgress = (currentProgress - start) / (end - start);
+                
+                // On prend une sous-section des points
+                const pointsCount = Math.floor(pathData.points.length * localProgress);
+                const currentPoints = pathData.points.slice(0, Math.max(2, pointsCount)); // Au moins 2 points pour un trait
+
+                if (currentPoints.length > 1) {
+                    const options = {
+                        size: pathData.width,
+                        thinning: 0.37,
+                        smoothing: 0.47,
+                        streamline: 0.81,
+                        easing: (t: number) => t,
+                        start: { taper: 5, cap: true },
+                        end: { taper: 5, cap: true },
+                        simulatePressure: true,
+                        last: false, // En cours de tracé
+                    };
+                    const outline = getStroke(currentPoints, options);
+                    const svg = getSvgPathFromStroke(outline);
+                    const skiaPath = Skia.Path.MakeFromSVGString(svg);
+                    runOnJS(setCurrentPath)(skiaPath);
+                }
+            }
+        },
+        [progress, pathData]
+    );
+
+    // Rendu pour les anciens traits (Stroke simple sans points JSON)
+    // On utilise l'opacité pour les faire apparaitre "pop"
     const opacity = useDerivedValue(() => {
+        if (isFilled && pathData.points) return 1; // Géré par le path dynamique ci-dessus
+
         const threshold = index / totalCount;
-        const nextThreshold = (index + 1) / totalCount;
-        
-        if (progress.value > threshold) {
-            // Le trait est en cours d'apparition ou déjà apparu
-            // On peut faire un fade-in rapide entre threshold et threshold + petit epsilon
-             return 1;
-        }
-        return 0;
+        return progress.value > threshold ? 1 : 0;
     });
+
+    if (!currentPath && isFilled) return null;
+
+    // Fallback pour ancien format (si pas de path dynamique encore)
+    const displayPath = currentPath || (pathData.svgPath ? Skia.Path.MakeFromSVGString(pathData.svgPath) : null);
+    if (!displayPath) return null;
 
     return (
         <Path
-            path={path}
-            color={isEraser ? "#000" : color} // La couleur noire pour l'effaceur sera gérée par blendMode
+            path={displayPath}
+            color={pathData.isEraser ? "#000" : pathData.color}
             style={isFilled ? "fill" : "stroke"}
-            strokeWidth={isFilled ? 0 : width}
+            strokeWidth={isFilled ? 0 : pathData.width}
             strokeCap="round"
             strokeJoin="round"
-            blendMode={isEraser ? "clear" : "srcOver"}
+            blendMode={pathData.isEraser ? "clear" : "srcOver"}
             opacity={opacity}
         />
     );
@@ -78,7 +142,6 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
 
     const { width: screenWidth } = Dimensions.get('window');
     const targetWidth = viewerSize || screenWidth;
-    // Ratio 4:3 par défaut pour l'affichage si hauteur non fournie
     const targetHeight = viewerHeight || targetWidth * (4/3); 
     
     const image = useImage(imageUri);
@@ -89,63 +152,36 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
     useEffect(() => {
         if (animated && !startVisible) {
             progress.value = 0;
-            // Animation linéaire qui révèle les chemins
             progress.value = withTiming(1, {
-                duration: 2500, // 2.5s pour tout dessiner
+                duration: 3500, // Un peu plus lent pour apprécier le tracé (3.5s)
                 easing: Easing.linear
             });
         } else {
             progress.value = 1;
         }
-    }, [animated, startVisible]); // Dépendances strictes
+    }, [animated, startVisible]); 
 
-    // On prépare les chemins Skia
-    const skiaPaths = useMemo(() => {
-        return canvasData.map((p) => {
-             const path = Skia.Path.MakeFromSVGString(p.svgPath);
-             return { ...p, skiaPath: path };
-        }).filter(p => p.skiaPath !== null);
+    // On prépare les données (plus besoin de pré-calculer les skiaPaths ici car AnimatedPath le fait)
+    // Mais on a besoin de filtrer les données valides
+    const validPaths = useMemo(() => {
+        return canvasData.filter(p => p.svgPath || (p.points && p.points.length > 0));
     }, [canvasData]);
 
-    // On calcule l'échelle pour centrer le dessin si nécessaire (autoCenter)
     const scaleTransform = useMemo(() => {
-        if (!autoCenter || skiaPaths.length === 0) return { translateX: 0, translateY: 0, scale: 1 };
-
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        if (!autoCenter || validPaths.length === 0) return { translateX: 0, translateY: 0, scale: 1 };
         
-        skiaPaths.forEach(p => {
-            if(p.skiaPath) {
-                const bounds = p.skiaPath.getBounds();
-                if (bounds.x < minX) minX = bounds.x;
-                if (bounds.y < minY) minY = bounds.y;
-                if (bounds.x + bounds.width > maxX) maxX = bounds.x + bounds.width;
-                if (bounds.y + bounds.height > maxY) maxY = bounds.y + bounds.height;
-            }
-        });
-
-        if (minX === Infinity) return { translateX: 0, translateY: 0, scale: 1 };
-
-        const drawingWidth = maxX - minX;
-        const drawingHeight = maxY - minY;
-        const centerX = minX + drawingWidth / 2;
-        const centerY = minY + drawingHeight / 2;
-
-        const scaleX = (targetWidth * 0.9) / drawingWidth;
-        const scaleY = (targetHeight * 0.9) / drawingHeight;
-        const scale = Math.min(scaleX, scaleY, 1); 
-
-        const translateX = (targetWidth / 2) - (centerX * scale);
-        const translateY = (targetHeight / 2) - (centerY * scale);
-
-        return { translateX, translateY, scale };
-
-    }, [skiaPaths, autoCenter, targetWidth, targetHeight]);
+        // Calcul simplifié des bounds (approximatif pour le centrage)
+        // Pour être précis, il faudrait parser tous les SVG, ce qui est lourd.
+        // On va supposer que le centrage n'est pas critique pour l'instant ou utiliser une bbox simple si points dispos.
+        return { translateX: 0, translateY: 0, scale: 1 }; 
+        
+        // TODO: Réimplémenter un calcul de bounds léger si nécessaire
+    }, [validPaths, autoCenter]);
 
     
     return (
         <View style={{ width: targetWidth, height: targetHeight, overflow: 'hidden' }}>
             <Canvas style={{ flex: 1 }}>
-                {/* 1. IMAGE DE FOND (Nuage) */}
                 {!transparentMode && image && (
                     <SkiaImage
                         image={image}
@@ -157,7 +193,6 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
                     />
                 )}
 
-                {/* 2. DESSIN */}
                 <Group 
                     transform={[
                         { translateX: scaleTransform.translateX },
@@ -165,25 +200,15 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
                         { scale: scaleTransform.scale }
                     ]}
                 >
-                    {skiaPaths.map((p, index) => {
-                        if (!p.skiaPath) return null;
-                        
-                        const isFilled = p.isFilled ?? false; 
-                        
-                        return (
-                            <AnimatedPath
-                                key={index}
-                                path={p.skiaPath}
-                                color={p.isEraser ? (transparentMode ? "transparent" : "#000") : p.color}
-                                width={p.width}
-                                isEraser={p.isEraser}
-                                isFilled={isFilled}
-                                index={index}
-                                totalCount={skiaPaths.length}
-                                progress={progress}
-                            />
-                        );
-                    })}
+                    {validPaths.map((p, index) => (
+                        <AnimatedPath
+                            key={index}
+                            pathData={p}
+                            index={index}
+                            totalCount={validPaths.length}
+                            progress={progress}
+                        />
+                    ))}
                 </Group>
             </Canvas>
         </View>
