@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, memo } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, Dimensions, Alert, Pressable, Platform, ScrollView, PixelRatio } from 'react-native';
-import { X, Heart, Lightbulb, Palette, Zap, MoreHorizontal } from 'lucide-react-native';
+import { X, Heart, Lightbulb, Palette, Zap, MoreHorizontal, Share2 } from 'lucide-react-native';
 import { supabase } from '../lib/supabaseClient';
 import { DrawingViewer } from './DrawingViewer';
 import { useAuth } from '../contexts/AuthContext';
@@ -8,6 +8,7 @@ import { getOptimizedImageUrl } from '../utils/imageOptimizer';
 // Ajout des imports d'animation et Skia
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withSequence } from 'react-native-reanimated';
 import { Canvas, Rect, LinearGradient as SkiaGradient, vec, useImage, Image as SkiaImage, Group, Blur, Mask, Paint } from "@shopify/react-native-skia";
+import { ShareModal } from './ShareModal';
 
 interface DrawingDetailModalProps {
   visible: boolean;
@@ -104,6 +105,7 @@ export const DrawingDetailModal: React.FC<DrawingDetailModalProps> = ({ visible,
   
   const [isHolding, setIsHolding] = useState(false);
   const [animationReady, setAnimationReady] = useState(false);
+  const [isShareModalVisible, setShareModalVisible] = useState(false);
   
   const [userReaction, setUserReaction] = useState<ReactionType>(null);
   const [reactionCounts, setReactionCounts] = useState({
@@ -248,6 +250,10 @@ export const DrawingDetailModal: React.FC<DrawingDetailModalProps> = ({ visible,
     );
   };
 
+  const openShareModal = () => {
+      setShareModalVisible(true);
+  };
+
   if (!drawing) return null;
 
   return (
@@ -298,7 +304,7 @@ export const DrawingDetailModal: React.FC<DrawingDetailModalProps> = ({ visible,
                                 <View style={{ width: '100%', height: '100%' }} /> 
                             )}
                         </View>
-                        {isUnlocked && <Text style={styles.hintText}> </Text>}
+                        {isUnlocked && <Text style={styles.hintText}>Maintenir pour voir l'original</Text>}
                     </Pressable>
                 </View>
 
@@ -306,11 +312,16 @@ export const DrawingDetailModal: React.FC<DrawingDetailModalProps> = ({ visible,
                 <View style={styles.infoCard}>
                     <View style={styles.infoContent}>
                         <View style={styles.titleRow}>
+                            {/* BOUTON PARTAGE */}
+                            <TouchableOpacity onPress={openShareModal} style={styles.iconBtnLeft} hitSlop={15}>
+                                <Share2 color="#CCC" size={24} />
+                            </TouchableOpacity>
+
                             <Text style={styles.drawingTitle} numberOfLines={1}>
                                 {drawing.label || "Sans titre"}
                             </Text>
                             
-                            <TouchableOpacity onPress={handleReport} style={styles.moreBtnAbsolute} hitSlop={15}>
+                            <TouchableOpacity onPress={handleReport} style={styles.iconBtnRight} hitSlop={15}>
                                 <MoreHorizontal color="#CCC" size={24} />
                             </TouchableOpacity>
                         </View>
@@ -351,6 +362,13 @@ export const DrawingDetailModal: React.FC<DrawingDetailModalProps> = ({ visible,
                     </View>
                 </View>
             </ScrollView>
+
+            {/* MODALE DE PARTAGE */}
+            <ShareModal 
+                visible={isShareModalVisible}
+                onClose={() => setShareModalVisible(false)}
+                drawing={drawing}
+            />
         </View>
     </Modal>
   );
@@ -387,7 +405,19 @@ const styles = StyleSheet.create({
       color: '#FFF',
       letterSpacing: -0.5, 
       textAlign: 'center',
-      maxWidth: '80%' 
+      maxWidth: '70%' 
+  },
+  iconBtnLeft: {
+      position: 'absolute',
+      left: 0,
+      top: 5,
+      padding: 5
+  },
+  iconBtnRight: { 
+      position: 'absolute',
+      right: 0,
+      top: 5,
+      padding: 5 
   },
   moreBtnAbsolute: { 
       position: 'absolute',
