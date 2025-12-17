@@ -127,16 +127,23 @@ export const ShareModal: React.FC<ShareModalProps> = ({ visible, onClose, drawin
                                         dialogTitle: 'Partager mon dessin Sunbim',
                                         UTI: 'public.movie' // Pour iOS
                                     });
+                                    // Une fois le partage terminé (ou la feuille de partage fermée), on ferme la modale
+                                    // Note : shareAsync attend la fin de l'action sur certaines plateformes, mais pas toujours sur d'autres.
+                                    // On ferme la modale juste après pour revenir au feed.
+                                    onClose();
                                 } else {
                                     Alert.alert("Erreur", "Le partage n'est pas disponible sur cet appareil");
+                                    onClose();
                                 }
+                            } else {
+                                // Pas d'URL de sortie, on ferme quand même
+                                onClose();
                             }
                             
-                            // Fermer la modale après l'action de partage (optionnel)
-                            // onClose(); 
                         } catch (e) {
                             console.warn("Erreur arrêt enregistrement:", e);
                             Alert.alert("Erreur", "Impossible d'enregistrer la vidéo");
+                            onClose();
                         }
                     }, DRAWING_ANIMATION_DURATION + RECORDING_END_BUFFER);
 
@@ -224,8 +231,8 @@ export const ShareModal: React.FC<ShareModalProps> = ({ visible, onClose, drawin
                 </View>
 
                 {/* 3. HEADER "nyola" STYLE SUNBIMHEADER */}
-                {/* Positionné dynamiquement au-dessus de l'image mais descendu */}
-                <View style={[styles.headerBar, { top: geometry.topPosition - 80 }]}>
+                {/* Positionné dynamiquement au-dessus de l'image mais descendu encore plus bas (100px au lieu de 80px) */}
+                <View style={[styles.headerBar, { top: geometry.topPosition - 100 }]}>
                     <View style={styles.titleContainer}>
                         <Text style={styles.headerText}>nyola</Text>
                         <Text style={styles.headerSubtitle}>And you, what do you see ?</Text>
@@ -239,7 +246,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({ visible, onClose, drawin
                         {drawing.label || "Sans titre"}
                     </Text>
                     <Text style={styles.authorName}>
-                        {author?.display_name || "Anonyme"}
+                        by {author?.display_name || "Anonyme"}
                     </Text>
                 </View>
 
