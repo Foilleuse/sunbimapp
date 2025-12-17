@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { View, StyleSheet, Modal, Dimensions, TouchableOpacity, PixelRatio } from 'react-native';
+import React, { useMemo, useState, useEffect } from 'react';
+import { View, StyleSheet, Modal, Dimensions, TouchableOpacity, PixelRatio, Pressable, ScrollView } from 'react-native';
 import { Canvas, Rect, LinearGradient as SkiaGradient, vec, useImage, Image as SkiaImage, Group, Blur, Mask, Paint } from "@shopify/react-native-skia";
 import { X } from 'lucide-react-native';
 import { DrawingViewer } from './DrawingViewer';
@@ -12,7 +12,6 @@ interface ShareModalProps {
 }
 
 // --- COMPOSANT BACKGROUND : MIROIR + FLOU + FONDU ÉTENDU ---
-// Identique à celui du feed pour garantir la cohérence visuelle
 const MirroredBackground = ({ uri, width, height, top }: { uri: string, width: number, height: number, top: number }) => {
     const image = useImage(uri);
     
@@ -21,7 +20,6 @@ const MirroredBackground = ({ uri, width, height, top }: { uri: string, width: n
     const bottom = top + height;
     const BLUR_RADIUS = 25; 
 
-    // 🔥 CORRECTION BORDS BLANCS
     const EXTRA_WIDTH = 100;
     const bgWidth = width + EXTRA_WIDTH;
     const bgX = -EXTRA_WIDTH / 2;
@@ -63,47 +61,28 @@ const MirroredBackground = ({ uri, width, height, top }: { uri: string, width: n
 
 export const ShareModal: React.FC<ShareModalProps> = ({ visible, onClose, drawing }) => {
     const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+    const [animationReady, setAnimationReady] = useState(false);
 
-    // Calcul des dimensions pour l'image centrale en respectant le ratio 3:4 (comme sur le feed)
-    // On veut qu'elle soit aussi grande que possible, mais sans dépasser l'écran.
-    const { viewerWidth, viewerHeight } = useMemo(() => {
-        // Ratio cible 3:4 (largeur / hauteur)
-        const targetRatio = 3 / 4; 
-        
-        // On part de la largeur maximale possible (largeur écran)
-        let w = screenWidth;
-        // On calcule la hauteur théorique correspondant à cette largeur pour respecter le ratio 3:4
-        let h = w / targetRatio; // = w * (4/3)
-
-        // Si la hauteur calculée dépasse la hauteur de l'écran, on est contraint par la hauteur.
-        // On ajuste alors la hauteur à la hauteur de l'écran, et on recalcule la largeur.
-        if (h > screenHeight) {
-            h = screenHeight;
-            w = h * targetRatio;
+    // Initialisation de l'animation comme dans DrawingDetailModal
+    useEffect(() => {
+        if (visible && drawing) {
+            setAnimationReady(false);
+            const timer = setTimeout(() => {
+                setAnimationReady(true);
+            }, 500); 
+            return () => clearTimeout(timer);
+        } else {
+            setAnimationReady(false);
         }
+    }, [visible, drawing]);
 
-        // On arrondit pour éviter les demi-pixels
-        return { viewerWidth: Math.floor(w), viewerHeight: Math.floor(h) };
-    }, [screenWidth, screenHeight]);
-
-
-    // Optimisation de l'image de fond (plein écran)
-    const backgroundUri = useMemo(() => {
+    // Optimisation de l'image de fond et centrale
+    const optimizedModalImageUri = useMemo(() => {
         if (!drawing?.cloud_image_url) return null;
         const w = Math.round(screenWidth * PixelRatio.get());
-        // On prend une hauteur arbitraire assez grande pour le fond flouté, ou screenHeight
-        const h = Math.round(screenHeight * PixelRatio.get()); 
+        const h = Math.round(w * (4/3));
         return getOptimizedImageUrl(drawing.cloud_image_url, w, h);
-    }, [drawing?.cloud_image_url, screenWidth, screenHeight]);
-
-    // Optimisation de l'image centrale (format 3:4 exact)
-    const centerImageUri = useMemo(() => {
-        if (!drawing?.cloud_image_url) return null;
-        const w = Math.round(viewerWidth * PixelRatio.get());
-        const h = Math.round(viewerHeight * PixelRatio.get());
-        return getOptimizedImageUrl(drawing.cloud_image_url, w, h);
-    }, [drawing?.cloud_image_url, viewerWidth, viewerHeight]);
-
+    }, [drawing, screenWidth]);
 
     if (!drawing) return null;
 
@@ -111,70 +90,63 @@ export const ShareModal: React.FC<ShareModalProps> = ({ visible, onClose, drawin
         <Modal
             visible={visible}
             animationType="fade"
-            transparent={false} // Fond opaque (noir par défaut dans le style container)
+            transparent={false}
             onRequestClose={onClose}
             statusBarTranslucent={true}
         >
-            <View style={styles.container}>
-                {/* 1. Background étendu sur tout l'écran (flouté via MirroredBackground) */}
-                {drawing.cloud_image_url && (
-                    <MirroredBackground 
-                        uri={backgroundUri || drawing.cloud_image_url}
-                        width={screenWidth}
-                        height={screenHeight} 
-                        top={0} 
-                    />
-                )}
+            <View style={styles.modalContainer}>
+                
+                {/* FOND MIROIR GLOBAL */}
+                <MirroredBackground 
+                    uri={optimizedModalImageUri || drawing.cloud_image_url}
+                    width={screenWidth}
+                    height={screenWidth * (4/3)}
+                    top={60} 
+                />
 
-                {/* 2. Zone de dessin centrée (Image nette + Dessin) */}
-                <View style={styles.centeredContent}>
-                    {/* Conteneur avec taille explicite 3:4 */}
-                    <View style={{ width: viewerWidth, height: viewerHeight, overflow: 'hidden' }}>
-                        <DrawingViewer
-                            imageUri={centerImageUri || drawing.cloud_image_url}
-                            canvasData={drawing.canvas_data}
-                            viewerSize={viewerWidth}
-                            viewerHeight={viewerHeight}
-                            transparentMode={false} // 🔥 CORRECTION : false pour afficher l'image du nuage dans le viewer (cadre net)
-                            // Si transparentMode est true, on verrait à travers, donc le flou derrière (pas ce qu'on veut pour le cadre central)
-                            // En mettant false, DrawingViewer affiche l'imageUri en fond, créant le cadre net 3:4.
-                            animated={true}
-                            startVisible={false}
-                            autoCenter={false}
-                        />
-                    </View>
-                </View>
-
-                {/* Bouton fermeture discret */}
-                <TouchableOpacity 
-                    style={styles.closeBtn} 
-                    onPress={onClose}
-                    hitSlop={20}
+                <ScrollView 
+                    contentContainerStyle={{ flexGrow: 1, alignItems: 'center' }}
+                    showsVerticalScrollIndicator={false}
                 >
-                    <X color="rgba(255,255,255,0.6)" size={32} />
-                </TouchableOpacity>
+                    {/* Header avec bouton fermer - Hauteur fixe 60 pour alignement */}
+                    <View style={[styles.header, { height: 60, paddingVertical: 0, paddingTop: 10, paddingHorizontal: 15, backgroundColor: 'transparent', width: '100%', justifyContent: 'center' }]}> 
+                        <TouchableOpacity onPress={onClose} style={styles.closeBtnTransparent} hitSlop={15}>
+                            <X color="#FFF" size={28} />
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* Zone Image + Dessin */}
+                    <View style={{ width: screenWidth, alignItems: 'center' }}> 
+                        <View style={{ width: screenWidth, aspectRatio: 3/4, backgroundColor: 'transparent', marginTop: 0 }}>
+                            <View style={{ flex: 1 }}>
+                                {animationReady ? (
+                                    <DrawingViewer
+                                        imageUri={optimizedModalImageUri || drawing.cloud_image_url} 
+                                        canvasData={drawing.canvas_data}
+                                        viewerSize={screenWidth} 
+                                        viewerHeight={screenWidth * (4/3)} 
+                                        transparentMode={true} 
+                                        startVisible={false} 
+                                        animated={true}
+                                        autoCenter={false} 
+                                    />
+                                ) : (
+                                    <View style={{ width: '100%', height: '100%' }} /> 
+                                )}
+                            </View>
+                        </View>
+                    </View>
+
+                    {/* Pas d'infoCard ni de réactions ici, juste l'image pure */}
+                    
+                </ScrollView>
             </View>
         </Modal>
     );
 };
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: 'black',
-    },
-    centeredContent: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    closeBtn: {
-        position: 'absolute',
-        top: 60, // Ajusté pour safe area environ
-        right: 20,
-        zIndex: 100,
-        padding: 10,
-        backgroundColor: 'rgba(0,0,0,0.3)',
-        borderRadius: 25,
-    }
+  modalContainer: { flex: 1, backgroundColor: '#000' }, // Fond noir par défaut
+  header: { alignItems: 'flex-end', borderBottomWidth: 0, borderColor: '#eee' }, 
+  closeBtnTransparent: { padding: 5, backgroundColor: 'transparent' },
 });
