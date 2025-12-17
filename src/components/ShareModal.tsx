@@ -1,9 +1,9 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { View, StyleSheet, Modal, Dimensions, PixelRatio, StatusBar, Text, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, Modal, Dimensions, PixelRatio, StatusBar, Text } from 'react-native';
 import { Canvas, Rect, LinearGradient as SkiaGradient, vec, useImage, Image as SkiaImage, Group, Blur, Mask, Paint } from "@shopify/react-native-skia";
 import { DrawingViewer } from './DrawingViewer';
 import { getOptimizedImageUrl } from '../utils/imageOptimizer';
-import { X } from 'lucide-react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 interface ShareModalProps {
     visible: boolean;
@@ -76,13 +76,23 @@ export const ShareModal: React.FC<ShareModalProps> = ({ visible, onClose, drawin
         }
     }, [visible, drawing]);
 
-    // Optimisation de l'image de fond et centrale
+    // Calculs de géométrie pour alignement parfait
+    const geometry = useMemo(() => {
+        const imgWidth = screenWidth;
+        const imgHeight = screenWidth * (4/3);
+        // Centrage vertical exact
+        const topPosition = (screenHeight - imgHeight) / 2;
+        
+        return { imgWidth, imgHeight, topPosition };
+    }, [screenWidth, screenHeight]);
+
+    // Optimisation de l'image
     const optimizedModalImageUri = useMemo(() => {
         if (!drawing?.cloud_image_url) return null;
-        const w = Math.round(screenWidth * PixelRatio.get());
-        const h = Math.round(w * (4/3));
+        const w = Math.round(geometry.imgWidth * PixelRatio.get());
+        const h = Math.round(geometry.imgHeight * PixelRatio.get());
         return getOptimizedImageUrl(drawing.cloud_image_url, w, h);
-    }, [drawing, screenWidth]);
+    }, [drawing, geometry]);
 
     const author = drawing?.users;
 
@@ -96,62 +106,60 @@ export const ShareModal: React.FC<ShareModalProps> = ({ visible, onClose, drawin
             onRequestClose={onClose}
             statusBarTranslucent={true}
         >
-            {/* Masque la barre de statut */}
             <StatusBar hidden={true} />
             
             <View style={styles.modalContainer}>
                 
-                {/* FOND MIROIR GLOBAL */}
+                {/* 1. BACKGROUND MIROIR (Positionné via `top`) */}
                 <MirroredBackground 
                     uri={optimizedModalImageUri || drawing.cloud_image_url}
-                    width={screenWidth}
-                    height={screenWidth * (4/3)}
-                    top={(screenHeight - (screenWidth * (4/3))) / 2} 
+                    width={geometry.imgWidth}
+                    height={geometry.imgHeight}
+                    top={geometry.topPosition} 
                 />
 
-                {/* Contenu centré */}
-                <View style={styles.centeredContent}>
-                    {/* Zone Image + Dessin */}
-                    <View style={{ width: screenWidth, alignItems: 'center' }}> 
-                        <View style={{ width: screenWidth, aspectRatio: 3/4, backgroundColor: 'transparent' }}>
-                            <View style={{ flex: 1 }}>
-                                {animationReady ? (
-                                    <DrawingViewer
-                                        imageUri={optimizedModalImageUri || drawing.cloud_image_url} 
-                                        canvasData={drawing.canvas_data}
-                                        viewerSize={screenWidth} 
-                                        viewerHeight={screenWidth * (4/3)} 
-                                        transparentMode={true} 
-                                        startVisible={false} 
-                                        animated={true}
-                                        autoCenter={false} 
-                                    />
-                                ) : (
-                                    <View style={{ width: '100%', height: '100%' }} /> 
-                                )}
-                            </View>
-                        </View>
-                    </View>
-
-                    {/* INFOS DU DESSIN (Titre + Auteur) PLACÉES JUSTE SOUS LA PHOTO */}
-                    <View style={styles.infoContainer}>
-                        <Text style={styles.drawingTitle} numberOfLines={1}>
-                            {drawing.label || "Sans titre"}
-                        </Text>
-                        <Text style={styles.authorName}>
-                            {author?.display_name || "Anonyme"}
-                        </Text>
-                    </View>
+                {/* 2. DESSIN/PHOTO (Positionné absolument au même endroit que le background pour alignement) */}
+                <View style={[styles.drawingLayer, { 
+                    top: geometry.topPosition, 
+                    width: geometry.imgWidth, 
+                    height: geometry.imgHeight 
+                }]}>
+                    {animationReady ? (
+                        <DrawingViewer
+                            imageUri={optimizedModalImageUri || drawing.cloud_image_url} 
+                            canvasData={drawing.canvas_data}
+                            viewerSize={geometry.imgWidth} 
+                            viewerHeight={geometry.imgHeight} 
+                            transparentMode={true} 
+                            startVisible={false} 
+                            animated={true}
+                            autoCenter={false} 
+                        />
+                    ) : (
+                        // Placeholder transparent pendant le délai
+                        <View style={{ width: '100%', height: '100%' }} /> 
+                    )}
                 </View>
 
-                {/* Bouton fermeture discret */}
-                <TouchableOpacity 
-                    style={styles.closeBtn} 
-                    onPress={onClose}
-                    hitSlop={20}
-                >
-                    <X color="rgba(255,255,255,0.6)" size={32} />
-                </TouchableOpacity>
+                {/* 3. HEADER "NYOLA" (Positionné en haut comme sur le feed) */}
+                <SafeAreaView style={styles.headerContainer} edges={['top']}>
+                    <View style={styles.headerContent}>
+                        {/* Espace vide à gauche pour équilibrer si nécessaire */}
+                        <View style={{ width: 40 }} />
+                        <Text style={styles.headerTitle}>Nyola</Text>
+                        <View style={{ width: 40 }} />
+                    </View>
+                </SafeAreaView>
+
+                {/* 4. INFOS (Sous la photo) */}
+                <View style={[styles.infoContainer, { top: geometry.topPosition + geometry.imgHeight + 20 }]}>
+                    <Text style={styles.drawingTitle} numberOfLines={1}>
+                        {drawing.label || "Sans titre"}
+                    </Text>
+                    <Text style={styles.authorName}>
+                        {author?.display_name || "Anonyme"}
+                    </Text>
+                </View>
 
             </View>
         </Modal>
@@ -162,20 +170,40 @@ const styles = StyleSheet.create({
   modalContainer: { 
       flex: 1, 
       backgroundColor: '#000',
-      justifyContent: 'center', 
-      alignItems: 'center'      
   },
-  centeredContent: {
-      width: '100%',
-      justifyContent: 'center',
-      alignItems: 'center',
+  drawingLayer: {
+      position: 'absolute',
+      left: 0,
+      // Top, Width, Height sont définis dynamiquement
   },
-  // Style ajusté pour placer les infos sous la photo avec un espace
-  infoContainer: {
-      marginTop: 20, // Espace sous la photo
+  headerContainer: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      zIndex: 20,
+  },
+  headerContent: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
       alignItems: 'center',
       paddingHorizontal: 20,
+      paddingVertical: 10, // Similaire au feed
+  },
+  headerTitle: {
+      fontSize: 28,
+      fontWeight: '900',
+      color: '#FFF',
+      letterSpacing: -1,
+      textShadowColor: 'rgba(0,0,0,0.3)',
+      textShadowOffset: { width: 0, height: 2 },
+      textShadowRadius: 4,
+  },
+  infoContainer: {
+      position: 'absolute',
       width: '100%',
+      alignItems: 'center',
+      paddingHorizontal: 20,
   },
   drawingTitle: { 
       fontSize: 26, 
@@ -195,14 +223,5 @@ const styles = StyleSheet.create({
       textShadowColor: 'rgba(0,0,0,0.5)',
       textShadowOffset: { width: 0, height: 1 },
       textShadowRadius: 2,
-  },
-  closeBtn: {
-      position: 'absolute',
-      top: 60, // Ajusté pour safe area environ
-      right: 20,
-      zIndex: 100,
-      padding: 10,
-      backgroundColor: 'rgba(0,0,0,0.3)',
-      borderRadius: 25,
   }
 });
