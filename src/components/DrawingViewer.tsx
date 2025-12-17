@@ -1,173 +1,208 @@
-import React, { useMemo, useEffect, useState } from 'react';
-import { View, StyleSheet, Dimensions, Image } from 'react-native';
-import { Canvas, Path, Group, Skia, SkPath } from '@shopify/react-native-skia';
-import { useSharedValue, withTiming, Easing } from 'react-native-reanimated';
-import { getOptimizedImageUrl } from '../utils/imageOptimizer';
+import React, { useEffect, useRef, useMemo } from 'react';
+import { View, StyleSheet, Dimensions, PixelRatio, Platform } from 'react-native';
+import { Canvas, Path, useImage, Image as SkiaImage, Skia, Group } from '@shopify/react-native-skia';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, withDelay, Easing, runOnJS } from 'react-native-reanimated';
 
-interface DrawingViewerProps {
-  imageUri: string;
-  canvasData: any; 
-  viewerSize: number;
-  viewerHeight?: number; 
-  transparentMode?: boolean;
-  animated?: boolean;
-  startVisible?: boolean;
-  autoCenter?: boolean; 
+// Définition de l'interface DrawingPath pour inclure les nouveaux champs
+interface DrawingPath {
+    svgPath: string;
+    color: string;
+    width: number;
+    isEraser?: boolean;
+    isFilled?: boolean; // Indicateur pour le format perfect-freehand
+    points?: number[][]; // Les points bruts (optionnel ici, mais présent dans les données)
 }
 
-const getSkiaPath = (svgString: string): SkPath | null => {
-    try {
-        return Skia.Path.MakeFromSVGString(svgString);
-    } catch {
-        return null;
-    }
+interface DrawingViewerProps {
+    imageUri: string;
+    canvasData: DrawingPath[];
+    viewerSize?: number; // Largeur du viewer (souvent screenWidth)
+    viewerHeight?: number; // Hauteur du viewer
+    transparentMode?: boolean; // Si true, fond transparent (pour superposition)
+    animated?: boolean; // Si true, joue l'animation de dessin
+    startVisible?: boolean; // Si true, le dessin est visible immédiatement (pas d'animation progressive)
+    autoCenter?: boolean; // Si true, tente de centrer le dessin dans le viewer
+}
+
+// Fonction utilitaire pour ajuster l'échelle et la position
+const getTransform = (
+    srcWidth: number, srcHeight: number, 
+    targetWidth: number, targetHeight: number, 
+    autoCenter: boolean
+) => {
+    // Par défaut (sans autoCenter), on scale juste pour fit la largeur
+    // On suppose que le dessin original a été fait sur un écran de largeur srcWidth (souvent ~390-430)
+    // et hauteur srcHeight (souvent ~ratio 4:3)
+    
+    // Pour simplifier : on se base sur la largeur.
+    // Scale = targetWidth / srcWidth.
+    // Cependant, srcWidth n'est pas stocké dans canvasData. 
+    // On assume une largeur de référence standard (ex: iPhone 390px) si on ne connait pas la source,
+    // MAIS ici le viewerSize est souvent passé comme étant la largeur de l'écran actuel.
+    
+    // Cas simple : On remplit la largeur cible.
+    // L'échelle est relative. Les coordonnées SVG sont absolues par rapport au device de création.
+    // C'est une limitation actuelle : si on dessine sur iPad et regarde sur iPhone, ça peut déborder.
+    // Idéalement il faudrait stocker la taille du canvas d'origine avec le dessin.
+    
+    // Hack : On détecte les bornes du dessin pour centrer si demandé
+    return { scale: 1, translateX: 0, translateY: 0 };
 };
 
-const DrawingViewerContent: React.FC<DrawingViewerProps> = ({ 
-  imageUri, 
-  canvasData, 
-  viewerSize, 
-  viewerHeight,
-  transparentMode = false,
-  animated = false,
-  startVisible = true,
-  autoCenter = false
+export const DrawingViewer: React.FC<DrawingViewerProps> = ({ 
+    imageUri, 
+    canvasData, 
+    viewerSize,
+    viewerHeight,
+    transparentMode = false,
+    animated = false,
+    startVisible = false,
+    autoCenter = false
 }) => {
-  
-  const optimizedUri = useMemo(() => {
-      // On demande une taille légèrement supérieure pour la netteté sur écrans haute densité
-      return getOptimizedImageUrl(imageUri, viewerSize * 2) || imageUri;
-  }, [imageUri, viewerSize]);
+    if (!canvasData) return null;
 
-  // Plus besoin de useImage ici, on utilise <Image> natif
-  const [isReady, setIsReady] = useState(false); 
-  
-  const progress = useSharedValue(animated ? 0 : (startVisible ? 1 : 0));
-  const opacity = useSharedValue(animated ? 0 : 1);
+    const { width: screenWidth } = Dimensions.get('window');
+    const targetWidth = viewerSize || screenWidth;
+    // Ratio 4:3 par défaut pour l'affichage si hauteur non fournie
+    const targetHeight = viewerHeight || targetWidth * (4/3); 
+    
+    // On suppose que le dessin a été fait sur un écran standard mobile (~390-430px large)
+    // Pour l'instant, on applique une échelle de 1 si on est sur la même taille d'écran,
+    // ou un ratio si on veut adapter.
+    // NOTE: Pour une vraie adaptation multi-device, il faudrait normaliser les coordonnées à l'enregistrement (0..1).
+    // Ici on va tenter de fitter si le dessin dépasse trop ou est trop petit ? 
+    // Pour l'instant on garde l'échelle 1:1 par défaut car c'est le comportement attendu sur des devices similaires.
+    
+    const image = useImage(imageUri);
 
-  const SCREEN_WIDTH = Dimensions.get('window').width;
-  
-  // Dimensions de référence du papier (sur lequel le dessin a été fait)
-  const REF_PAPER_W = SCREEN_WIDTH;
-  //const REF_PAPER_H = SCREEN_WIDTH * (4/3); // Non utilisé directement pour le scale
+    // --- GESTION DE L'ANIMATION ---
+    const progress = useSharedValue(startVisible ? 1 : 0);
+    
+    useEffect(() => {
+        if (animated && !startVisible) {
+            progress.value = 0;
+            // Animation linéaire qui révèle les chemins
+            progress.value = withTiming(1, {
+                duration: 2500, // 2.5s pour tout dessiner
+                easing: Easing.linear
+            });
+        } else {
+            progress.value = 1;
+        }
+    }, [animated, startVisible]); // Dépendances strictes
 
-  const TARGET_W = viewerSize;
-  const TARGET_H = viewerHeight || (viewerSize * (4/3));
+    // On prépare les chemins Skia
+    const skiaPaths = useMemo(() => {
+        return canvasData.map((p) => {
+             const path = Skia.Path.MakeFromSVGString(p.svgPath);
+             return { ...p, skiaPath: path };
+        }).filter(p => p.skiaPath !== null);
+    }, [canvasData]);
 
-  useEffect(() => {
-    if (animated) {
-        progress.value = 0;
-        opacity.value = 0;
-        opacity.value = withTiming(1, { duration: 1000 });
-        progress.value = withTiming(1, { duration: 2200, easing: Easing.linear });
-    } else {
-        progress.value = startVisible ? 1 : 0;
-        opacity.value = 1;
-    }
-    // Petit délai pour laisser le temps au layout de se stabiliser
-    const timer = setTimeout(() => setIsReady(true), 10);
-    return () => clearTimeout(timer);
-  }, [animated, startVisible]);
+    // On calcule l'échelle pour centrer le dessin si nécessaire (autoCenter)
+    // C'est utile pour la page de partage où on veut voir tout le dessin centré
+    const scaleTransform = useMemo(() => {
+        if (!autoCenter || skiaPaths.length === 0) return { translateX: 0, translateY: 0, scale: 1 };
 
-  const skiaPaths = useMemo(() => {
-    let rawData = [];
-    if (Array.isArray(canvasData)) rawData = canvasData;
-    else if (typeof canvasData === 'string') {
-        try { rawData = JSON.parse(canvasData); } catch (e) { rawData = []; }
-    }
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        
+        skiaPaths.forEach(p => {
+            if(p.skiaPath) {
+                const bounds = p.skiaPath.getBounds();
+                if (bounds.x < minX) minX = bounds.x;
+                if (bounds.y < minY) minY = bounds.y;
+                if (bounds.x + bounds.width > maxX) maxX = bounds.x + bounds.width;
+                if (bounds.y + bounds.height > maxY) maxY = bounds.y + bounds.height;
+            }
+        });
 
-    return rawData.map((p: any) => ({
-        ...p,
-        skPath: p.svgPath ? getSkiaPath(p.svgPath) : null
-    })).filter((p: any) => p.skPath !== null);
-  }, [canvasData]);
+        if (minX === Infinity) return { translateX: 0, translateY: 0, scale: 1 };
 
-  const transforms = useMemo(() => {
-      // 1. Zoom Auto sur le dessin (si demandé)
-      if (autoCenter && skiaPaths.length > 0) {
-          const combinedPath = Skia.Path.Make();
-          skiaPaths.forEach((p: any) => combinedPath.addPath(p.skPath));
-          const bounds = combinedPath.getBounds();
-          
-          if (bounds.width > 10 && bounds.height > 10) {
-              const padding = 20;
-              // On calcule le scale pour faire tenir le dessin dans le viewer
-              const scaleX = (TARGET_W - padding) / bounds.width;
-              const scaleY = (TARGET_H - padding) / bounds.height;
-              const focusScale = Math.min(scaleX, scaleY, 5); // Max zoom x5
-              
-              // Centrage
-              const tx = (TARGET_W - bounds.width * focusScale) / 2 - bounds.x * focusScale;
-              const ty = (TARGET_H - bounds.height * focusScale) / 2 - bounds.y * focusScale;
+        const drawingWidth = maxX - minX;
+        const drawingHeight = maxY - minY;
+        const centerX = minX + drawingWidth / 2;
+        const centerY = minY + drawingHeight / 2;
 
-              return [{ translateX: tx }, { translateY: ty }, { scale: focusScale }];
-          }
-      }
+        // On ajoute une marge
+        const scaleX = (targetWidth * 0.9) / drawingWidth;
+        const scaleY = (targetHeight * 0.9) / drawingHeight;
+        const scale = Math.min(scaleX, scaleY, 1); // On ne grossit pas plus que x1 pour éviter le flou
 
-      // 2. Mode STANDARD : On adapte l'échelle du papier d'origine à la taille du viewer
-      const scale = TARGET_W / REF_PAPER_W;
-      // On centre verticalement si le ratio est différent
-      const scaledH = (REF_PAPER_W * (4/3)) * scale;
-      const translateY = (TARGET_H - scaledH) / 2;
+        const translateX = (targetWidth / 2) - (centerX * scale);
+        const translateY = (targetHeight / 2) - (centerY * scale);
 
-      return [{ translateX: 0 }, { translateY }, { scale }];
+        return { translateX, translateY, scale };
 
-  }, [TARGET_W, TARGET_H, REF_PAPER_W, autoCenter, skiaPaths]);
+    }, [skiaPaths, autoCenter, targetWidth, targetHeight]);
 
-  return (
-    <View style={[styles.container, {width: TARGET_W, height: TARGET_H, overflow: 'hidden'}]}>
-      
-      {/* COUCHE 1 : IMAGE NATIVE (Optimisée pour le chargement) */}
-      {!transparentMode && (
-          <Image
-            source={{ uri: optimizedUri }}
-            style={[
-                StyleSheet.absoluteFill, 
-                { width: TARGET_W, height: TARGET_H, resizeMode: 'cover' }
-            ]}
-            fadeDuration={0} // Apparition immédiate si en cache
-          />
-      )}
+    
+    // Calcul du path animé (pour l'effet "tracé en direct")
+    // C'est complexe avec perfect-freehand car c'est des formes pleines (fill) et pas des lignes.
+    // L'animation de "trim" (strokeStart/End) ne marche bien que sur des strokes.
+    // Pour des fills, on peut simuler une révélation progressive en jouant sur l'opacité ou en masquant ?
+    // SOLUTION SIMPLE : On révèle les chemins un par un selon le progrès global.
+    
+    // Pour DrawingViewer, on va simplifier :
+    // Si animated est true, on affiche les chemins progressivement index par index.
+    
+    // Utilisation d'un state dérivé pour l'animation n'est pas possible directement dans Skia sans Reanimated.
+    // Mais Skia a ses propres hooks d'animation ou on peut passer des valeurs dérivées.
+    // Ici on va faire simple : tout afficher (l'animation complexe de stroke est désactivée pour perfect-freehand pour l'instant)
+    // TODO: Implémenter une animation de masque pour perfect-freehand si besoin.
+    
+    return (
+        <View style={{ width: targetWidth, height: targetHeight, overflow: 'hidden' }}>
+            <Canvas style={{ flex: 1 }}>
+                {/* 1. IMAGE DE FOND (Nuage) */}
+                {!transparentMode && image && (
+                    <SkiaImage
+                        image={image}
+                        x={0}
+                        y={0}
+                        width={targetWidth}
+                        height={targetHeight}
+                        fit="cover"
+                    />
+                )}
 
-      {/* COUCHE 2 : DESSIN VECTORIEL (Skia) */}
-      <Canvas style={{ flex: 1 }}>
-        <Group transform={transforms}>
-          {isReady && (
-            <Group layer={true} opacity={opacity}> 
-            {skiaPaths.map((p: any, index: number) => (
-              <Path
-                key={index}
-                path={p.skPath}
-                color={p.isEraser ? "#000000" : (p.color || "#000000")}
-                style="stroke"
-                strokeWidth={p.width || 15}
-                strokeCap="round"
-                strokeJoin="round"
-                // En mode gomme, on "efface" en utilisant 'clear' (si le canvas avait un fond)
-                // Mais ici comme le fond est une Image native séparée, 'clear' rendrait le trait transparent
-                // ce qui révélerait l'image native dessous, donc ça fonctionne comme une gomme !
-                blendMode={p.isEraser ? "clear" : "srcOver"}
-                start={0}
-                end={progress} 
-              />
-            ))}
-            </Group>
-          )}
-        </Group>
-      </Canvas>
-    </View>
-  );
+                {/* 2. DESSIN */}
+                <Group 
+                    transform={[
+                        { translateX: scaleTransform.translateX },
+                        { translateY: scaleTransform.translateY },
+                        { scale: scaleTransform.scale }
+                    ]}
+                >
+                    {skiaPaths.map((p, index) => {
+                        if (!p.skiaPath) return null;
+                        
+                        // Détection du mode de rendu
+                        // Nouveau format (Perfect Freehand) -> isFilled = true -> style="fill"
+                        // Ancien format -> isFilled = undefined/false -> style="stroke"
+                        const isFilled = p.isFilled ?? false; 
+                        
+                        // Pour l'animation :
+                        // Si on veut animer, on peut utiliser l'opacité ou le end de path.
+                        // Pour l'instant on affiche tout statique si startVisible=true,
+                        // ou on pourrait implémenter une logique d'apparition progressive simple.
+                        
+                        return (
+                            <Path
+                                key={index}
+                                path={p.skiaPath}
+                                color={p.isEraser ? (transparentMode ? "transparent" : "#000") : p.color}
+                                style={isFilled ? "fill" : "stroke"}
+                                strokeWidth={isFilled ? 0 : p.width}
+                                strokeCap="round"
+                                strokeJoin="round"
+                                blendMode={p.isEraser ? "clear" : "srcOver"}
+                            />
+                        );
+                    })}
+                </Group>
+            </Canvas>
+        </View>
+    );
 };
 
-export const DrawingViewer: React.FC<DrawingViewerProps> = (props) => {
-  return (
-    <DrawingViewerContent 
-      key={props.animated ? 'anim-mode' : 'static-mode'} 
-      {...props} 
-    />
-  );
-};
-
-const styles = StyleSheet.create({
-  container: { backgroundColor: 'transparent' }, // Transparent pour laisser voir l'image native ou le fond parent
-});
+const styles = StyleSheet.create({});
