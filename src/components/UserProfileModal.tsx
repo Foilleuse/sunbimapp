@@ -19,47 +19,64 @@ interface UserProfileModalProps {
 // Types de réactions possibles
 type ReactionType = 'like' | 'smart' | 'beautiful' | 'crazy' | null;
 
-// --- COMPOSANT BACKGROUND : MIROIR + FLOU + FONDU ÉTENDU (identique à gallery.tsx) ---
-const MirroredBackground = ({ uri, width, height, top }: { uri: string, width: number, height: number, top: number }) => {
+// --- COMPOSANT BACKGROUND : MIROIR + FLOU (AMBIANCE SEULEMENT) ---
+// Utiliser en fond fixe derrière le ScrollView
+const MirroredBackgroundBlur = ({ uri, width, height }: { uri: string, width: number, height: number }) => {
     const image = useImage(uri);
-    
     if (!image) return null;
 
-    const bottom = top + height;
     const BLUR_RADIUS = 25; 
-
     const EXTRA_WIDTH = 100;
     const bgWidth = width + EXTRA_WIDTH;
     const bgX = -EXTRA_WIDTH / 2;
+    // On remplit tout l'écran en hauteur
+    const top = 0; 
 
     return (
         <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
             <Group layer={<Paint><Blur blur={BLUR_RADIUS} /></Paint>}>
+                {/* Image centrale étendue (floue) */}
                 <SkiaImage image={image} x={bgX} y={top} width={bgWidth} height={height} fit="cover" />
+                {/* Miroirs (flous) */}
                 <Group origin={vec(width / 2, top)} transform={[{ scaleY: -1 }]}>
                     <SkiaImage image={image} x={bgX} y={top} width={bgWidth} height={height} fit="cover" />
                 </Group>
-                <Group origin={vec(width / 2, bottom)} transform={[{ scaleY: -1 }]}>
+                <Group origin={vec(width / 2, height)} transform={[{ scaleY: -1 }]}>
                     <SkiaImage image={image} x={bgX} y={top} width={bgWidth} height={height} fit="cover" />
                 </Group>
             </Group>
+            {/* Voile noir léger pour uniformiser */}
+            <Rect x={0} y={0} width={width} height={height} color="rgba(0,0,0,0.3)" />
+        </Canvas>
+    );
+};
 
+// --- COMPOSANT IMAGE NETTE AVEC MASQUE (DÉGRADÉ HAUT/BAS) ---
+// Utiliser DANS le ScrollView pour l'image principale
+const MaskedImage = ({ uri, width, height }: { uri: string, width: number, height: number }) => {
+    const image = useImage(uri);
+    if (!image) return null;
+
+    return (
+        <Canvas style={{ width, height }} pointerEvents="none">
             <Mask
                 mode="luminance"
                 mask={
-                    <Rect x={0} y={top} width={width} height={height}>
+                    <Rect x={0} y={0} width={width} height={height}>
                         <SkiaGradient
-                            start={vec(0, top)}
-                            end={vec(0, bottom)}
+                            start={vec(0, 0)}
+                            end={vec(0, height)}
+                            // Noir = Transparent, Blanc = Visible
+                            // On crée le fondu en haut et en bas
                             colors={["black", "white", "white", "black"]}
-                            positions={[0, 0.2, 0.8, 1]}
+                            positions={[0, 0.1, 0.9, 1]} 
                         />
                     </Rect>
                 }
             >
                 <SkiaImage
                     image={image}
-                    x={0} y={top} width={width} height={height}
+                    x={0} y={0} width={width} height={height}
                     fit="cover"
                 />
             </Mask>
@@ -169,7 +186,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
   // Ajout d'un état pour retarder l'animation
   const [animationReady, setAnimationReady] = useState(false);
 
-  const { width: screenWidth } = Dimensions.get('window');
+  const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
   const SPACING = 1; 
   const NUM_COLS = 2;
   const ITEM_SIZE = (screenWidth - (SPACING * (NUM_COLS - 1))) / NUM_COLS;
@@ -578,12 +595,11 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
             <Modal visible={!!selectedDrawing} animationType="slide" presentationStyle="pageSheet" onRequestClose={closeDrawing}>
                 {selectedDrawing && (
                     <View style={styles.modalContainer}>
-                        {/* FOND MIROIR AJOUTÉ */}
-                        <MirroredBackground 
+                        {/* FOND MIROIR GLOBAL (AMBIANCE FLOUE) */}
+                        <MirroredBackgroundBlur 
                             uri={selectedDrawingImageOptimized || selectedDrawing.cloud_image_url}
                             width={screenWidth}
-                            height={screenWidth * (4/3)}
-                            top={60} 
+                            height={screenHeight}
                         />
 
                         <View style={styles.modalHeader}>
@@ -603,6 +619,19 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                                 onPressOut={() => setIsHolding(false)}
                                 style={{ width: screenWidth, aspectRatio: 3/4, backgroundColor: 'transparent', marginTop: 0 }}
                             >
+                                {/* ✅ ALIGNEMENT EXACT AVEC GALLERY : 
+                                    L'image nette est DANS le scroll view, avec son propre MaskedImage.
+                                    Le DrawingViewer transparent est par-dessus.
+                                    Ainsi, si on cache le dessin (isHolding), l'image nette masquée (dégradé) reste visible.
+                                */}
+                                <View style={StyleSheet.absoluteFill}>
+                                    <MaskedImage 
+                                        uri={selectedDrawingImageOptimized || selectedDrawing.cloud_image_url}
+                                        width={screenWidth}
+                                        height={screenWidth * (4/3)}
+                                    />
+                                </View>
+
                                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                                     {/* Animation retardée pour éviter les saccades */}
                                     {animationReady && (
@@ -611,7 +640,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                                             canvasData={isSelectedUnlocked ? selectedDrawing.canvas_data : []}
                                             viewerSize={screenWidth} 
                                             viewerHeight={screenWidth * (4/3)} 
-                                            transparentMode={false} // On affiche le fond (nuage) ici pour alignement
+                                            transparentMode={true} // ✅ IMPORTANT : Transparent pour voir le MaskedImage en dessous
                                             startVisible={false} 
                                             animated={true}
                                             autoCenter={false} 
@@ -624,7 +653,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                                             canvasData={isSelectedUnlocked ? selectedDrawing.canvas_data : []}
                                             viewerSize={screenWidth} 
                                             viewerHeight={screenWidth * (4/3)} 
-                                            transparentMode={false}
+                                            transparentMode={true} // ✅ IMPORTANT : Transparent ici aussi
                                             startVisible={true} 
                                             animated={false}
                                             autoCenter={false} 
