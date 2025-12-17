@@ -224,8 +224,8 @@ export const ShareModal: React.FC<ShareModalProps> = ({ visible, onClose, drawin
                 </View>
 
                 {/* 3. HEADER "nyola" STYLE SUNBIMHEADER */}
-                {/* Positionné dynamiquement au-dessus de l'image */}
-                <View style={[styles.headerBar, { top: geometry.topPosition - 90 }]}>
+                {/* Positionné dynamiquement au-dessus de l'image mais descendu */}
+                <View style={[styles.headerBar, { top: geometry.topPosition - 80 }]}>
                     <View style={styles.titleContainer}>
                         <Text style={styles.headerText}>nyola</Text>
                         <Text style={styles.headerSubtitle}>And you, what do you see ?</Text>
