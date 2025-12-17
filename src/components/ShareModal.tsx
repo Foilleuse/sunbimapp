@@ -1,9 +1,10 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { View, StyleSheet, Modal, Dimensions, PixelRatio, StatusBar, Text } from 'react-native';
+import { View, StyleSheet, Modal, Dimensions, PixelRatio, StatusBar, Text, TouchableOpacity } from 'react-native';
 import { Canvas, Rect, LinearGradient as SkiaGradient, vec, useImage, Image as SkiaImage, Group, Blur, Mask, Paint } from "@shopify/react-native-skia";
 import { DrawingViewer } from './DrawingViewer';
 import { getOptimizedImageUrl } from '../utils/imageOptimizer';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { X } from 'lucide-react-native';
 
 interface ShareModalProps {
     visible: boolean;
@@ -141,14 +142,14 @@ export const ShareModal: React.FC<ShareModalProps> = ({ visible, onClose, drawin
                     )}
                 </View>
 
-                {/* 3. HEADER "nyola" */}
-                {/* On ajoute un padding top plus important pour descendre sous le notch */}
-                <SafeAreaView style={styles.headerContainer} edges={['top']}>
-                    <View style={styles.headerContent}>
-                        <Text style={styles.headerTitle}>nyola</Text>
+                {/* 3. HEADER "nyola" STYLE SUNBIMHEADER */}
+                {/* On garde la structure headerBar mais transparent et positionné en haut */}
+                <View style={styles.headerBar}>
+                    <View style={styles.titleContainer}>
+                        <Text style={styles.headerText}>nyola</Text>
                         <Text style={styles.headerSubtitle}>And you, what do you see ?</Text>
                     </View>
-                </SafeAreaView>
+                </View>
 
                 {/* 4. INFOS (Sous la photo) */}
                 <View style={[styles.infoContainer, { top: geometry.topPosition + geometry.imgHeight + 20 }]}>
@@ -175,38 +176,46 @@ const styles = StyleSheet.create({
       left: 0,
       // Top, Width, Height sont définis dynamiquement
   },
-  headerContainer: {
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      right: 0,
-      zIndex: 20,
-      // Padding top supplémentaire pour décoller du haut
-      paddingTop: 40,
+  // --- NOUVEAUX STYLES HEADER INSPIRÉS DE SUNBIMHEADER ---
+  headerBar: {
+    width: '100%',
+    backgroundColor: 'transparent', 
+    paddingTop: 60, // Marge top similaire au SunbimHeader
+    paddingBottom: 15,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    justifyContent: 'center', 
+    alignItems: 'center',
+    position: 'absolute', // Flottant
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 20,
   },
-  headerContent: {
+  titleContainer: {
       alignItems: 'center',
-      paddingHorizontal: 20,
   },
-  headerTitle: {
-      fontSize: 40, // Titre plus grand
-      fontWeight: '900',
-      color: '#FFF',
-      letterSpacing: -2,
-      marginBottom: 5,
-      textShadowColor: 'rgba(0,0,0,0.3)',
-      textShadowOffset: { width: 0, height: 2 },
-      textShadowRadius: 4,
+  headerText: {
+    fontSize: 32,
+    fontWeight: '900',
+    color: '#ffffffff', // Blanc comme demandé (transparent text hack ou juste blanc ?) -> Le code référence utilisait #ffffffff (blanc opaque)
+    // On garde le blanc opaque pour que ça soit visible sur le fond sombre/image
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 2, height: 2 }, 
+    textShadowRadius: 0,
+    lineHeight: 34,
   },
   headerSubtitle: {
-      fontSize: 16,
+      fontSize: 14, // Un peu plus petit que le titre
       fontWeight: '600',
-      color: 'rgba(255,255,255,0.9)',
+      color: 'rgba(255,255,255,0.7)', // Style "whiteSubText" ou similaire
+      marginTop: 2,
       fontStyle: 'italic',
-      textShadowColor: 'rgba(0,0,0,0.3)',
-      textShadowOffset: { width: 0, height: 1 },
+      textShadowColor: 'rgba(0,0,0,0.5)',
+      textShadowOffset: { width: 1, height: 1 },
       textShadowRadius: 2,
   },
+  
   infoContainer: {
       position: 'absolute',
       width: '100%',
