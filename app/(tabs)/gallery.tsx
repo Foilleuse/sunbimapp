@@ -82,7 +82,6 @@ const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color, count }: an
     return (
         <Pressable onPress={handlePress} style={styles.reactionBtn}>
             <Animated.View style={animatedStyle}>
-                {/* Icône blanche si inactive, couleur si active */}
                 <Icon
                     color={isActive ? color : "#FFF"}
                     fill={isActive ? color : "transparent"}
@@ -144,6 +143,10 @@ export default function GalleryPage() {
     
     const [selectedDrawing, setSelectedDrawing] = useState<any | null>(null);
     const [isHolding, setIsHolding] = useState(false);
+    
+    // Ajout d'un état pour retarder l'animation
+    const [animationReady, setAnimationReady] = useState(false);
+
     const [userReaction, setUserReaction] = useState<ReactionType>(null);
     const [reactionCounts, setReactionCounts] = useState({ like: 0, smart: 0, beautiful: 0, crazy: 0 });
 
@@ -226,7 +229,19 @@ export default function GalleryPage() {
 
     useEffect(() => { fetchGallery(); }, [onlyLiked, user]); 
     useFocusEffect(useCallback(() => { fetchGallery(); return () => closeViewer(); }, []));
-    useEffect(() => { if (selectedDrawing) fetchReactionsState(); }, [selectedDrawing]);
+    useEffect(() => { 
+        if (selectedDrawing) {
+            fetchReactionsState();
+            // Délai pour laisser la modale s'ouvrir avant de lancer l'animation
+            setAnimationReady(false);
+            const timer = setTimeout(() => {
+                setAnimationReady(true);
+            }, 300); // 300ms de délai
+            return () => clearTimeout(timer);
+        } else {
+            setAnimationReady(false);
+        }
+    }, [selectedDrawing]);
 
     const onRefresh = () => { setRefreshing(true); fetchGallery(); };
     const handleSearchSubmit = () => { setLoading(true); fetchGallery(); Keyboard.dismiss(); };
@@ -381,17 +396,34 @@ export default function GalleryPage() {
 
                             <Pressable onPressIn={() => setIsHolding(true)} onPressOut={() => setIsHolding(false)} style={{ width: screenWidth, aspectRatio: 3/4, backgroundColor: 'transparent', marginTop: 0 }}>
                                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
-                                    <DrawingViewer
-                                        imageUri={optimizedModalImageUri || selectedDrawing.cloud_image_url} 
-                                        canvasData={selectedDrawing.canvas_data}
-                                        viewerSize={screenWidth} 
-                                        viewerHeight={screenWidth * (4/3)}
-                                        transparentMode={true} 
-                                        startVisible={false} 
-                                        animated={true}
-                                        autoCenter={false} 
-                                    />
+                                    {/* On n'affiche le viewer que quand la modale est stable (animationReady) pour éviter les saccades */}
+                                    {animationReady && (
+                                        <DrawingViewer
+                                            imageUri={optimizedModalImageUri || selectedDrawing.cloud_image_url} 
+                                            canvasData={selectedDrawing.canvas_data}
+                                            viewerSize={screenWidth} 
+                                            viewerHeight={screenWidth * (4/3)}
+                                            transparentMode={true} 
+                                            startVisible={false} 
+                                            animated={true}
+                                            autoCenter={false} 
+                                        />
+                                    )}
+                                    {/* Pendant l'ouverture, on peut afficher l'image statique ou le viewer non animé si on veut éviter le flash */}
+                                    {!animationReady && (
+                                         <DrawingViewer
+                                            imageUri={optimizedModalImageUri || selectedDrawing.cloud_image_url} 
+                                            canvasData={selectedDrawing.canvas_data}
+                                            viewerSize={screenWidth} 
+                                            viewerHeight={screenWidth * (4/3)}
+                                            transparentMode={true} 
+                                            startVisible={true} // Affiche directement sans animation pour l'intro
+                                            animated={false}
+                                            autoCenter={false} 
+                                        />
+                                    )}
                                 </View>
+                                <Text style={styles.hintText}>Maintenir pour voir l'original</Text>
                             </Pressable>
 
                             {/* INFO CARD TRANSPARENT AVEC TEXTE BLANC */}
