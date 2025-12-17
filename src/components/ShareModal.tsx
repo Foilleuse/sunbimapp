@@ -1,8 +1,9 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { View, StyleSheet, Modal, Dimensions, PixelRatio, StatusBar } from 'react-native';
+import { View, StyleSheet, Modal, Dimensions, PixelRatio, StatusBar, Text } from 'react-native';
 import { Canvas, Rect, LinearGradient as SkiaGradient, vec, useImage, Image as SkiaImage, Group, Blur, Mask, Paint } from "@shopify/react-native-skia";
 import { DrawingViewer } from './DrawingViewer';
 import { getOptimizedImageUrl } from '../utils/imageOptimizer';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 interface ShareModalProps {
     visible: boolean;
@@ -68,7 +69,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({ visible, onClose, drawin
             setAnimationReady(false);
             const timer = setTimeout(() => {
                 setAnimationReady(true);
-            }, 1000); // Délai augmenté à 1000ms (1 seconde)
+            }, 1000); 
             return () => clearTimeout(timer);
         } else {
             setAnimationReady(false);
@@ -83,6 +84,8 @@ export const ShareModal: React.FC<ShareModalProps> = ({ visible, onClose, drawin
         return getOptimizedImageUrl(drawing.cloud_image_url, w, h);
     }, [drawing, screenWidth]);
 
+    const author = drawing?.users;
+
     if (!drawing) return null;
 
     return (
@@ -93,7 +96,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({ visible, onClose, drawin
             onRequestClose={onClose}
             statusBarTranslucent={true}
         >
-            {/* Masque la barre de statut (heure, batterie, réseau) */}
+            {/* Masque la barre de statut */}
             <StatusBar hidden={true} />
             
             <View style={styles.modalContainer}>
@@ -103,8 +106,13 @@ export const ShareModal: React.FC<ShareModalProps> = ({ visible, onClose, drawin
                     uri={optimizedModalImageUri || drawing.cloud_image_url}
                     width={screenWidth}
                     height={screenWidth * (4/3)}
-                    top={(screenHeight - (screenWidth * (4/3))) / 2} // Centrage vertical du background pour l'effet miroir
+                    top={(screenHeight - (screenWidth * (4/3))) / 2} 
                 />
+
+                {/* HEADER (Titre Nyola) */}
+                <SafeAreaView style={styles.headerContainer} edges={['top']}>
+                    <Text style={styles.headerTitle}>Sunbim</Text>
+                </SafeAreaView>
 
                 {/* Contenu centré */}
                 <View style={styles.centeredContent}>
@@ -131,6 +139,16 @@ export const ShareModal: React.FC<ShareModalProps> = ({ visible, onClose, drawin
                     </View>
                 </View>
 
+                {/* INFOS DU DESSIN (Titre + Auteur, sans boutons) */}
+                <View style={styles.infoContainer}>
+                    <Text style={styles.drawingTitle} numberOfLines={1}>
+                        {drawing.label || "Sans titre"}
+                    </Text>
+                    <Text style={styles.authorName}>
+                        {author?.display_name || "Anonyme"}
+                    </Text>
+                </View>
+
             </View>
         </Modal>
     );
@@ -140,12 +158,56 @@ const styles = StyleSheet.create({
   modalContainer: { 
       flex: 1, 
       backgroundColor: '#000',
-      justifyContent: 'center', // Centrage vertical
-      alignItems: 'center'      // Centrage horizontal
+      justifyContent: 'center', 
+      alignItems: 'center'      
+  },
+  headerContainer: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      alignItems: 'center',
+      paddingTop: 10,
+      zIndex: 10,
+  },
+  headerTitle: {
+      fontSize: 28,
+      fontWeight: '900',
+      color: '#FFF',
+      letterSpacing: -1,
+      textShadowColor: 'rgba(0,0,0,0.3)',
+      textShadowOffset: { width: 0, height: 2 },
+      textShadowRadius: 4,
   },
   centeredContent: {
       width: '100%',
       justifyContent: 'center',
       alignItems: 'center',
+  },
+  infoContainer: {
+      position: 'absolute',
+      bottom: 40,
+      alignItems: 'center',
+      paddingHorizontal: 20,
+      width: '100%',
+  },
+  drawingTitle: { 
+      fontSize: 26, 
+      fontWeight: '900', 
+      color: '#FFF', 
+      letterSpacing: -0.5, 
+      textAlign: 'center',
+      marginBottom: 5,
+      textShadowColor: 'rgba(0,0,0,0.5)',
+      textShadowOffset: { width: 0, height: 1 },
+      textShadowRadius: 2,
+  },
+  authorName: { 
+      fontSize: 16, 
+      fontWeight: '600', 
+      color: 'rgba(255,255,255,0.8)', 
+      textShadowColor: 'rgba(0,0,0,0.5)',
+      textShadowOffset: { width: 0, height: 1 },
+      textShadowRadius: 2,
   }
 });
