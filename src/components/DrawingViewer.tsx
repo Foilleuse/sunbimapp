@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useMemo, useState } from 'react';
 import { View, StyleSheet, Dimensions, PixelRatio, Platform } from 'react-native';
-import { Canvas, Path, useImage, Image as SkiaImage, Skia, Group } from '@shopify/react-native-skia';
+import { Canvas, Path, useImage, Image as SkiaImage, Skia, Group, SkPath } from '@shopify/react-native-skia';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withDelay, Easing, runOnJS, useDerivedValue, useAnimatedReaction } from 'react-native-reanimated';
 import { getStroke } from 'perfect-freehand';
 
@@ -42,39 +42,39 @@ function getSvgPathFromStroke(stroke: number[][]): string {
 
 // Composant interne pour gérer l'animation d'un chemin individuel
 const AnimatedPath = ({ pathData, index, progress, totalCount }: { pathData: DrawingPath, index: number, progress: Animated.SharedValue<number>, totalCount: number }) => {
-    const [currentPath, setCurrentPath] = useState(pathData.isFilled ? Skia.Path.MakeFromSVGString("") : Skia.Path.MakeFromSVGString(pathData.svgPath));
+    // CORRECTION CRASH : Initialisation sécurisée. On ne crée pas de Path Skia avec une string vide ou undefined.
+    const [currentPath, setCurrentPath] = useState<SkPath | null>(() => {
+        // Si c'est un chemin "filled" (nouveau format), on commence à null (l'animation le dessinera)
+        if (pathData.isFilled) return null;
+        // Si c'est un ancien format (stroke), on essaie de le charger s'il est valide
+        if (pathData.svgPath && pathData.svgPath.length > 0) {
+            return Skia.Path.MakeFromSVGString(pathData.svgPath);
+        }
+        return null;
+    });
+
     const isFilled = pathData.isFilled ?? false;
 
-    // Si c'est un trait "ancien format" (stroke simple), on utilise l'opacité
-    // Si c'est un trait "perfect-freehand" (fill), on recalcule le path
-    
     useAnimatedReaction(
         () => progress.value,
         (currentProgress) => {
             if (!pathData.points || !isFilled) return;
 
-            // Calcul de la fenêtre de temps pour ce trait spécifique
-            // Chaque trait a une portion de l'animation globale (1 / totalCount)
             const start = index / totalCount;
             const end = (index + 1) / totalCount;
             
             if (currentProgress < start) {
-                // Pas encore commencé
                 if (currentPath !== null) runOnJS(setCurrentPath)(null);
             } else if (currentProgress >= end) {
-                // Terminé -> Afficher le path final complet (optimisation)
-                // On ne recalcule plus, on met le path final SVG stocké
-                // Attention : il faut que le SVG stocké soit valide.
-                const finalPath = Skia.Path.MakeFromSVGString(pathData.svgPath);
-                runOnJS(setCurrentPath)(finalPath);
+                // Terminé -> on met le path final SVG stocké s'il est valide
+                if (pathData.svgPath) {
+                    const finalPath = Skia.Path.MakeFromSVGString(pathData.svgPath);
+                    if (finalPath) runOnJS(setCurrentPath)(finalPath);
+                }
             } else {
-                // En cours de tracé
-                // On normalise le progrès pour ce trait (0 à 1)
                 const localProgress = (currentProgress - start) / (end - start);
-                
-                // On prend une sous-section des points
                 const pointsCount = Math.floor(pathData.points.length * localProgress);
-                const currentPoints = pathData.points.slice(0, Math.max(2, pointsCount)); // Au moins 2 points pour un trait
+                const currentPoints = pathData.points.slice(0, Math.max(2, pointsCount)); 
 
                 if (currentPoints.length > 1) {
                     const options = {
@@ -86,31 +86,32 @@ const AnimatedPath = ({ pathData, index, progress, totalCount }: { pathData: Dra
                         start: { taper: 5, cap: true },
                         end: { taper: 5, cap: true },
                         simulatePressure: true,
-                        last: false, // En cours de tracé
+                        last: false, 
                     };
                     const outline = getStroke(currentPoints, options);
                     const svg = getSvgPathFromStroke(outline);
-                    const skiaPath = Skia.Path.MakeFromSVGString(svg);
-                    runOnJS(setCurrentPath)(skiaPath);
+                    
+                    // Sécurité supplémentaire : ne créer le path que si le SVG n'est pas vide
+                    if (svg && svg.length > 0) {
+                        const skiaPath = Skia.Path.MakeFromSVGString(svg);
+                        if (skiaPath) runOnJS(setCurrentPath)(skiaPath);
+                    }
                 }
             }
         },
         [progress, pathData]
     );
 
-    // Rendu pour les anciens traits (Stroke simple sans points JSON)
-    // On utilise l'opacité pour les faire apparaitre "pop"
     const opacity = useDerivedValue(() => {
-        if (isFilled && pathData.points) return 1; // Géré par le path dynamique ci-dessus
-
+        if (isFilled && pathData.points) return 1; 
         const threshold = index / totalCount;
         return progress.value > threshold ? 1 : 0;
     });
 
-    if (!currentPath && isFilled) return null;
+    // Fallback sécurisé pour l'affichage
+    const displayPath = currentPath || 
+        (!isFilled && pathData.svgPath ? Skia.Path.MakeFromSVGString(pathData.svgPath) : null);
 
-    // Fallback pour ancien format (si pas de path dynamique encore)
-    const displayPath = currentPath || (pathData.svgPath ? Skia.Path.MakeFromSVGString(pathData.svgPath) : null);
     if (!displayPath) return null;
 
     return (
@@ -146,14 +147,13 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
     
     const image = useImage(imageUri);
 
-    // --- GESTION DE L'ANIMATION ---
     const progress = useSharedValue(startVisible ? 1 : 0);
     
     useEffect(() => {
         if (animated && !startVisible) {
             progress.value = 0;
             progress.value = withTiming(1, {
-                duration: 3500, // Un peu plus lent pour apprécier le tracé (3.5s)
+                duration: 3500, 
                 easing: Easing.linear
             });
         } else {
@@ -161,21 +161,13 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
         }
     }, [animated, startVisible]); 
 
-    // On prépare les données (plus besoin de pré-calculer les skiaPaths ici car AnimatedPath le fait)
-    // Mais on a besoin de filtrer les données valides
     const validPaths = useMemo(() => {
         return canvasData.filter(p => p.svgPath || (p.points && p.points.length > 0));
     }, [canvasData]);
 
     const scaleTransform = useMemo(() => {
         if (!autoCenter || validPaths.length === 0) return { translateX: 0, translateY: 0, scale: 1 };
-        
-        // Calcul simplifié des bounds (approximatif pour le centrage)
-        // Pour être précis, il faudrait parser tous les SVG, ce qui est lourd.
-        // On va supposer que le centrage n'est pas critique pour l'instant ou utiliser une bbox simple si points dispos.
         return { translateX: 0, translateY: 0, scale: 1 }; 
-        
-        // TODO: Réimplémenter un calcul de bounds léger si nécessaire
     }, [validPaths, autoCenter]);
 
     
