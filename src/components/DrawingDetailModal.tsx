@@ -298,7 +298,7 @@ export const DrawingDetailModal: React.FC<DrawingDetailModalProps> = ({ visible,
                                 <View style={{ width: '100%', height: '100%' }} /> 
                             )}
                         </View>
-                        {isUnlocked && <Text style={styles.hintText}>Maintenir pour voir l'original</Text>}
+                        {isUnlocked && <Text style={styles.hintText}> </Text>}
                     </Pressable>
                 </View>
 
