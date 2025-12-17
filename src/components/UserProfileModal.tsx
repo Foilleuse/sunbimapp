@@ -19,64 +19,52 @@ interface UserProfileModalProps {
 // Types de réactions possibles
 type ReactionType = 'like' | 'smart' | 'beautiful' | 'crazy' | null;
 
-// --- COMPOSANT BACKGROUND : MIROIR + FLOU (AMBIANCE SEULEMENT) ---
-// Utiliser en fond fixe derrière le ScrollView
-const MirroredBackgroundBlur = ({ uri, width, height }: { uri: string, width: number, height: number }) => {
+// --- COMPOSANT BACKGROUND : MIROIR + FLOU + FONDU ÉTENDU ---
+// Copié EXACTEMENT de gallery.tsx pour garantir l'uniformité
+const MirroredBackground = ({ uri, width, height, top }: { uri: string, width: number, height: number, top: number }) => {
     const image = useImage(uri);
+    
     if (!image) return null;
 
+    const bottom = top + height;
     const BLUR_RADIUS = 25; 
-    const EXTRA_WIDTH = 100;
+
+    // 🔥 CORRECTION BORDS BLANCS (comme dans feed/gallery)
+    const EXTRA_WIDTH = 100; 
     const bgWidth = width + EXTRA_WIDTH;
     const bgX = -EXTRA_WIDTH / 2;
-    // On remplit tout l'écran en hauteur
-    const top = 0; 
 
     return (
         <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
+            {/* 1. ARRIÈRE-PLAN : MIROIRS + FLOU */}
             <Group layer={<Paint><Blur blur={BLUR_RADIUS} /></Paint>}>
-                {/* Image centrale étendue (floue) */}
                 <SkiaImage image={image} x={bgX} y={top} width={bgWidth} height={height} fit="cover" />
-                {/* Miroirs (flous) */}
                 <Group origin={vec(width / 2, top)} transform={[{ scaleY: -1 }]}>
                     <SkiaImage image={image} x={bgX} y={top} width={bgWidth} height={height} fit="cover" />
                 </Group>
-                <Group origin={vec(width / 2, height)} transform={[{ scaleY: -1 }]}>
+                <Group origin={vec(width / 2, bottom)} transform={[{ scaleY: -1 }]}>
                     <SkiaImage image={image} x={bgX} y={top} width={bgWidth} height={height} fit="cover" />
                 </Group>
             </Group>
-            {/* Voile noir léger pour uniformiser */}
-            <Rect x={0} y={0} width={width} height={height} color="rgba(0,0,0,0.3)" />
-        </Canvas>
-    );
-};
 
-// --- COMPOSANT IMAGE NETTE AVEC MASQUE (DÉGRADÉ HAUT/BAS) ---
-// Utiliser DANS le ScrollView pour l'image principale
-const MaskedImage = ({ uri, width, height }: { uri: string, width: number, height: number }) => {
-    const image = useImage(uri);
-    if (!image) return null;
-
-    return (
-        <Canvas style={{ width, height }} pointerEvents="none">
+            {/* 2. PREMIER-PLAN : IMAGE NETTE AVEC MASQUE (Dégradé haut/bas) */}
             <Mask
                 mode="luminance"
                 mask={
-                    <Rect x={0} y={0} width={width} height={height}>
+                    <Rect x={0} y={top} width={width} height={height}>
                         <SkiaGradient
-                            start={vec(0, 0)}
-                            end={vec(0, height)}
+                            start={vec(0, top)}
+                            end={vec(0, bottom)}
                             // Noir = Transparent, Blanc = Visible
-                            // On crée le fondu en haut et en bas
                             colors={["black", "white", "white", "black"]}
-                            positions={[0, 0.1, 0.9, 1]} 
+                            positions={[0, 0.2, 0.8, 1]}
                         />
                     </Rect>
                 }
             >
                 <SkiaImage
                     image={image}
-                    x={0} y={0} width={width} height={height}
+                    x={0} y={top} width={width} height={height}
                     fit="cover"
                 />
             </Mask>
@@ -117,14 +105,10 @@ const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color, count }: an
 
 // --- COMPOSANT MÉMORISÉ POUR LA GRILLE ---
 const DrawingGridItem = memo(({ item, size, isUnlocked, onPress, spacing }: any) => {
-    
-    // 🔥 OPTIMISATION GRILLE : CONSERVÉE (Calcul de l'image exacte 3:4)
     const optimizedGridUri = useMemo(() => {
         if (!item.cloud_image_url) return null;
-        // Calcul des pixels physiques nécessaires
         const w = Math.round(size * PixelRatio.get());
-        const h = Math.round(w * (4/3)); // Ratio 3:4
-        // Demande de crop au serveur
+        const h = Math.round(w * (4/3)); 
         return getOptimizedImageUrl(item.cloud_image_url, w, h);
     }, [item.cloud_image_url, size]);
 
@@ -135,15 +119,14 @@ const DrawingGridItem = memo(({ item, size, isUnlocked, onPress, spacing }: any)
             style={{ width: size, aspectRatio: 3/4, marginBottom: spacing, backgroundColor: '#F9F9F9', overflow: 'hidden', position: 'relative' }}
         >
             <DrawingViewer 
-                // ✅ Utilisation de l'URL optimisée
                 imageUri={optimizedGridUri || item.cloud_image_url}
                 canvasData={isUnlocked ? item.canvas_data : []}
                 viewerSize={size}
-                viewerHeight={size * (4/3)} // Ajout hauteur explicite
+                viewerHeight={size * (4/3)} 
                 transparentMode={false}
                 animated={false}
                 startVisible={true}
-                autoCenter={false} // Pas d'auto-center pour la grille
+                autoCenter={false} 
             />
             {!isUnlocked && (
                 <View style={styles.missedOverlay}>
@@ -174,7 +157,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
   const [selectedDrawing, setSelectedDrawing] = useState<any | null>(null);
   const [isHolding, setIsHolding] = useState(false);
   
-  // États pour les réactions du dessin sélectionné
   const [userReaction, setUserReaction] = useState<ReactionType>(null);
   const [reactionCounts, setReactionCounts] = useState({
       like: 0,
@@ -183,10 +165,9 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
       crazy: 0
   });
 
-  // Ajout d'un état pour retarder l'animation
   const [animationReady, setAnimationReady] = useState(false);
 
-  const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+  const { width: screenWidth } = Dimensions.get('window');
   const SPACING = 1; 
   const NUM_COLS = 2;
   const ITEM_SIZE = (screenWidth - (SPACING * (NUM_COLS - 1))) / NUM_COLS;
@@ -225,11 +206,9 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
     return () => { isMounted = false; };
   }, [visible, userId, currentUser]);
 
-  // Chargement des réactions quand un dessin est ouvert
   useEffect(() => {
     if (selectedDrawing) {
         fetchReactionsState();
-        // Délai pour l'animation
         setAnimationReady(false);
         const timer = setTimeout(() => setAnimationReady(true), 300);
         return () => clearTimeout(timer);
@@ -238,7 +217,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
     }
   }, [selectedDrawing]);
 
-  // 🔥 OPTIMISATION MODALE VIEW : Calcul de l'image HD 3:4 pour la vue détaillée
   const selectedDrawingImageOptimized = useMemo(() => {
     if (!selectedDrawing?.cloud_image_url) return null;
     const w = Math.round(screenWidth * PixelRatio.get());
@@ -477,7 +455,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
   
   const closeDrawing = () => {
       setSelectedDrawing(null);
-      // Reset reactions local state
       setUserReaction(null);
       setReactionCounts({ like: 0, smart: 0, beautiful: 0, crazy: 0 });
   };
@@ -513,7 +490,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                 <View style={styles.profileInfoContainer}>
                     {userProfile?.avatar_url ? (
                         <Image 
-                            // ✅ MODIFICATION : Utilisation directe de l'URL sans transformation
                             source={{ uri: userProfile.avatar_url }} 
                             style={styles.profileAvatar} 
                         />
@@ -595,75 +571,133 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
             <Modal visible={!!selectedDrawing} animationType="slide" presentationStyle="pageSheet" onRequestClose={closeDrawing}>
                 {selectedDrawing && (
                     <View style={styles.modalContainer}>
-                        {/* FOND MIROIR GLOBAL (AMBIANCE FLOUE) */}
-                        <MirroredBackgroundBlur 
+                        {/* FOND MIROIR GLOBAL + IMAGE NETTE MASQUÉE INTÉGRÉS */}
+                        <MirroredBackground 
                             uri={selectedDrawingImageOptimized || selectedDrawing.cloud_image_url}
                             width={screenWidth}
-                            height={screenHeight}
+                            height={screenWidth * (4/3)}
+                            top={60} 
                         />
 
-                        <View style={styles.modalHeader}>
-                            <TouchableOpacity onPress={closeDrawing} style={styles.closeBtnTransparent} hitSlop={15}>
-                                <X color="#FFF" size={30} />
-                            </TouchableOpacity>
-                        </View>
-
+                        {/* ✅ AJOUT SCROLLVIEW POUR PETITS ÉCRANS */}
                         <ScrollView 
                             contentContainerStyle={{ flexGrow: 1, alignItems: 'center' }}
                             showsVerticalScrollIndicator={false}
                         >
-                            <Pressable 
-                                onPressIn={() => {
-                                    if (isSelectedUnlocked) setIsHolding(true);
-                                }} 
-                                onPressOut={() => setIsHolding(false)}
-                                style={{ width: screenWidth, aspectRatio: 3/4, backgroundColor: 'transparent', marginTop: 0 }}
-                            >
-                                {/* ✅ ALIGNEMENT EXACT AVEC GALLERY : 
-                                    L'image nette est DANS le scroll view, avec son propre MaskedImage.
-                                    Le DrawingViewer transparent est par-dessus.
-                                    Ainsi, si on cache le dessin (isHolding), l'image nette masquée (dégradé) reste visible.
-                                */}
-                                <View style={StyleSheet.absoluteFill}>
-                                    <MaskedImage 
-                                        uri={selectedDrawingImageOptimized || selectedDrawing.cloud_image_url}
-                                        width={screenWidth}
-                                        height={screenWidth * (4/3)}
-                                    />
-                                </View>
+                            <View style={[styles.header, { paddingVertical: 0, paddingTop: 10, paddingHorizontal: 15, backgroundColor: 'transparent', width: '100%' }]}> 
+                                <TouchableOpacity onPress={closeDrawing} style={styles.closeBtnTransparent} hitSlop={15}>
+                                    <X color="#FFF" size={28} />
+                                </TouchableOpacity>
+                            </View>
 
-                                <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
-                                    {/* Animation retardée pour éviter les saccades */}
-                                    {animationReady && (
-                                        <DrawingViewer
-                                            imageUri={selectedDrawingImageOptimized || selectedDrawing.cloud_image_url} 
-                                            canvasData={isSelectedUnlocked ? selectedDrawing.canvas_data : []}
-                                            viewerSize={screenWidth} 
-                                            viewerHeight={screenWidth * (4/3)} 
-                                            transparentMode={true} // ✅ IMPORTANT : Transparent pour voir le MaskedImage en dessous
-                                            startVisible={false} 
-                                            animated={true}
-                                            autoCenter={false} 
-                                        />
-                                    )}
-                                    {/* Preview statique immédiate */}
-                                    {!animationReady && (
-                                        <DrawingViewer
-                                            imageUri={selectedDrawingImageOptimized || selectedDrawing.cloud_image_url} 
-                                            canvasData={isSelectedUnlocked ? selectedDrawing.canvas_data : []}
-                                            viewerSize={screenWidth} 
-                                            viewerHeight={screenWidth * (4/3)} 
-                                            transparentMode={true} // ✅ IMPORTANT : Transparent ici aussi
-                                            startVisible={true} 
-                                            animated={false}
-                                            autoCenter={false} 
-                                        />
-                                    )}
-                                </View>
-                                {isSelectedUnlocked && <Text style={styles.hintText}>Maintenir pour voir l'original</Text>}
-                            </Pressable>
+                            <View style={{ width: screenWidth, alignItems: 'center' }}> 
+                                <Pressable 
+                                    onPressIn={() => {
+                                        if (isSelectedUnlocked) setIsHolding(true);
+                                    }} 
+                                    onPressOut={() => setIsHolding(false)}
+                                    style={{ width: screenWidth, aspectRatio: 3/4, backgroundColor: 'transparent', marginTop: 0 }}
+                                >
+                                    {/* DrawingViewer gère UNIQUEMENT le dessin par-dessus (transparentMode=true).
+                                        L'image de fond (flou + net) est gérée par MirroredBackground en absolute derrière le ScrollView.
+                                        
+                                        ATTENTION : Dans Gallery.tsx, le MirroredBackground EST en absolute derrière.
+                                        Donc l'image nette ne scrolle PAS avec le dessin si le ScrollView bouge.
+                                        Si on veut que l'image nette scrolle AVEC le dessin, il faut l'inclure ici.
+                                        
+                                        MAIS : L'utilisateur a demandé "exactement la même chose que gallery.tsx".
+                                        Dans gallery.tsx, le background est fixe.
+                                        Donc on laisse le background fixe et on scroll le dessin par dessus ?
+                                        Non, gallery.tsx n'a pas de ScrollView sur le dessin, c'est fixe.
+                                        
+                                        ICI, on a ajouté un ScrollView pour les petits écrans.
+                                        Si on scrolle, le dessin monte, mais le fond (MirroredBackground) reste fixe.
+                                        Cela va désaligner le dessin du fond.
+                                        
+                                        POUR CORRIGER CELA et garder l'aspect "Gallery" tout en scrollant :
+                                        On doit afficher l'image nette masquée DANS le ScrollView, SOUS le dessin.
+                                        Et le fond flou reste fixe derrière.
+                                    */}
+                                    
+                                    {/* On n'affiche PAS l'image nette ici car MirroredBackground s'en occupe.
+                                        Si on veut scroller, il faut que MirroredBackground ne soit pas utilisé tel quel
+                                        ou que l'image nette soit séparée.
+                                        
+                                        Toutefois, la demande est "exactement comme gallery".
+                                        Dans gallery, ça ne scrolle pas (sauf la liste). La modale est fixe.
+                                        
+                                        Je vais donc suivre STRICTEMENT la demande :
+                                        MirroredBackground (fixe) + DrawingViewer (Transparent).
+                                        Si ça scrolle, ça désaligne. C'est le compromis du "exactement comme gallery".
+                                        
+                                        Pour éviter le désalignement, je vais supprimer le décalage 'top' du MirroredBackground
+                                        et l'intégrer dans le scrollview ? Non, MirroredBackground est complexe.
+                                        
+                                        Je vais réutiliser la solution "MirroredBackgroundBlur (fixe) + MaskedImage (scrollable)"
+                                        que j'avais proposée juste avant, car c'est la seule façon d'avoir le visuel de la galerie ET le scroll.
+                                        
+                                        Mais l'utilisateur a dit "Tu n'as pas repris exactement... les bords flous disparaissent".
+                                        C'est parce que MaskedImage n'avait pas les bons paramètres de masque ou que DrawingViewer cachait tout.
+                                        
+                                        Je vais donc utiliser DrawingViewer en transparentMode=TRUE.
+                                        Et dessous, une image qui imite PARFAITEMENT la partie centrale de MirroredBackground.
+                                    */}
+                                    
+                                    {/* Image Nette Masquée (Doit scroller avec le dessin) */}
+                                    <View style={StyleSheet.absoluteFill}>
+                                        <Canvas style={{ flex: 1 }} pointerEvents="none">
+                                            <Mask
+                                                mode="luminance"
+                                                mask={
+                                                    <Rect x={0} y={0} width={screenWidth} height={screenWidth * (4/3)}>
+                                                        <SkiaGradient
+                                                            start={vec(0, 0)}
+                                                            end={vec(0, screenWidth * (4/3))}
+                                                            colors={["black", "white", "white", "black"]}
+                                                            positions={[0, 0.2, 0.8, 1]} // Mêmes positions que MirroredBackground
+                                                        />
+                                                    </Rect>
+                                                }
+                                            >
+                                                <SkiaImage
+                                                    image={useImage(selectedDrawingImageOptimized || selectedDrawing.cloud_image_url)}
+                                                    x={0} y={0} width={screenWidth} height={screenWidth * (4/3)}
+                                                    fit="cover"
+                                                />
+                                            </Mask>
+                                        </Canvas>
+                                    </View>
 
-                            {/* INFO CARD TRANSPARENT AVEC TEXTE BLANC */}
+                                    <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
+                                        {animationReady && (
+                                            <DrawingViewer
+                                                imageUri={selectedDrawingImageOptimized || selectedDrawing.cloud_image_url} 
+                                                canvasData={isSelectedUnlocked ? selectedDrawing.canvas_data : []}
+                                                viewerSize={screenWidth} 
+                                                viewerHeight={screenWidth * (4/3)} 
+                                                transparentMode={true} 
+                                                startVisible={false} 
+                                                animated={true}
+                                                autoCenter={false} 
+                                            />
+                                        )}
+                                        {!animationReady && (
+                                            <DrawingViewer
+                                                imageUri={selectedDrawingImageOptimized || selectedDrawing.cloud_image_url} 
+                                                canvasData={isSelectedUnlocked ? selectedDrawing.canvas_data : []}
+                                                viewerSize={screenWidth} 
+                                                viewerHeight={screenWidth * (4/3)} 
+                                                transparentMode={true}
+                                                startVisible={true} 
+                                                animated={false}
+                                                autoCenter={false} 
+                                            />
+                                        )}
+                                    </View>
+                                    {isSelectedUnlocked && <Text style={styles.hintText}>Maintenir pour voir l'original</Text>}
+                                </Pressable>
+                            </View>
+
                             <View style={styles.infoCard}>
                                 <View style={styles.infoContent}>
                                     <View style={styles.titleRow}>
@@ -678,7 +712,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                                     
                                     <Text style={styles.userName}>{userProfile?.display_name || "Anonyme"}</Text>
 
-                                    {/* BARRE DE RÉACTIONS */}
                                     <View style={styles.reactionBar}>
                                         <AnimatedReactionBtn
                                             icon={Heart}
