@@ -141,13 +141,12 @@ export const ShareModal: React.FC<ShareModalProps> = ({ visible, onClose, drawin
                     )}
                 </View>
 
-                {/* 3. HEADER "NYOLA" (Positionné en haut comme sur le feed) */}
+                {/* 3. HEADER "nyola" */}
+                {/* On ajoute un padding top plus important pour descendre sous le notch */}
                 <SafeAreaView style={styles.headerContainer} edges={['top']}>
                     <View style={styles.headerContent}>
-                        {/* Espace vide à gauche pour équilibrer si nécessaire */}
-                        <View style={{ width: 40 }} />
-                        <Text style={styles.headerTitle}>Nyola</Text>
-                        <View style={{ width: 40 }} />
+                        <Text style={styles.headerTitle}>nyola</Text>
+                        <Text style={styles.headerSubtitle}>And you, what do you see ?</Text>
                     </View>
                 </SafeAreaView>
 
@@ -182,22 +181,31 @@ const styles = StyleSheet.create({
       left: 0,
       right: 0,
       zIndex: 20,
+      // Padding top supplémentaire pour décoller du haut
+      paddingTop: 40,
   },
   headerContent: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
       alignItems: 'center',
       paddingHorizontal: 20,
-      paddingVertical: 10, // Similaire au feed
   },
   headerTitle: {
-      fontSize: 28,
+      fontSize: 40, // Titre plus grand
       fontWeight: '900',
       color: '#FFF',
-      letterSpacing: -1,
+      letterSpacing: -2,
+      marginBottom: 5,
       textShadowColor: 'rgba(0,0,0,0.3)',
       textShadowOffset: { width: 0, height: 2 },
       textShadowRadius: 4,
+  },
+  headerSubtitle: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: 'rgba(255,255,255,0.9)',
+      fontStyle: 'italic',
+      textShadowColor: 'rgba(0,0,0,0.3)',
+      textShadowOffset: { width: 0, height: 1 },
+      textShadowRadius: 2,
   },
   infoContainer: {
       position: 'absolute',
