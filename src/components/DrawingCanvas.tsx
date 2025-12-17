@@ -218,8 +218,8 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
             smoothing: 0.47,
             streamline: 0.81,
             easing: (t: number) => t,
-            start: { taper: 5, cap: true }, // Taper activé pour un début fin
-            end: { taper: 5, cap: true },   // Taper activé pour une fin fine
+            start: { taper: 5, cap: true }, // Taper à 5 pour un début très fin
+            end: { taper: 5, cap: true },   // Taper à 5 pour une fin très fine
             simulatePressure: true,
             last: true, // Indique que le trait est fini
           };
@@ -255,16 +255,19 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
     // Calcul du path en temps réel pour le trait en cours
     let currentSvgPath = "";
     if (currentPoints && currentPoints.length > 0) {
+        // Options strictement identiques au rendu final (avec last: true)
+        // Note: Mettre last: true force le calcul des extrémités comme si le trait était fini.
+        // Cela permet de voir exactement à quoi ressemblera le trait, y compris les pointes.
         const options = {
             size: strokeWidth / baseScaleRef.current,
             thinning: 0.37,
             smoothing: 0.47,
             streamline: 0.81,
             easing: (t: number) => t,
-            start: { taper: true, cap: true }, // Taper activé pour la prévisualisation aussi
-            end: { taper: true, cap: true },
+            start: { taper: 5, cap: true },
+            end: { taper: 5, cap: true },
             simulatePressure: true,
-            last: false,
+            last: true, // Changé à true pour voir l'effet taper immédiatement
         };
         const outline = getStroke(currentPoints, options);
         currentSvgPath = getSvgPathFromStroke(outline);
