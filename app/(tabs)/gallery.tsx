@@ -7,90 +7,8 @@ import { useFocusEffect } from 'expo-router';
 import { Search, Heart, Cloud, CloudOff, XCircle, User, MessageCircle, X, MoreHorizontal, Lightbulb, Palette, Zap } from 'lucide-react-native';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer';
-// Ajout des imports d'animation
-import Animated, { useSharedValue, useAnimatedStyle, withSpring, withSequence } from 'react-native-reanimated';
-import { Canvas, Rect, LinearGradient as SkiaGradient, vec, useImage, Image as SkiaImage, Group, Blur, Mask, Paint } from "@shopify/react-native-skia";
-
-type ReactionType = 'like' | 'smart' | 'beautiful' | 'crazy' | null;
-
-// --- COMPOSANT BACKGROUND : MIROIR + FLOU + FONDU ÉTENDU (Copie de feed.tsx) ---
-const MirroredBackground = ({ uri, width, height, top }: { uri: string, width: number, height: number, top: number }) => {
-    const image = useImage(uri);
-    
-    if (!image) return null;
-
-    const bottom = top + height;
-    const BLUR_RADIUS = 25; 
-
-    const EXTRA_WIDTH = 100;
-    const bgWidth = width + EXTRA_WIDTH;
-    const bgX = -EXTRA_WIDTH / 2;
-
-    return (
-        <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
-            <Group layer={<Paint><Blur blur={BLUR_RADIUS} /></Paint>}>
-                <SkiaImage image={image} x={bgX} y={top} width={bgWidth} height={height} fit="cover" />
-                <Group origin={vec(width / 2, top)} transform={[{ scaleY: -1 }]}>
-                    <SkiaImage image={image} x={bgX} y={top} width={bgWidth} height={height} fit="cover" />
-                </Group>
-                <Group origin={vec(width / 2, bottom)} transform={[{ scaleY: -1 }]}>
-                    <SkiaImage image={image} x={bgX} y={top} width={bgWidth} height={height} fit="cover" />
-                </Group>
-            </Group>
-
-            <Mask
-                mode="luminance"
-                mask={
-                    <Rect x={0} y={top} width={width} height={height}>
-                        <SkiaGradient
-                            start={vec(0, top)}
-                            end={vec(0, bottom)}
-                            colors={["black", "white", "white", "black"]}
-                            positions={[0, 0.2, 0.8, 1]}
-                        />
-                    </Rect>
-                }
-            >
-                <SkiaImage
-                    image={image}
-                    x={0} y={top} width={width} height={height}
-                    fit="cover"
-                />
-            </Mask>
-        </Canvas>
-    );
-};
-
-// --- COMPOSANT BOUTON DE RÉACTION ANIMÉ ---
-const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color, count }: any) => {
-    const scale = useSharedValue(1);
-
-    const animatedStyle = useAnimatedStyle(() => {
-        return {
-            transform: [{ scale: scale.value }],
-        };
-    });
-
-    const handlePress = () => {
-        scale.value = withSequence(
-            withSpring(1.6, { damping: 10, stiffness: 200 }),
-            withSpring(1, { damping: 10, stiffness: 200 })
-        );
-        onPress();
-    };
-
-    return (
-        <Pressable onPress={handlePress} style={styles.reactionBtn}>
-            <Animated.View style={animatedStyle}>
-                <Icon
-                    color={isActive ? color : "#FFF"}
-                    fill={isActive ? color : "transparent"}
-                    size={24}
-                />
-            </Animated.View>
-        </Pressable>
-    );
-};
+// Import de la nouvelle modale
+import { DrawingDetailModal } from '../../src/components/DrawingDetailModal';
 
 // --- COMPOSANT VIGNETTE ---
 const GalleryItem = memo(({ item, itemSize, showClouds, onPress }: any) => {
@@ -142,13 +60,6 @@ export default function GalleryPage() {
     const [searchText, setSearchText] = useState('');
     
     const [selectedDrawing, setSelectedDrawing] = useState<any | null>(null);
-    const [isHolding, setIsHolding] = useState(false);
-    
-    // Ajout d'un état pour retarder l'animation
-    const [animationReady, setAnimationReady] = useState(false);
-
-    const [userReaction, setUserReaction] = useState<ReactionType>(null);
-    const [reactionCounts, setReactionCounts] = useState({ like: 0, smart: 0, beautiful: 0, crazy: 0 });
 
     const { width: screenWidth } = Dimensions.get('window');
     const SPACING = 1; 
@@ -229,19 +140,6 @@ export default function GalleryPage() {
 
     useEffect(() => { fetchGallery(); }, [onlyLiked, user]); 
     useFocusEffect(useCallback(() => { fetchGallery(); return () => closeViewer(); }, []));
-    useEffect(() => { 
-        if (selectedDrawing) {
-            fetchReactionsState();
-            // Délai pour laisser la modale s'ouvrir avant de lancer l'animation
-            setAnimationReady(false);
-            const timer = setTimeout(() => {
-                setAnimationReady(true);
-            }, 300); // 300ms de délai
-            return () => clearTimeout(timer);
-        } else {
-            setAnimationReady(false);
-        }
-    }, [selectedDrawing]);
 
     const onRefresh = () => { setRefreshing(true); fetchGallery(); };
     const handleSearchSubmit = () => { setLoading(true); fetchGallery(); Keyboard.dismiss(); };
@@ -250,94 +148,8 @@ export default function GalleryPage() {
     
     const closeViewer = () => { 
         setSelectedDrawing(null); 
-        setUserReaction(null);
-        setReactionCounts({ like: 0, smart: 0, beautiful: 0, crazy: 0 });
     };
 
-    const fetchReactionsState = async () => {
-        if (!selectedDrawing) return;
-        try {
-            const { data: allReactions, error } = await supabase
-                .from('reactions')
-                .select('reaction_type, user_id')
-                .eq('drawing_id', selectedDrawing.id);
-
-            if (error) throw error;
-
-            const counts = { like: 0, smart: 0, beautiful: 0, crazy: 0 };
-            let myReaction: ReactionType = null;
-
-            allReactions?.forEach((r: any) => {
-                if (counts.hasOwnProperty(r.reaction_type)) {
-                    counts[r.reaction_type as keyof typeof counts]++;
-                }
-                if (user && r.user_id === user.id) {
-                    myReaction = r.reaction_type as ReactionType;
-                }
-            });
-
-            setReactionCounts(counts);
-            setUserReaction(myReaction);
-
-        } catch (e) {
-            console.error("Erreur chargement réactions:", e);
-        }
-    };
-
-    const handleReaction = async (type: ReactionType) => {
-        if (!user || !type || !selectedDrawing) return;
-
-        const previousReaction = userReaction;
-        const previousCounts = { ...reactionCounts };
-        
-        let newReaction: ReactionType = type;
-        let newCounts = { ...reactionCounts };
-
-        if (userReaction === type) {
-            newReaction = null;
-            newCounts[type] = Math.max(0, newCounts[type] - 1);
-        } else {
-            if (previousReaction) {
-                newCounts[previousReaction] = Math.max(0, newCounts[previousReaction] - 1);
-            }
-            newCounts[type]++;
-        }
-
-        setUserReaction(newReaction);
-        setReactionCounts(newCounts);
-
-        try {
-            if (newReaction === null) {
-                await supabase.from('reactions').delete().eq('user_id', user.id).eq('drawing_id', selectedDrawing.id);
-            } else {
-                await supabase.from('reactions').upsert({
-                    user_id: user.id,
-                    drawing_id: selectedDrawing.id,
-                    reaction_type: newReaction
-                }, { onConflict: 'user_id, drawing_id' });
-            }
-        } catch (e) {
-            console.error(e);
-            setUserReaction(previousReaction);
-            setReactionCounts(previousCounts);
-        }
-    };
-
-    const handleReport = () => { Alert.alert("Info", "Fonctionnalité de signalement."); };
-
-    const author = selectedDrawing?.users;
-    
-    // 🔥 PLEIN ÉCRAN OPTIMISÉ 3:4 (pour alignement dessin)
-    // On demande un crop physique exact en 3:4 comme sur le Feed/Profil
-    const optimizedModalImageUri = useMemo(() => {
-        if (!selectedDrawing?.cloud_image_url) return null;
-        
-        const physicalWidth = Math.round(screenWidth * PixelRatio.get());
-        const physicalHeight = Math.round(physicalWidth * (4/3));
-
-        return getOptimizedImageUrl(selectedDrawing.cloud_image_url, physicalWidth, physicalHeight);
-    }, [selectedDrawing, screenWidth]);
-    
     const renderItem = useCallback(({ item }: { item: any }) => (
         <GalleryItem item={item} itemSize={ITEM_SIZE} showClouds={showClouds} onPress={openViewer} />
     ), [showClouds, ITEM_SIZE, openViewer]);
@@ -376,102 +188,15 @@ export default function GalleryPage() {
                     )}
                 </View>
 
-                {/* MODALE STYLE FEED/PROFIL */}
-                <Modal visible={!!selectedDrawing} animationType="slide" presentationStyle="pageSheet" onRequestClose={closeViewer}>
-                    {selectedDrawing && (
-                        <View style={styles.modalContainer}>
-                             {/* FOND MIROIR AJOUTÉ */}
-                             <MirroredBackground 
-                                uri={optimizedModalImageUri || selectedDrawing.cloud_image_url}
-                                width={screenWidth}
-                                height={screenWidth * (4/3)}
-                                top={60} 
-                            />
-
-                             <View style={styles.modalHeader}>
-                                  <TouchableOpacity onPress={closeViewer} style={styles.closeModalBtn}>
-                                      <X color="#FFF" size={30} /> 
-                                  </TouchableOpacity>
-                              </View>
-
-                            <Pressable onPressIn={() => setIsHolding(true)} onPressOut={() => setIsHolding(false)} style={{ width: screenWidth, aspectRatio: 3/4, backgroundColor: 'transparent', marginTop: 0 }}>
-                                <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
-                                    {/* On n'affiche le viewer que quand la modale est stable (animationReady) pour éviter les saccades */}
-                                    {animationReady && (
-                                        <DrawingViewer
-                                            imageUri={optimizedModalImageUri || selectedDrawing.cloud_image_url} 
-                                            canvasData={selectedDrawing.canvas_data}
-                                            viewerSize={screenWidth} 
-                                            viewerHeight={screenWidth * (4/3)}
-                                            transparentMode={true} 
-                                            startVisible={false} 
-                                            animated={true}
-                                            autoCenter={false} 
-                                        />
-                                    )}
-                                    {/* Pendant l'ouverture, on peut afficher l'image statique ou le viewer non animé si on veut éviter le flash */}
-                                    {!animationReady && (
-                                         <DrawingViewer
-                                            imageUri={optimizedModalImageUri || selectedDrawing.cloud_image_url} 
-                                            canvasData={selectedDrawing.canvas_data}
-                                            viewerSize={screenWidth} 
-                                            viewerHeight={screenWidth * (4/3)}
-                                            transparentMode={true} 
-                                            startVisible={true} // Affiche directement sans animation pour l'intro
-                                            animated={false}
-                                            autoCenter={false} 
-                                        />
-                                    )}
-                                </View>
-                                <Text style={styles.hintText}>Maintenir pour voir l'original</Text>
-                            </Pressable>
-
-                            {/* INFO CARD TRANSPARENT AVEC TEXTE BLANC */}
-                            <View style={styles.infoCard}>
-                                <View style={styles.infoContent}>
-                                    <View style={styles.titleRow}>
-                                        <Text style={styles.drawingTitle} numberOfLines={1}>{selectedDrawing.label || "Sans titre"}
-                                        </Text>
-                                        <TouchableOpacity onPress={handleReport} style={styles.moreBtnAbsolute} hitSlop={15}><MoreHorizontal color="#CCC" size={24} /></TouchableOpacity>
-                                    </View>
-                                    <Text style={styles.userName}>{author?.display_name || "Anonyme"}</Text>
-                                    
-                                    {/* Barre de réactions animées */}
-                                    <View style={styles.reactionBar}>
-                                        <AnimatedReactionBtn
-                                            icon={Heart}
-                                            color="#FF3B30"
-                                            isActive={userReaction === 'like'}
-                                            count={reactionCounts.like}
-                                            onPress={() => handleReaction('like')}
-                                        />
-                                        <AnimatedReactionBtn
-                                            icon={Lightbulb}
-                                            color="#FFCC00"
-                                            isActive={userReaction === 'smart'}
-                                            count={reactionCounts.smart}
-                                            onPress={() => handleReaction('smart')}
-                                        />
-                                        <AnimatedReactionBtn
-                                            icon={Palette}
-                                            color="#5856D6"
-                                            isActive={userReaction === 'beautiful'}
-                                            count={reactionCounts.beautiful}
-                                            onPress={() => handleReaction('beautiful')}
-                                        />
-                                        <AnimatedReactionBtn
-                                            icon={Zap}
-                                            color="#FF2D55"
-                                            isActive={userReaction === 'crazy'}
-                                            count={reactionCounts.crazy}
-                                            onPress={() => handleReaction('crazy')}
-                                        />
-                                    </View>
-                                </View>
-                            </View>
-                        </View>
-                    )}
-                </Modal>
+                {/* MODALE DÉTAIL VIA COMPOSANT */}
+                {selectedDrawing && (
+                    <DrawingDetailModal
+                        visible={!!selectedDrawing}
+                        onClose={closeViewer}
+                        drawing={selectedDrawing}
+                        // L'auteur est déjà dans selectedDrawing.users via la jointure dans fetchGallery
+                    />
+                )}
             </View>
         </View>
     );
@@ -488,28 +213,4 @@ const styles = StyleSheet.create({
     activeBtn: { backgroundColor: '#000', borderColor: '#000' },
     emptyState: { marginTop: 100, alignItems: 'center' },
     emptyText: { color: '#999' },
-    hintText: { position: 'absolute', bottom: 10, alignSelf: 'center', color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width:1, height:1}, textShadowRadius: 1 },
-    modalContainer: { flex: 1, backgroundColor: '#FFF' }, 
-    modalHeader: { width: '100%', height: 60, justifyContent: 'center', alignItems: 'flex-end', paddingRight: 20, paddingTop: 10, backgroundColor: 'transparent', zIndex: 20 },
-    closeModalBtn: { padding: 5 },
-    
-    // Style de la carte modifié pour être transparent + texte blanc
-    infoCard: { 
-        width: '100%', 
-        padding: 20, 
-        backgroundColor: 'transparent', // Fond transparent
-        borderTopWidth: 0, // Plus de bordure
-        marginTop: 10 
-    },
-    infoContent: { alignItems: 'center' },
-    titleRow: { width: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 2, position: 'relative' },
-    drawingTitle: { fontSize: 26, fontWeight: '900', color: '#FFF', letterSpacing: -0.5, textAlign: 'center', maxWidth: '80%' }, // Titre blanc
-    moreBtnAbsolute: { position: 'absolute', right: 0, top: 5, padding: 5 },
-    userName: { fontSize: 13, fontWeight: '500', color: 'rgba(255,255,255,0.8)', marginBottom: 10 }, // Nom gris clair
-    reactionBar: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', width: '100%', paddingHorizontal: 10 },
-    
-    // Styles pour les boutons animés
-    reactionBtn: { alignItems: 'center', justifyContent: 'center', padding: 8 },
-    reactionText: { fontSize: 12, fontWeight: '700', color: '#999', marginTop: 4 },
-    activeText: { color: '#000', fontWeight: '900' }
 });
