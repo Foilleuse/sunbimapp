@@ -219,7 +219,13 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
                     />
                 )}
 
+                {/* 🔥 CORRECTION GOMME : 
+                   On isole les traits dans un Group avec layer={true}.
+                   Ainsi, le blendMode="clear" de la gomme n'effacera que les traits à l'intérieur de ce calque,
+                   et ne "percera" pas jusqu'à l'image de fond qui est dessinée en dessous (hors du groupe).
+                */}
                 <Group 
+                    layer={true}
                     transform={[
                         { translateX: scaleTransform.translateX },
                         { translateY: scaleTransform.translateY },
