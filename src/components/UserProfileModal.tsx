@@ -5,6 +5,9 @@ import { supabase } from '../lib/supabaseClient';
 import { DrawingViewer } from './DrawingViewer';
 import { useAuth } from '../contexts/AuthContext';
 import { getOptimizedImageUrl } from '../utils/imageOptimizer';
+// Ajout des imports d'animation et Skia
+import Animated, { useSharedValue, useAnimatedStyle, withSpring, withSequence } from 'react-native-reanimated';
+import { Canvas, Rect, LinearGradient as SkiaGradient, vec, useImage, Image as SkiaImage, Group, Blur, Mask, Paint } from "@shopify/react-native-skia";
 
 interface UserProfileModalProps {
   visible: boolean;
@@ -15,6 +18,54 @@ interface UserProfileModalProps {
 
 // Types de réactions possibles
 type ReactionType = 'like' | 'smart' | 'beautiful' | 'crazy' | null;
+
+// --- COMPOSANT BACKGROUND : MIROIR + FLOU + FONDU ÉTENDU ---
+const MirroredBackground = ({ uri, width, height, top }: { uri: string, width: number, height: number, top: number }) => {
+    const image = useImage(uri);
+    
+    if (!image) return null;
+
+    const bottom = top + height;
+    const BLUR_RADIUS = 25; 
+
+    const EXTRA_WIDTH = 100;
+    const bgWidth = width + EXTRA_WIDTH;
+    const bgX = -EXTRA_WIDTH / 2;
+
+    return (
+        <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
+            <Group layer={<Paint><Blur blur={BLUR_RADIUS} /></Paint>}>
+                <SkiaImage image={image} x={bgX} y={top} width={bgWidth} height={height} fit="cover" />
+                <Group origin={vec(width / 2, top)} transform={[{ scaleY: -1 }]}>
+                    <SkiaImage image={image} x={bgX} y={top} width={bgWidth} height={height} fit="cover" />
+                </Group>
+                <Group origin={vec(width / 2, bottom)} transform={[{ scaleY: -1 }]}>
+                    <SkiaImage image={image} x={bgX} y={top} width={bgWidth} height={height} fit="cover" />
+                </Group>
+            </Group>
+
+            <Mask
+                mode="luminance"
+                mask={
+                    <Rect x={0} y={top} width={width} height={height}>
+                        <SkiaGradient
+                            start={vec(0, top)}
+                            end={vec(0, bottom)}
+                            colors={["black", "white", "white", "black"]}
+                            positions={[0, 0.2, 0.8, 1]}
+                        />
+                    </Rect>
+                }
+            >
+                <SkiaImage
+                    image={image}
+                    x={0} y={top} width={width} height={height}
+                    fit="cover"
+                />
+            </Mask>
+        </Canvas>
+    );
+};
 
 // --- COMPOSANT MÉMORISÉ POUR LA GRILLE ---
 const DrawingGridItem = memo(({ item, size, isUnlocked, onPress, spacing }: any) => {
@@ -40,9 +91,11 @@ const DrawingGridItem = memo(({ item, size, isUnlocked, onPress, spacing }: any)
                 imageUri={optimizedGridUri || item.cloud_image_url}
                 canvasData={isUnlocked ? item.canvas_data : []}
                 viewerSize={size}
+                viewerHeight={size * (4/3)} // Ajout hauteur explicite
                 transparentMode={false}
                 animated={false}
                 startVisible={true}
+                autoCenter={false} // Pas d'auto-center pour la grille
             />
             {!isUnlocked && (
                 <View style={styles.missedOverlay}>
@@ -127,6 +180,14 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
         fetchReactionsState();
     }
   }, [selectedDrawing]);
+
+  // 🔥 OPTIMISATION MODALE VIEW : Calcul de l'image HD 3:4 pour la vue détaillée
+  const selectedDrawingImageOptimized = useMemo(() => {
+    if (!selectedDrawing?.cloud_image_url) return null;
+    const w = Math.round(screenWidth * PixelRatio.get());
+    const h = Math.round(w * (4/3));
+    return getOptimizedImageUrl(selectedDrawing.cloud_image_url, w, h);
+  }, [selectedDrawing, screenWidth]);
 
   const fetchReactionsState = async () => {
         if (!selectedDrawing) return;
@@ -364,17 +425,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
       setReactionCounts({ like: 0, smart: 0, beautiful: 0, crazy: 0 });
   };
 
-  // ❌ OPTIMISATION AVATAR SUPPRIMÉE ICI : on utilise directement l'URL dans le JSX
-
-  // 🔥 OPTIMISATION MODALE VIEW : CONSERVÉE (HD + Ratio 3:4 forcé)
-  const selectedDrawingImageOptimized = useMemo(() => {
-    if (!selectedDrawing?.cloud_image_url) return null;
-    const w = Math.round(screenWidth * PixelRatio.get());
-    const h = Math.round(w * (4/3));
-    return getOptimizedImageUrl(selectedDrawing.cloud_image_url, w, h);
-  }, [selectedDrawing, screenWidth]);
-
-
   const renderDrawingItem = useCallback(({ item }: { item: any }) => {
     const isUnlocked = (currentUser?.id === userId) || unlockedCloudIds.includes(item.cloud_id);
 
@@ -487,10 +537,18 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
             {/* MODALE D'AGRANDISSEMENT (STYLE FEED CARD) */}
             <Modal visible={!!selectedDrawing} animationType="slide" presentationStyle="pageSheet" onRequestClose={closeDrawing}>
                 {selectedDrawing && (
-                    <SafeAreaView style={styles.safeAreaContainer}>
-                        <View style={[styles.header, { paddingVertical: 0, paddingTop: 10, paddingHorizontal: 15 }]}> 
+                    <View style={styles.modalContainer}>
+                        {/* FOND MIROIR AJOUTÉ */}
+                        <MirroredBackground 
+                            uri={selectedDrawingImageOptimized || selectedDrawing.cloud_image_url}
+                            width={screenWidth}
+                            height={screenWidth * (4/3)}
+                            top={60} 
+                        />
+
+                        <View style={[styles.header, { paddingVertical: 0, paddingTop: 10, paddingHorizontal: 15, backgroundColor: 'transparent' }]}> 
                             <TouchableOpacity onPress={closeDrawing} style={styles.closeBtnTransparent} hitSlop={15}>
-                                <X color="#000" size={28} />
+                                <X color="#FFF" size={28} />
                             </TouchableOpacity>
                         </View>
 
@@ -500,14 +558,9 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                                     if (isSelectedUnlocked) setIsHolding(true);
                                 }} 
                                 onPressOut={() => setIsHolding(false)}
-                                style={{ width: screenWidth, aspectRatio: 3/4, backgroundColor: '#F0F0F0' }}
+                                style={{ width: screenWidth, aspectRatio: 3/4, backgroundColor: 'transparent' }}
                             >
-                                <Image 
-                                    // ✅ Utilisation conservée de l'image optimisée pour le viewer
-                                    source={{ uri: selectedDrawingImageOptimized || selectedDrawing.cloud_image_url }}
-                                    style={[StyleSheet.absoluteFill, { opacity: 1 }]}
-                                    resizeMode="cover"
-                                />
+                                {/* L'image est gérée par DrawingViewer ou MirroredBackground */}
                                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                                     <DrawingViewer
                                         imageUri={selectedDrawingImageOptimized || selectedDrawing.cloud_image_url} 
@@ -517,13 +570,14 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                                         transparentMode={true} 
                                         startVisible={false} 
                                         animated={true}
+                                        autoCenter={false} 
                                     />
                                 </View>
-                                {isSelectedUnlocked && <Text style={styles.hintText}>Maintenir pour voir l'original</Text>}
+                                {isSelectedUnlocked && <Text style={styles.hintText}> </Text>}
                             </Pressable>
                         </View>
 
-                        {/* INFO CARD STYLE FEED */}
+                        {/* INFO CARD STYLE FEED (BLANC SUR TRANSPARENT) */}
                          <View style={styles.infoCard}>
                             <View style={styles.infoContent}>
                                 <View style={styles.titleRow}>
@@ -541,25 +595,25 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                                 {/* BARRE DE RÉACTIONS - SANS COMPTEURS */}
                                 <View style={styles.reactionBar}>
                                     <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('like')}>
-                                        <Heart color={userReaction === 'like' ? "#FF3B30" : "#000"} fill={userReaction === 'like' ? "#FF3B30" : "transparent"} size={24} />
+                                        <Heart color={userReaction === 'like' ? "#FF3B30" : "#FFF"} fill={userReaction === 'like' ? "#FF3B30" : "transparent"} size={24} />
                                     </TouchableOpacity>
 
                                     <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('smart')}>
-                                        <Lightbulb color={userReaction === 'smart' ? "#FFCC00" : "#000"} fill={userReaction === 'smart' ? "#FFCC00" : "transparent"} size={24} />
+                                        <Lightbulb color={userReaction === 'smart' ? "#FFCC00" : "#FFF"} fill={userReaction === 'smart' ? "#FFCC00" : "transparent"} size={24} />
                                     </TouchableOpacity>
 
                                     <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('beautiful')}>
-                                        <Palette color={userReaction === 'beautiful' ? "#5856D6" : "#000"} fill={userReaction === 'beautiful' ? "#5856D6" : "transparent"} size={24} />
+                                        <Palette color={userReaction === 'beautiful' ? "#5856D6" : "#FFF"} fill={userReaction === 'beautiful' ? "#5856D6" : "transparent"} size={24} />
                                     </TouchableOpacity>
 
                                     <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('crazy')}>
-                                        <Zap color={userReaction === 'crazy' ? "#FF2D55" : "#000"} fill={userReaction === 'crazy' ? "#FF2D55" : "transparent"} size={24} />
+                                        <Zap color={userReaction === 'crazy' ? "#FF2D55" : "#FFF"} fill={userReaction === 'crazy' ? "#FF2D55" : "transparent"} size={24} />
                                     </TouchableOpacity>
                                 </View>
                             </View>
                          </View>
 
-                    </SafeAreaView>
+                    </View>
                 )}
             </Modal>
 
@@ -668,13 +722,14 @@ const styles = StyleSheet.create({
 
   hintText: { position: 'absolute', bottom: 10, alignSelf: 'center', color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width:1, height:1}, textShadowRadius: 1 },
   
-  // Styles copiés et adaptés de FeedCard pour l'uniformité
+  modalContainer: { flex: 1, backgroundColor: '#FFF' }, // Base blanche mais modale interne transparente
+
+  // Styles Feed Card pour l'uniformité
   infoCard: {
       width: '100%',
       padding: 20, 
-      backgroundColor: '#FFF',
-      borderTopWidth: 1, 
-      borderTopColor: '#F0F0F0',
+      backgroundColor: 'transparent',
+      borderTopWidth: 0, 
       marginTop: 10, 
   },
   infoContent: {
@@ -691,7 +746,7 @@ const styles = StyleSheet.create({
   drawingTitle: { 
       fontSize: 26, 
       fontWeight: '900', 
-      color: '#000', 
+      color: '#FFF', 
       letterSpacing: -0.5, 
       textAlign: 'center',
       maxWidth: '80%' 
@@ -705,7 +760,7 @@ const styles = StyleSheet.create({
   userName: { 
       fontSize: 13, 
       fontWeight: '500', 
-      color: '#888',
+      color: 'rgba(255,255,255,0.8)',
       marginBottom: 10
   },
   reactionBar: { 

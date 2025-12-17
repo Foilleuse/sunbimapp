@@ -392,7 +392,6 @@ export default function GalleryPage() {
                                         autoCenter={false} 
                                     />
                                 </View>
-                                <Text style={styles.hintText}>Maintenir pour voir l'original</Text>
                             </Pressable>
 
                             {/* INFO CARD TRANSPARENT AVEC TEXTE BLANC */}
