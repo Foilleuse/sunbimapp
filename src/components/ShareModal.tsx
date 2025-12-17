@@ -68,7 +68,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({ visible, onClose, drawin
             setAnimationReady(false);
             const timer = setTimeout(() => {
                 setAnimationReady(true);
-            }, 500); 
+            }, 1000); // Délai augmenté à 1000ms (1 seconde)
             return () => clearTimeout(timer);
         } else {
             setAnimationReady(false);
