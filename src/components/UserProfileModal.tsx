@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, memo, useMemo } from 'react';
-import { View, Text, StyleSheet, Modal, Image, TouchableOpacity, FlatList, ActivityIndicator, Dimensions, Alert, Pressable, Platform, SafeAreaView, PixelRatio } from 'react-native';
+import { View, Text, StyleSheet, Modal, Image, TouchableOpacity, FlatList, ActivityIndicator, Dimensions, Alert, Pressable, Platform, SafeAreaView, PixelRatio, ScrollView } from 'react-native';
 import { X, User, UserPlus, UserCheck, Heart, MessageCircle, Lock, AlertCircle, Unlock, Lightbulb, Palette, Zap, MoreHorizontal } from 'lucide-react-native';
 import { supabase } from '../lib/supabaseClient';
 import { DrawingViewer } from './DrawingViewer';
@@ -546,72 +546,78 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                             top={60} 
                         />
 
-                        <View style={[styles.header, { paddingVertical: 0, paddingTop: 10, paddingHorizontal: 15, backgroundColor: 'transparent' }]}> 
-                            <TouchableOpacity onPress={closeDrawing} style={styles.closeBtnTransparent} hitSlop={15}>
-                                <X color="#FFF" size={28} />
-                            </TouchableOpacity>
-                        </View>
+                        {/* ✅ AJOUT SCROLLVIEW POUR PETITS ÉCRANS */}
+                        <ScrollView 
+                            contentContainerStyle={{ flexGrow: 1, alignItems: 'center' }}
+                            showsVerticalScrollIndicator={false}
+                        >
+                            <View style={[styles.header, { paddingVertical: 0, paddingTop: 10, paddingHorizontal: 15, backgroundColor: 'transparent', width: '100%' }]}> 
+                                <TouchableOpacity onPress={closeDrawing} style={styles.closeBtnTransparent} hitSlop={15}>
+                                    <X color="#FFF" size={28} />
+                                </TouchableOpacity>
+                            </View>
 
-                        <View style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}> 
-                            <Pressable 
-                                onPressIn={() => {
-                                    if (isSelectedUnlocked) setIsHolding(true);
-                                }} 
-                                onPressOut={() => setIsHolding(false)}
-                                style={{ width: screenWidth, aspectRatio: 3/4, backgroundColor: 'transparent' }}
-                            >
-                                {/* L'image est gérée par DrawingViewer ou MirroredBackground */}
-                                <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
-                                    <DrawingViewer
-                                        imageUri={selectedDrawingImageOptimized || selectedDrawing.cloud_image_url} 
-                                        canvasData={isSelectedUnlocked ? selectedDrawing.canvas_data : []}
-                                        viewerSize={screenWidth} 
-                                        viewerHeight={screenWidth * (4/3)} 
-                                        transparentMode={true} 
-                                        startVisible={false} 
-                                        animated={true}
-                                        autoCenter={false} 
-                                    />
-                                </View>
-                                {isSelectedUnlocked && <Text style={styles.hintText}> </Text>}
-                            </Pressable>
-                        </View>
+                            <View style={{ width: screenWidth, alignItems: 'center' }}> 
+                                <Pressable 
+                                    onPressIn={() => {
+                                        if (isSelectedUnlocked) setIsHolding(true);
+                                    }} 
+                                    onPressOut={() => setIsHolding(false)}
+                                    style={{ width: screenWidth, aspectRatio: 3/4, backgroundColor: 'transparent' }}
+                                >
+                                    {/* L'image est gérée par DrawingViewer ou MirroredBackground */}
+                                    <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
+                                        <DrawingViewer
+                                            imageUri={selectedDrawingImageOptimized || selectedDrawing.cloud_image_url} 
+                                            canvasData={isSelectedUnlocked ? selectedDrawing.canvas_data : []}
+                                            viewerSize={screenWidth} 
+                                            viewerHeight={screenWidth * (4/3)} 
+                                            transparentMode={true} 
+                                            startVisible={false} 
+                                            animated={true}
+                                            autoCenter={false} 
+                                        />
+                                    </View>
+                                    {isSelectedUnlocked && <Text style={styles.hintText}>Maintenir pour voir l'original</Text>}
+                                </Pressable>
+                            </View>
 
-                        {/* INFO CARD STYLE FEED (BLANC SUR TRANSPARENT) */}
-                         <View style={styles.infoCard}>
-                            <View style={styles.infoContent}>
-                                <View style={styles.titleRow}>
-                                    <Text style={styles.drawingTitle} numberOfLines={1}>
-                                        {selectedDrawing.label || "Sans titre"}
-                                    </Text>
+                            {/* INFO CARD STYLE FEED (BLANC SUR TRANSPARENT) */}
+                            <View style={styles.infoCard}>
+                                <View style={styles.infoContent}>
+                                    <View style={styles.titleRow}>
+                                        <Text style={styles.drawingTitle} numberOfLines={1}>
+                                            {selectedDrawing.label || "Sans titre"}
+                                        </Text>
+                                        
+                                        <TouchableOpacity onPress={handleReport} style={styles.moreBtnAbsolute} hitSlop={15}>
+                                            <MoreHorizontal color="#CCC" size={24} />
+                                        </TouchableOpacity>
+                                    </View>
                                     
-                                    <TouchableOpacity onPress={handleReport} style={styles.moreBtnAbsolute} hitSlop={15}>
-                                        <MoreHorizontal color="#CCC" size={24} />
-                                    </TouchableOpacity>
-                                </View>
-                                
-                                <Text style={styles.userName}>{userProfile?.display_name || "Anonyme"}</Text>
+                                    <Text style={styles.userName}>{userProfile?.display_name || "Anonyme"}</Text>
 
-                                {/* BARRE DE RÉACTIONS - SANS COMPTEURS */}
-                                <View style={styles.reactionBar}>
-                                    <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('like')}>
-                                        <Heart color={userReaction === 'like' ? "#FF3B30" : "#FFF"} fill={userReaction === 'like' ? "#FF3B30" : "transparent"} size={24} />
-                                    </TouchableOpacity>
+                                    {/* BARRE DE RÉACTIONS - SANS COMPTEURS */}
+                                    <View style={styles.reactionBar}>
+                                        <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('like')}>
+                                            <Heart color={userReaction === 'like' ? "#FF3B30" : "#FFF"} fill={userReaction === 'like' ? "#FF3B30" : "transparent"} size={24} />
+                                        </TouchableOpacity>
 
-                                    <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('smart')}>
-                                        <Lightbulb color={userReaction === 'smart' ? "#FFCC00" : "#FFF"} fill={userReaction === 'smart' ? "#FFCC00" : "transparent"} size={24} />
-                                    </TouchableOpacity>
+                                        <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('smart')}>
+                                            <Lightbulb color={userReaction === 'smart' ? "#FFCC00" : "#FFF"} fill={userReaction === 'smart' ? "#FFCC00" : "transparent"} size={24} />
+                                        </TouchableOpacity>
 
-                                    <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('beautiful')}>
-                                        <Palette color={userReaction === 'beautiful' ? "#5856D6" : "#FFF"} fill={userReaction === 'beautiful' ? "#5856D6" : "transparent"} size={24} />
-                                    </TouchableOpacity>
+                                        <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('beautiful')}>
+                                            <Palette color={userReaction === 'beautiful' ? "#5856D6" : "#FFF"} fill={userReaction === 'beautiful' ? "#5856D6" : "transparent"} size={24} />
+                                        </TouchableOpacity>
 
-                                    <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('crazy')}>
-                                        <Zap color={userReaction === 'crazy' ? "#FF2D55" : "#FFF"} fill={userReaction === 'crazy' ? "#FF2D55" : "transparent"} size={24} />
-                                    </TouchableOpacity>
+                                        <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('crazy')}>
+                                            <Zap color={userReaction === 'crazy' ? "#FF2D55" : "#FFF"} fill={userReaction === 'crazy' ? "#FF2D55" : "transparent"} size={24} />
+                                        </TouchableOpacity>
+                                    </View>
                                 </View>
                             </View>
-                         </View>
+                        </ScrollView>
 
                     </View>
                 )}
