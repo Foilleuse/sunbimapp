@@ -19,19 +19,18 @@ interface UserProfileModalProps {
 // Types de réactions possibles
 type ReactionType = 'like' | 'smart' | 'beautiful' | 'crazy' | null;
 
-// --- COMPOSANT BACKGROUND : MIROIR + FLOU ---
-// Sert uniquement pour l'ambiance arrière-plan (flou)
-const MirroredBackgroundBlur = ({ uri, width, height }: { uri: string, width: number, height: number }) => {
+// --- COMPOSANT BACKGROUND : MIROIR + FLOU + FONDU ÉTENDU (identique à gallery.tsx) ---
+const MirroredBackground = ({ uri, width, height, top }: { uri: string, width: number, height: number, top: number }) => {
     const image = useImage(uri);
+    
     if (!image) return null;
 
+    const bottom = top + height;
     const BLUR_RADIUS = 25; 
+
     const EXTRA_WIDTH = 100;
     const bgWidth = width + EXTRA_WIDTH;
     const bgX = -EXTRA_WIDTH / 2;
-    // On centre verticalement ou on remplit
-    // Ici on va remplir tout l'écran avec le motif
-    const top = 0;
 
     return (
         <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
@@ -40,40 +39,27 @@ const MirroredBackgroundBlur = ({ uri, width, height }: { uri: string, width: nu
                 <Group origin={vec(width / 2, top)} transform={[{ scaleY: -1 }]}>
                     <SkiaImage image={image} x={bgX} y={top} width={bgWidth} height={height} fit="cover" />
                 </Group>
-                <Group origin={vec(width / 2, height)} transform={[{ scaleY: -1 }]}>
+                <Group origin={vec(width / 2, bottom)} transform={[{ scaleY: -1 }]}>
                     <SkiaImage image={image} x={bgX} y={top} width={bgWidth} height={height} fit="cover" />
                 </Group>
             </Group>
-            {/* Voile noir léger pour lisibilité */}
-            <Rect x={0} y={0} width={width} height={height * 2} color="rgba(0,0,0,0.3)" />
-        </Canvas>
-    );
-};
 
-// --- COMPOSANT IMAGE NETTE AVEC MASQUE ---
-// Sert pour l'image principale dans le ScrollView
-const MaskedImage = ({ uri, width, height }: { uri: string, width: number, height: number }) => {
-    const image = useImage(uri);
-    if (!image) return null;
-
-    return (
-        <Canvas style={{ width, height }} pointerEvents="none">
             <Mask
                 mode="luminance"
                 mask={
-                    <Rect x={0} y={0} width={width} height={height}>
+                    <Rect x={0} y={top} width={width} height={height}>
                         <SkiaGradient
-                            start={vec(0, 0)}
-                            end={vec(0, height)}
+                            start={vec(0, top)}
+                            end={vec(0, bottom)}
                             colors={["black", "white", "white", "black"]}
-                            positions={[0, 0.05, 0.95, 1]} // Marges de fondu plus fines pour l'image principale
+                            positions={[0, 0.2, 0.8, 1]}
                         />
                     </Rect>
                 }
             >
                 <SkiaImage
                     image={image}
-                    x={0} y={0} width={width} height={height}
+                    x={0} y={top} width={width} height={height}
                     fit="cover"
                 />
             </Mask>
@@ -81,6 +67,36 @@ const MaskedImage = ({ uri, width, height }: { uri: string, width: number, heigh
     );
 };
 
+// --- COMPOSANT BOUTON DE RÉACTION ANIMÉ ---
+const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color, count }: any) => {
+    const scale = useSharedValue(1);
+
+    const animatedStyle = useAnimatedStyle(() => {
+        return {
+            transform: [{ scale: scale.value }],
+        };
+    });
+
+    const handlePress = () => {
+        scale.value = withSequence(
+            withSpring(1.6, { damping: 10, stiffness: 200 }),
+            withSpring(1, { damping: 10, stiffness: 200 })
+        );
+        onPress();
+    };
+
+    return (
+        <Pressable onPress={handlePress} style={styles.reactionBtn}>
+            <Animated.View style={animatedStyle}>
+                <Icon
+                    color={isActive ? color : "#FFF"}
+                    fill={isActive ? color : "transparent"}
+                    size={24}
+                />
+            </Animated.View>
+        </Pressable>
+    );
+};
 
 // --- COMPOSANT MÉMORISÉ POUR LA GRILLE ---
 const DrawingGridItem = memo(({ item, size, isUnlocked, onPress, spacing }: any) => {
@@ -153,7 +169,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
   // Ajout d'un état pour retarder l'animation
   const [animationReady, setAnimationReady] = useState(false);
 
-  const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+  const { width: screenWidth } = Dimensions.get('window');
   const SPACING = 1; 
   const NUM_COLS = 2;
   const ITEM_SIZE = (screenWidth - (SPACING * (NUM_COLS - 1))) / NUM_COLS;
@@ -558,81 +574,67 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                 )
             )}
 
-            {/* MODALE D'AGRANDISSEMENT (STYLE FEED CARD) */}
+            {/* MODALE D'AGRANDISSEMENT IDENTIQUE A GALLERY */}
             <Modal visible={!!selectedDrawing} animationType="slide" presentationStyle="pageSheet" onRequestClose={closeDrawing}>
                 {selectedDrawing && (
                     <View style={styles.modalContainer}>
-                        {/* FOND MIROIR GLOBAL (Flou) */}
-                        <MirroredBackgroundBlur 
+                        {/* FOND MIROIR AJOUTÉ */}
+                        <MirroredBackground 
                             uri={selectedDrawingImageOptimized || selectedDrawing.cloud_image_url}
                             width={screenWidth}
-                            height={screenHeight} // Prend toute la hauteur
+                            height={screenWidth * (4/3)}
+                            top={60} 
                         />
 
-                        {/* ✅ AJOUT SCROLLVIEW POUR PETITS ÉCRANS */}
+                        <View style={styles.modalHeader}>
+                            <TouchableOpacity onPress={closeDrawing} style={styles.closeBtnTransparent} hitSlop={15}>
+                                <X color="#FFF" size={30} />
+                            </TouchableOpacity>
+                        </View>
+
                         <ScrollView 
                             contentContainerStyle={{ flexGrow: 1, alignItems: 'center' }}
                             showsVerticalScrollIndicator={false}
                         >
-                            <View style={[styles.header, { paddingVertical: 0, paddingTop: 10, paddingHorizontal: 15, backgroundColor: 'transparent', width: '100%' }]}> 
-                                <TouchableOpacity onPress={closeDrawing} style={styles.closeBtnTransparent} hitSlop={15}>
-                                    <X color="#FFF" size={28} />
-                                </TouchableOpacity>
-                            </View>
-
-                            <View style={{ width: screenWidth, alignItems: 'center' }}> 
-                                <Pressable 
-                                    onPressIn={() => {
-                                        if (isSelectedUnlocked) setIsHolding(true);
-                                    }} 
-                                    onPressOut={() => setIsHolding(false)}
-                                    style={{ width: screenWidth, aspectRatio: 3/4, backgroundColor: 'transparent', marginTop: 0 }}
-                                >
-                                    {/* ✅ CORRECTION : 
-                                        On affiche l'image nette AVEC MASQUE directement ici.
-                                        Ainsi elle scrolle avec le dessin et reste alignée.
-                                    */}
-                                    <View style={StyleSheet.absoluteFill}>
-                                        <MaskedImage 
-                                            uri={selectedDrawingImageOptimized || selectedDrawing.cloud_image_url}
-                                            width={screenWidth}
-                                            height={screenWidth * (4/3)}
+                            <Pressable 
+                                onPressIn={() => {
+                                    if (isSelectedUnlocked) setIsHolding(true);
+                                }} 
+                                onPressOut={() => setIsHolding(false)}
+                                style={{ width: screenWidth, aspectRatio: 3/4, backgroundColor: 'transparent', marginTop: 0 }}
+                            >
+                                <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
+                                    {/* Animation retardée pour éviter les saccades */}
+                                    {animationReady && (
+                                        <DrawingViewer
+                                            imageUri={selectedDrawingImageOptimized || selectedDrawing.cloud_image_url} 
+                                            canvasData={isSelectedUnlocked ? selectedDrawing.canvas_data : []}
+                                            viewerSize={screenWidth} 
+                                            viewerHeight={screenWidth * (4/3)} 
+                                            transparentMode={false} // On affiche le fond (nuage) ici pour alignement
+                                            startVisible={false} 
+                                            animated={true}
+                                            autoCenter={false} 
                                         />
-                                    </View>
+                                    )}
+                                    {/* Preview statique immédiate */}
+                                    {!animationReady && (
+                                        <DrawingViewer
+                                            imageUri={selectedDrawingImageOptimized || selectedDrawing.cloud_image_url} 
+                                            canvasData={isSelectedUnlocked ? selectedDrawing.canvas_data : []}
+                                            viewerSize={screenWidth} 
+                                            viewerHeight={screenWidth * (4/3)} 
+                                            transparentMode={false}
+                                            startVisible={true} 
+                                            animated={false}
+                                            autoCenter={false} 
+                                        />
+                                    )}
+                                </View>
+                                {isSelectedUnlocked && <Text style={styles.hintText}>Maintenir pour voir l'original</Text>}
+                            </Pressable>
 
-                                    <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
-                                        {/* DrawingViewer ne gère plus que les traits (transparentMode=true) */}
-                                        {animationReady && (
-                                            <DrawingViewer
-                                                imageUri={selectedDrawingImageOptimized || selectedDrawing.cloud_image_url} 
-                                                canvasData={isSelectedUnlocked ? selectedDrawing.canvas_data : []}
-                                                viewerSize={screenWidth} 
-                                                viewerHeight={screenWidth * (4/3)} 
-                                                transparentMode={true} 
-                                                startVisible={false} 
-                                                animated={true}
-                                                autoCenter={false} 
-                                            />
-                                        )}
-                                        {/* Preview statique immédiate */}
-                                        {!animationReady && (
-                                            <DrawingViewer
-                                                imageUri={selectedDrawingImageOptimized || selectedDrawing.cloud_image_url} 
-                                                canvasData={isSelectedUnlocked ? selectedDrawing.canvas_data : []}
-                                                viewerSize={screenWidth} 
-                                                viewerHeight={screenWidth * (4/3)} 
-                                                transparentMode={true} 
-                                                startVisible={true} 
-                                                animated={false}
-                                                autoCenter={false} 
-                                            />
-                                        )}
-                                    </View>
-                                    {isSelectedUnlocked && <Text style={styles.hintText}>Maintenir pour voir l'original</Text>}
-                                </Pressable>
-                            </View>
-
-                            {/* INFO CARD STYLE FEED (BLANC SUR TRANSPARENT) */}
+                            {/* INFO CARD TRANSPARENT AVEC TEXTE BLANC */}
                             <View style={styles.infoCard}>
                                 <View style={styles.infoContent}>
                                     <View style={styles.titleRow}>
@@ -647,28 +649,40 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                                     
                                     <Text style={styles.userName}>{userProfile?.display_name || "Anonyme"}</Text>
 
-                                    {/* BARRE DE RÉACTIONS - SANS COMPTEURS */}
+                                    {/* BARRE DE RÉACTIONS */}
                                     <View style={styles.reactionBar}>
-                                        <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('like')}>
-                                            <Heart color={userReaction === 'like' ? "#FF3B30" : "#FFF"} fill={userReaction === 'like' ? "#FF3B30" : "transparent"} size={24} />
-                                        </TouchableOpacity>
-
-                                        <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('smart')}>
-                                            <Lightbulb color={userReaction === 'smart' ? "#FFCC00" : "#FFF"} fill={userReaction === 'smart' ? "#FFCC00" : "transparent"} size={24} />
-                                        </TouchableOpacity>
-
-                                        <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('beautiful')}>
-                                            <Palette color={userReaction === 'beautiful' ? "#5856D6" : "#FFF"} fill={userReaction === 'beautiful' ? "#5856D6" : "transparent"} size={24} />
-                                        </TouchableOpacity>
-
-                                        <TouchableOpacity style={styles.reactionBtn} onPress={() => handleReaction('crazy')}>
-                                            <Zap color={userReaction === 'crazy' ? "#FF2D55" : "#FFF"} fill={userReaction === 'crazy' ? "#FF2D55" : "transparent"} size={24} />
-                                        </TouchableOpacity>
+                                        <AnimatedReactionBtn
+                                            icon={Heart}
+                                            color="#FF3B30"
+                                            isActive={userReaction === 'like'}
+                                            count={reactionCounts.like}
+                                            onPress={() => handleReaction('like')}
+                                        />
+                                        <AnimatedReactionBtn
+                                            icon={Lightbulb}
+                                            color="#FFCC00"
+                                            isActive={userReaction === 'smart'}
+                                            count={reactionCounts.smart}
+                                            onPress={() => handleReaction('smart')}
+                                        />
+                                        <AnimatedReactionBtn
+                                            icon={Palette}
+                                            color="#5856D6"
+                                            isActive={userReaction === 'beautiful'}
+                                            count={reactionCounts.beautiful}
+                                            onPress={() => handleReaction('beautiful')}
+                                        />
+                                        <AnimatedReactionBtn
+                                            icon={Zap}
+                                            color="#FF2D55"
+                                            isActive={userReaction === 'crazy'}
+                                            count={reactionCounts.crazy}
+                                            onPress={() => handleReaction('crazy')}
+                                        />
                                     </View>
                                 </View>
                             </View>
                         </ScrollView>
-
                     </View>
                 )}
             </Modal>
@@ -779,14 +793,15 @@ const styles = StyleSheet.create({
   hintText: { position: 'absolute', bottom: 10, alignSelf: 'center', color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width:1, height:1}, textShadowRadius: 1 },
   
   modalContainer: { flex: 1, backgroundColor: '#FFF' }, // Base blanche mais modale interne transparente
+  modalHeader: { width: '100%', height: 60, justifyContent: 'center', alignItems: 'flex-end', paddingRight: 20, paddingTop: 10, backgroundColor: 'transparent', zIndex: 20 },
 
-  // Styles Feed Card pour l'uniformité
+  // Styles Feed Card pour l'uniformité (Blanc sur fond sombre)
   infoCard: {
       width: '100%',
       padding: 20, 
-      backgroundColor: 'transparent',
-      borderTopWidth: 0, 
-      marginTop: 10, 
+      backgroundColor: 'transparent', // Fond transparent
+      borderTopWidth: 0, // Plus de bordure
+      marginTop: 10 
   },
   infoContent: {
       alignItems: 'center'
@@ -802,7 +817,7 @@ const styles = StyleSheet.create({
   drawingTitle: { 
       fontSize: 26, 
       fontWeight: '900', 
-      color: '#FFF', 
+      color: '#FFF', // Titre blanc
       letterSpacing: -0.5, 
       textAlign: 'center',
       maxWidth: '80%' 
@@ -816,7 +831,7 @@ const styles = StyleSheet.create({
   userName: { 
       fontSize: 13, 
       fontWeight: '500', 
-      color: 'rgba(255,255,255,0.8)',
+      color: 'rgba(255,255,255,0.8)', // Nom gris clair
       marginBottom: 10
   },
   reactionBar: { 
@@ -833,12 +848,12 @@ const styles = StyleSheet.create({
   },
   reactionText: { 
       fontSize: 12, 
-      fontWeight: '600', 
+      fontWeight: '700', 
       color: '#999',
       marginTop: 4 
   },
   activeText: {
       color: '#000',
-      fontWeight: '800'
+      fontWeight: '900'
   }
 });
