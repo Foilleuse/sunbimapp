@@ -43,11 +43,16 @@ function getSvgPathFromStroke(stroke: number[][]): string {
 // Composant interne pour gérer l'animation d'un chemin individuel
 const AnimatedPath = ({ pathData, index, progress, totalCount, startVisible }: { pathData: DrawingPath, index: number, progress: Animated.SharedValue<number>, totalCount: number, startVisible: boolean }) => {
     
-    // CORRECTION CRITIQUE : Si on doit animer (startVisible=false), on initialise currentPath à null pour être sûr qu'il ne s'affiche pas
+    const isFilled = pathData.isFilled ?? false;
+
+    // CORRECTION VISIBILITÉ :
+    // 1. Si c'est un path "filled" (perfect-freehand) ET qu'on anime -> on commence à null (géométrie progressive)
+    // 2. Si c'est un path "stroke" (SVG classique) -> on charge TOUJOURS le path (l'opacité gère l'anim)
     const [currentPath, setCurrentPath] = useState<SkPath | null>(() => {
-        if (!startVisible) return null; // Invisible au départ si on anime
+        // Cas 1: Animation progressive géométrique requise
+        if (!startVisible && isFilled && pathData.points) return null; 
         
-        // Si startVisible=true, on affiche tout de suite le chemin final
+        // Cas 2: Affichage direct ou stroke (animé par opacité)
         try {
             if (pathData.svgPath && pathData.svgPath.length > 0) {
                 return Skia.Path.MakeFromSVGString(pathData.svgPath);
@@ -58,10 +63,9 @@ const AnimatedPath = ({ pathData, index, progress, totalCount, startVisible }: {
         return null;
     });
 
-    const isFilled = pathData.isFilled ?? false;
-
     // Cette fonction s'exécute sur le JS Thread pour éviter les crashs Worklet/UI
     const updatePathOnJS = (currentProgress: number) => {
+        // On ne met à jour la géométrie que pour les paths "filled" avec des points
         if (!pathData.points || !isFilled) return;
 
         const start = index / totalCount;
@@ -76,9 +80,10 @@ const AnimatedPath = ({ pathData, index, progress, totalCount, startVisible }: {
             try {
                 if (pathData.svgPath) {
                     const finalPath = Skia.Path.MakeFromSVGString(pathData.svgPath);
-                    // On ne met à jour que si ce n'est pas déjà le final path (pour éviter re-render)
-                    // Note: Skia object comparison is not direct, but setting it again is safe-ish
-                    if (finalPath) setCurrentPath(finalPath);
+                    // On ne met à jour que si ce n'est pas déjà le final path (pour éviter re-render inutile)
+                    // Note: Skia object comparison is not direct, mais setState déclenchera un render
+                    // On peut optimiser en vérifiant une ref si besoin, mais ici c'est acceptable
+                    setCurrentPath(finalPath);
                 }
             } catch (e) { console.warn("Error creating final path", e); }
         } 
@@ -121,11 +126,12 @@ const AnimatedPath = ({ pathData, index, progress, totalCount, startVisible }: {
         () => progress.value,
         (val) => {
             // On ne lance le calcul que si l'animation est active (startVisible=false)
-            if (!startVisible) {
+            // ET que c'est un path "filled" (les strokes sont gérés par opacité uniquement)
+            if (!startVisible && isFilled) {
                 runOnJS(updatePathOnJS)(val);
             }
         },
-        [progress, pathData, startVisible]
+        [progress, pathData, startVisible, isFilled]
     );
 
     const opacity = useDerivedValue(() => {
@@ -143,8 +149,9 @@ const AnimatedPath = ({ pathData, index, progress, totalCount, startVisible }: {
     });
 
     // Fallback d'affichage :
-    // 1. currentPath (calculé dynamiquement ou null)
+    // 1. currentPath (calculé dynamiquement ou null ou path statique pour stroke)
     // 2. Si startVisible=true et pas de currentPath encore, on essaie de charger le SVG statique
+    // NOTE: Avec la nouvelle logique d'init, currentPath devrait être bon pour les strokes dès le début.
     const displayPath = currentPath || 
         (startVisible && !isFilled && pathData.svgPath ? (() => {
             try { return Skia.Path.MakeFromSVGString(pathData.svgPath); } catch(e) { return null; }
@@ -203,6 +210,7 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
 
     const validPaths = useMemo(() => {
         if (!Array.isArray(canvasData)) return [];
+        // On accepte soit svgPath (stroke), soit points (filled)
         return canvasData.filter(p => p && (p.svgPath || (p.points && p.points.length > 0)));
     }, [canvasData]);
 
