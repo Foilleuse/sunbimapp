@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { View, StyleSheet, Modal, Dimensions, PixelRatio, StatusBar, Text, TouchableOpacity, Alert } from 'react-native';
+import { View, StyleSheet, Modal, Dimensions, PixelRatio, StatusBar, Text, TouchableOpacity, Alert, Platform } from 'react-native';
 import { Canvas, Rect, LinearGradient as SkiaGradient, vec, useImage, Image as SkiaImage, Group, Blur, Mask, Paint } from "@shopify/react-native-skia";
 import { DrawingViewer } from './DrawingViewer';
 import { getOptimizedImageUrl } from '../utils/imageOptimizer';
@@ -86,15 +86,18 @@ export const ShareModal: React.FC<ShareModalProps> = ({ visible, onClose, drawin
                 try {
                     // console.log("Début enregistrement...");
                     // Amélioration de la qualité : bitrate élevé, fps 60, dimensions réelles
-                    const widthPx = screenWidth * PixelRatio.get();
-                    const heightPx = screenHeight * PixelRatio.get();
+                    // Note: Sur iOS, react-native-record-screen utilise ReplayKit qui a ses propres contraintes.
+                    // Sur Android, on peut spécifier width/height/bitrate.
+                    
+                    const widthPx = Math.round(screenWidth * PixelRatio.get());
+                    const heightPx = Math.round(screenHeight * PixelRatio.get());
                     
                     const res = await RecordScreen.startRecording({ 
                         mic: false,
-                        width: widthPx, // Utilisation des pixels réels pour la résolution native
-                        height: heightPx,
-                        bitrate: 10000000, // 10 Mbps pour très haute qualité
-                        fps: 60
+                        width: widthPx, // Utilisation des pixels réels pour la résolution native (Android)
+                        height: heightPx, // (Android)
+                        bitrate: 20000000, // 20 Mbps pour très haute qualité (Android)
+                        fps: 60 // (Android)
                     });
                     // console.log("Enregistrement démarré", res);
                 } catch (e) {
