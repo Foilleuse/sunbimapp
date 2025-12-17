@@ -11,6 +11,7 @@ import Carousel from 'react-native-reanimated-carousel';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withSequence } from 'react-native-reanimated';
 import { Canvas, Rect, LinearGradient as SkiaGradient, vec, useImage, Image as SkiaImage, Group, Blur, Mask, Paint } from "@shopify/react-native-skia";
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { SunbimHeader } from '../../src/components/SunbimHeader';
 
 // Types de réactions possibles
 type ReactionType = 'like' | 'smart' | 'beautiful' | 'crazy' | null;
@@ -249,6 +250,22 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
         );
     };
 
+    // 🔥 GESTION DU PARTAGE (SHARE) DANS LA CARTE
+    const handleShare = async () => {
+        // On partage l'image de fond (nuage) associée à ce dessin pour l'instant
+        // Idéalement on partagerait l'image composée (nuage + dessin) si on la générait côté serveur ou local
+        // Mais pour l'instant, partageons le lien de l'image du nuage.
+        if (!drawing.cloud_image_url) return;
+        try {
+          await Share.share({
+            message: `Regarde ce dessin "${drawing.label || 'Sans titre'}" sur Sunbim !`,
+            url: drawing.cloud_image_url, 
+          });
+        } catch (error: any) {
+          console.log(error.message);
+        }
+    };
+
     return (
         <View style={styles.cardContainer}>
             <View style={{ width: canvasSize, height: canvasSize * (4/3), backgroundColor: 'transparent', position: 'relative' }}>
@@ -272,11 +289,16 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
             <View style={styles.cardInfo}>
                 <View style={styles.headerInfo}>
                     <View style={styles.titleRow}>
+                        {/* 🔥 AJOUT DU BOUTON PARTAGE À GAUCHE */}
+                        <TouchableOpacity onPress={handleShare} style={styles.iconBtnLeft} hitSlop={15}>
+                            <Share2 color="#CCC" size={24} />
+                        </TouchableOpacity>
+
                         <Text style={styles.drawingTitle} numberOfLines={1}>
                             {drawing.label || "Sans titre"}
                         </Text>
                         
-                        <TouchableOpacity onPress={handleReport} style={styles.moreBtnAbsolute} hitSlop={15}>
+                        <TouchableOpacity onPress={handleReport} style={styles.iconBtnRight} hitSlop={15}>
                             <MoreHorizontal color="#CCC" size={24} />
                         </TouchableOpacity>
                     </View>
@@ -432,18 +454,6 @@ export default function FeedPage() {
         }
     };
 
-    const handleShare = async () => {
-        if (!backgroundCloud) return;
-        try {
-          await Share.share({
-            message: 'Regarde ce nuage sur Sunbim !',
-            url: backgroundCloud, 
-          });
-        } catch (error: any) {
-          console.log(error.message);
-        }
-    };
-
     const optimizedBackground = useMemo(() => {
         if (!backgroundCloud) return null;
         const physicalWidth = Math.round(screenWidth * PixelRatio.get());
@@ -465,17 +475,8 @@ export default function FeedPage() {
                 />
             )}
 
-            {/* HEADER CUSTOM AVEC BOUTON PARTAGE */}
-            <SafeAreaView style={styles.headerContainer} edges={['top']}>
-                <View style={styles.headerContent}>
-                    <TouchableOpacity onPress={handleShare} style={styles.shareBtn} hitSlop={10}>
-                        <Share2 color="#FFF" size={28} />
-                    </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Sunbim</Text>
-                    {/* Espace vide pour équilibrer le bouton partage et centrer le titre */}
-                    <View style={{ width: 28 }} />
-                </View>
-            </SafeAreaView>
+            {/* HEADER SIMPLIFIÉ (Sans bouton partage ici, déplacé dans la carte) */}
+            <SunbimHeader showCloseButton={false} transparent={true} />
             
             <View 
                 style={[styles.mainContent, { paddingTop: TOP_HEADER_SPACE }]} 
@@ -559,36 +560,8 @@ const styles = StyleSheet.create({
     centerBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     text: { color: '#FFF', fontSize: 16 }, 
     
-    // Nouveaux styles Header
-    headerContainer: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        zIndex: 50,
-        // Pas de fond pour laisser la transparence
-    },
-    headerContent: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 20,
-        paddingVertical: 10,
-    },
-    shareBtn: {
-        // Style bouton si besoin
-    },
-    headerTitle: {
-        fontSize: 28,
-        fontWeight: '900',
-        color: '#FFF',
-        letterSpacing: -1,
-        // Ombre portée pour lisibilité sur fond clair/sombre
-        textShadowColor: 'rgba(0,0,0,0.3)',
-        textShadowOffset: { width: 0, height: 2 },
-        textShadowRadius: 4,
-    },
-
+    // Header custom supprimé, retour au SunbimHeader standard via composant
+    
     mainContent: {
         flex: 1,
         position: 'relative',
@@ -627,10 +600,17 @@ const styles = StyleSheet.create({
         color: '#FFF', 
         letterSpacing: -0.5, 
         textAlign: 'center',
-        maxWidth: '80%' 
+        maxWidth: '70%' // Réduit pour laisser place aux boutons
     },
     
-    moreBtnAbsolute: { 
+    // Position absolue pour les boutons gauche/droite
+    iconBtnLeft: {
+        position: 'absolute',
+        left: 0,
+        top: 5,
+        padding: 5
+    },
+    iconBtnRight: { // Ancien moreBtnAbsolute
         position: 'absolute',
         right: 0,
         top: 5,
