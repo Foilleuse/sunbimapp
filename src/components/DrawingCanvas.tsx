@@ -218,8 +218,8 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
             smoothing: 0.47,
             streamline: 0.81,
             easing: (t: number) => t,
-            start: { taper: 0, cap: true },
-            end: { taper: 0, cap: true },
+            start: { taper: true, cap: true }, // Taper activé pour un début fin
+            end: { taper: true, cap: true },   // Taper activé pour une fin fine
             simulatePressure: true,
             last: true, // Indique que le trait est fini
           };
@@ -261,8 +261,8 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
             smoothing: 0.47,
             streamline: 0.81,
             easing: (t: number) => t,
-            start: { taper: 0, cap: true },
-            end: { taper: 0, cap: true },
+            start: { taper: true, cap: true }, // Taper activé pour la prévisualisation aussi
+            end: { taper: true, cap: true },
             simulatePressure: true,
             last: false,
         };
