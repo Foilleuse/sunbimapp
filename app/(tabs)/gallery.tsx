@@ -82,8 +82,9 @@ const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color, count }: an
     return (
         <Pressable onPress={handlePress} style={styles.reactionBtn}>
             <Animated.View style={animatedStyle}>
+                {/* Icône blanche si inactive, couleur si active */}
                 <Icon
-                    color={isActive ? color : "#000"}
+                    color={isActive ? color : "#FFF"}
                     fill={isActive ? color : "transparent"}
                     size={24}
                 />
@@ -374,37 +375,27 @@ export default function GalleryPage() {
 
                              <View style={styles.modalHeader}>
                                   <TouchableOpacity onPress={closeViewer} style={styles.closeModalBtn}>
-                                      <X color="#000" size={30} />
+                                      <X color="#FFF" size={30} /> 
                                   </TouchableOpacity>
                               </View>
 
-                            {/* Le fond gris #F0F0F0 est remplacé par transparent pour voir le mirroir */}
                             <Pressable onPressIn={() => setIsHolding(true)} onPressOut={() => setIsHolding(false)} style={{ width: screenWidth, aspectRatio: 3/4, backgroundColor: 'transparent', marginTop: 0 }}>
-                                
-                                {/* On ne met PAS d'Image ici car MirroredBackground gère l'affichage,
-                                    SAUF si on veut l'effet "isHolding" pour voir l'original net.
-                                    Le DrawingViewer a son propre imageUri, donc il affiche l'image de fond.
-                                    MirroredBackground est en arrière-plan global.
-                                    DrawingViewer gère l'image "nette" principale.
-                                */}
-
                                 <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
                                     <DrawingViewer
                                         imageUri={optimizedModalImageUri || selectedDrawing.cloud_image_url} 
                                         canvasData={selectedDrawing.canvas_data}
                                         viewerSize={screenWidth} 
                                         viewerHeight={screenWidth * (4/3)}
-                                        transparentMode={true} // Mode transparent pour que MirroredBackground soit visible autour si besoin, mais ici DrawingViewer couvre tout
+                                        transparentMode={true} 
                                         startVisible={false} 
                                         animated={true}
                                         autoCenter={false} 
                                     />
                                 </View>
-                                {/* Texte maintenu visible */}
                                 <Text style={styles.hintText}>Maintenir pour voir l'original</Text>
                             </Pressable>
 
-                            {/* INFO CARD AVEC BOUTONS ANIMÉS */}
+                            {/* INFO CARD TRANSPARENT AVEC TEXTE BLANC */}
                             <View style={styles.infoCard}>
                                 <View style={styles.infoContent}>
                                     <View style={styles.titleRow}>
@@ -467,15 +458,23 @@ const styles = StyleSheet.create({
     emptyState: { marginTop: 100, alignItems: 'center' },
     emptyText: { color: '#999' },
     hintText: { position: 'absolute', bottom: 10, alignSelf: 'center', color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width:1, height:1}, textShadowRadius: 1 },
-    modalContainer: { flex: 1, backgroundColor: '#FFF' }, // Changé en blanc pour éviter transparence indésirable si pas d'image
-    modalHeader: { width: '100%', height: 60, justifyContent: 'center', alignItems: 'flex-end', paddingRight: 20, paddingTop: 10, backgroundColor: 'transparent', zIndex: 20 }, // Fond transparent
+    modalContainer: { flex: 1, backgroundColor: '#FFF' }, 
+    modalHeader: { width: '100%', height: 60, justifyContent: 'center', alignItems: 'flex-end', paddingRight: 20, paddingTop: 10, backgroundColor: 'transparent', zIndex: 20 },
     closeModalBtn: { padding: 5 },
-    infoCard: { width: '100%', padding: 20, backgroundColor: '#FFF', borderTopWidth: 1, borderTopColor: '#F0F0F0', marginTop: 10 },
+    
+    // Style de la carte modifié pour être transparent + texte blanc
+    infoCard: { 
+        width: '100%', 
+        padding: 20, 
+        backgroundColor: 'transparent', // Fond transparent
+        borderTopWidth: 0, // Plus de bordure
+        marginTop: 10 
+    },
     infoContent: { alignItems: 'center' },
     titleRow: { width: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 2, position: 'relative' },
-    drawingTitle: { fontSize: 26, fontWeight: '900', color: '#000', letterSpacing: -0.5, textAlign: 'center', maxWidth: '80%' },
+    drawingTitle: { fontSize: 26, fontWeight: '900', color: '#FFF', letterSpacing: -0.5, textAlign: 'center', maxWidth: '80%' }, // Titre blanc
     moreBtnAbsolute: { position: 'absolute', right: 0, top: 5, padding: 5 },
-    userName: { fontSize: 13, fontWeight: '500', color: '#888', marginBottom: 10 },
+    userName: { fontSize: 13, fontWeight: '500', color: 'rgba(255,255,255,0.8)', marginBottom: 10 }, // Nom gris clair
     reactionBar: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', width: '100%', paddingHorizontal: 10 },
     
     // Styles pour les boutons animés
