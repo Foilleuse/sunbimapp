@@ -19,55 +19,68 @@ interface UserProfileModalProps {
 // Types de réactions possibles
 type ReactionType = 'like' | 'smart' | 'beautiful' | 'crazy' | null;
 
-// --- COMPOSANT BACKGROUND : MIROIR + FLOU + FONDU ÉTENDU ---
-const MirroredBackground = ({ uri, width, height, top }: { uri: string, width: number, height: number, top: number }) => {
+// --- COMPOSANT BACKGROUND : MIROIR + FLOU ---
+// Sert uniquement pour l'ambiance arrière-plan (flou)
+const MirroredBackgroundBlur = ({ uri, width, height }: { uri: string, width: number, height: number }) => {
     const image = useImage(uri);
-    
     if (!image) return null;
 
-    const bottom = top + height;
     const BLUR_RADIUS = 25; 
-
     const EXTRA_WIDTH = 100;
     const bgWidth = width + EXTRA_WIDTH;
     const bgX = -EXTRA_WIDTH / 2;
+    // On centre verticalement ou on remplit
+    // Ici on va remplir tout l'écran avec le motif
+    const top = 0;
 
     return (
         <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
-            {/* 1. ARRIÈRE-PLAN : MIROIRS + FLOU */}
             <Group layer={<Paint><Blur blur={BLUR_RADIUS} /></Paint>}>
                 <SkiaImage image={image} x={bgX} y={top} width={bgWidth} height={height} fit="cover" />
                 <Group origin={vec(width / 2, top)} transform={[{ scaleY: -1 }]}>
                     <SkiaImage image={image} x={bgX} y={top} width={bgWidth} height={height} fit="cover" />
                 </Group>
-                <Group origin={vec(width / 2, bottom)} transform={[{ scaleY: -1 }]}>
+                <Group origin={vec(width / 2, height)} transform={[{ scaleY: -1 }]}>
                     <SkiaImage image={image} x={bgX} y={top} width={bgWidth} height={height} fit="cover" />
                 </Group>
             </Group>
+            {/* Voile noir léger pour lisibilité */}
+            <Rect x={0} y={0} width={width} height={height * 2} color="rgba(0,0,0,0.3)" />
+        </Canvas>
+    );
+};
 
-            {/* 2. PREMIER-PLAN : IMAGE NETTE AVEC MASQUE (Le dégradé) */}
+// --- COMPOSANT IMAGE NETTE AVEC MASQUE ---
+// Sert pour l'image principale dans le ScrollView
+const MaskedImage = ({ uri, width, height }: { uri: string, width: number, height: number }) => {
+    const image = useImage(uri);
+    if (!image) return null;
+
+    return (
+        <Canvas style={{ width, height }} pointerEvents="none">
             <Mask
                 mode="luminance"
                 mask={
-                    <Rect x={0} y={top} width={width} height={height}>
+                    <Rect x={0} y={0} width={width} height={height}>
                         <SkiaGradient
-                            start={vec(0, top)}
-                            end={vec(0, bottom)}
+                            start={vec(0, 0)}
+                            end={vec(0, height)}
                             colors={["black", "white", "white", "black"]}
-                            positions={[0, 0.2, 0.8, 1]}
+                            positions={[0, 0.05, 0.95, 1]} // Marges de fondu plus fines pour l'image principale
                         />
                     </Rect>
                 }
             >
                 <SkiaImage
                     image={image}
-                    x={0} y={top} width={width} height={height}
+                    x={0} y={0} width={width} height={height}
                     fit="cover"
                 />
             </Mask>
         </Canvas>
     );
 };
+
 
 // --- COMPOSANT MÉMORISÉ POUR LA GRILLE ---
 const DrawingGridItem = memo(({ item, size, isUnlocked, onPress, spacing }: any) => {
@@ -140,7 +153,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
   // Ajout d'un état pour retarder l'animation
   const [animationReady, setAnimationReady] = useState(false);
 
-  const { width: screenWidth } = Dimensions.get('window');
+  const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
   const SPACING = 1; 
   const NUM_COLS = 2;
   const ITEM_SIZE = (screenWidth - (SPACING * (NUM_COLS - 1))) / NUM_COLS;
@@ -549,12 +562,11 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
             <Modal visible={!!selectedDrawing} animationType="slide" presentationStyle="pageSheet" onRequestClose={closeDrawing}>
                 {selectedDrawing && (
                     <View style={styles.modalContainer}>
-                        {/* FOND MIROIR AJOUTÉ AVEC LE DÉGRADÉ (MASK) QUI EST DÉJÀ DANS LE COMPOSANT MirroredBackground */}
-                        <MirroredBackground 
+                        {/* FOND MIROIR GLOBAL (Flou) */}
+                        <MirroredBackgroundBlur 
                             uri={selectedDrawingImageOptimized || selectedDrawing.cloud_image_url}
                             width={screenWidth}
-                            height={screenWidth * (4/3)}
-                            top={60} 
+                            height={screenHeight} // Prend toute la hauteur
                         />
 
                         {/* ✅ AJOUT SCROLLVIEW POUR PETITS ÉCRANS */}
@@ -576,29 +588,27 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                                     onPressOut={() => setIsHolding(false)}
                                     style={{ width: screenWidth, aspectRatio: 3/4, backgroundColor: 'transparent', marginTop: 0 }}
                                 >
-                                    {/* ✅ ALIGNEMENT & GOMME "HOLD" :
-                                        Le `MirroredBackground` gère le fond étendu et flou.
-                                        Ici, le `DrawingViewer` avec `transparentMode={true}` affiche SEULEMENT le dessin (traits).
-                                        L'image nette en dessous doit être indépendante pour rester visible quand on cache le dessin (isHolding).
-                                        Mais pour avoir le même effet de dégradé que le `MirroredBackground`, il faudrait appliquer le mask.
-                                        
-                                        Solution Simple : `MirroredBackground` affiche déjà l'image nette avec le mask en layer 2.
-                                        Donc on n'a PAS besoin d'afficher l'image ici, juste le dessin transparent par-dessus.
-                                        Ainsi quand on fait `isHolding` -> opacity 0 sur le dessin -> on voit juste le `MirroredBackground` derrière qui contient l'image nette masquée.
-                                        
-                                        Si le dessin disparaît (isHolding), l'image du MirroredBackground reste fixe = Pas de mouvement.
-                                        Et le dégradé est présent car il est dans MirroredBackground.
+                                    {/* ✅ CORRECTION : 
+                                        On affiche l'image nette AVEC MASQUE directement ici.
+                                        Ainsi elle scrolle avec le dessin et reste alignée.
                                     */}
-                                    
+                                    <View style={StyleSheet.absoluteFill}>
+                                        <MaskedImage 
+                                            uri={selectedDrawingImageOptimized || selectedDrawing.cloud_image_url}
+                                            width={screenWidth}
+                                            height={screenWidth * (4/3)}
+                                        />
+                                    </View>
+
                                     <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
-                                        {/* Animation retardée pour éviter les saccades */}
+                                        {/* DrawingViewer ne gère plus que les traits (transparentMode=true) */}
                                         {animationReady && (
                                             <DrawingViewer
                                                 imageUri={selectedDrawingImageOptimized || selectedDrawing.cloud_image_url} 
                                                 canvasData={isSelectedUnlocked ? selectedDrawing.canvas_data : []}
                                                 viewerSize={screenWidth} 
                                                 viewerHeight={screenWidth * (4/3)} 
-                                                transparentMode={true} // ✅ IMPORTANT : Transparent pour laisser voir le MirroredBackground derrière
+                                                transparentMode={true} 
                                                 startVisible={false} 
                                                 animated={true}
                                                 autoCenter={false} 
@@ -611,7 +621,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                                                 canvasData={isSelectedUnlocked ? selectedDrawing.canvas_data : []}
                                                 viewerSize={screenWidth} 
                                                 viewerHeight={screenWidth * (4/3)} 
-                                                transparentMode={true} // ✅ IMPORTANT : Transparent ici aussi
+                                                transparentMode={true} 
                                                 startVisible={true} 
                                                 animated={false}
                                                 autoCenter={false} 
