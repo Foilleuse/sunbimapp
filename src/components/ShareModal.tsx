@@ -1,10 +1,14 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { View, StyleSheet, Modal, Dimensions, PixelRatio, StatusBar, Text, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, Modal, Dimensions, PixelRatio, StatusBar, Text, TouchableOpacity, NativeModules } from 'react-native';
 import { Canvas, Rect, LinearGradient as SkiaGradient, vec, useImage, Image as SkiaImage, Group, Blur, Mask, Paint } from "@shopify/react-native-skia";
 import { DrawingViewer } from './DrawingViewer';
 import { getOptimizedImageUrl } from '../utils/imageOptimizer';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { X } from 'lucide-react-native';
+
+// Module natif hypothétique pour l'enregistrement (basé sur la présence de configuration ReplayKit)
+// Si une librairie spécifique est utilisée (ex: react-native-record-screen), il faudrait l'importer ici.
+const { ScreenRecorder } = NativeModules; 
 
 interface ShareModalProps {
     visible: boolean;
@@ -64,17 +68,60 @@ export const ShareModal: React.FC<ShareModalProps> = ({ visible, onClose, drawin
     const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
     const [animationReady, setAnimationReady] = useState(false);
 
-    // Initialisation de l'animation
+    // Durée de l'animation du dessin (doit correspondre à celle dans DrawingViewer)
+    const DRAWING_ANIMATION_DURATION = 3000; 
+    // Délai avant le début de l'animation (ex: 1s)
+    const ANIMATION_START_DELAY = 1000;
+    // Délai après la fin de l'animation pour couper l'enregistrement (ex: 1s)
+    const RECORDING_END_BUFFER = 1000;
+
+    // Gestion de l'animation et de l'enregistrement
     useEffect(() => {
-        if (visible && drawing) {
-            setAnimationReady(false);
-            const timer = setTimeout(() => {
-                setAnimationReady(true);
-            }, 1000); 
-            return () => clearTimeout(timer);
-        } else {
-            setAnimationReady(false);
-        }
+        let startTimer: NodeJS.Timeout;
+        let stopTimer: NodeJS.Timeout;
+
+        const startRecordingSequence = async () => {
+            if (visible && drawing) {
+                // 1. Démarrer l'enregistrement dès l'ouverture (ou avec un très léger délai pour s'assurer que le rendu est prêt)
+                try {
+                    // console.log("Début enregistrement...");
+                    // await ScreenRecorder?.startRecording(); 
+                } catch (e) {
+                    console.warn("Erreur démarrage enregistrement:", e);
+                }
+
+                setAnimationReady(false);
+                
+                // 2. Lancer l'animation après le délai défini
+                startTimer = setTimeout(() => {
+                    setAnimationReady(true); // Déclenche l'animation dans DrawingViewer
+
+                    // 3. Arrêter l'enregistrement après (Durée animation + Buffer de fin)
+                    stopTimer = setTimeout(async () => {
+                        try {
+                            // console.log("Fin enregistrement...");
+                            // const res = await ScreenRecorder?.stopRecording();
+                            // console.log("Vidéo enregistrée:", res);
+                            // Ici vous pourriez ouvrir la feuille de partage système avec la vidéo
+                        } catch (e) {
+                            console.warn("Erreur arrêt enregistrement:", e);
+                        }
+                    }, DRAWING_ANIMATION_DURATION + RECORDING_END_BUFFER);
+
+                }, ANIMATION_START_DELAY);
+            } else {
+                setAnimationReady(false);
+            }
+        };
+
+        startRecordingSequence();
+
+        return () => {
+            clearTimeout(startTimer);
+            clearTimeout(stopTimer);
+            // Sécurité : arrêter l'enregistrement si on ferme la modale prématurément
+            // ScreenRecorder?.stopRecording().catch(() => {});
+        };
     }, [visible, drawing]);
 
     // Calculs de géométrie pour alignement parfait
@@ -143,7 +190,6 @@ export const ShareModal: React.FC<ShareModalProps> = ({ visible, onClose, drawin
                 </View>
 
                 {/* 3. HEADER "nyola" STYLE SUNBIMHEADER */}
-                {/* On garde la structure headerBar mais transparent et positionné en haut */}
                 <View style={styles.headerBar}>
                     <View style={styles.titleContainer}>
                         <Text style={styles.headerText}>nyola</Text>
@@ -198,17 +244,16 @@ const styles = StyleSheet.create({
   headerText: {
     fontSize: 32,
     fontWeight: '900',
-    color: '#ffffffff', // Blanc comme demandé (transparent text hack ou juste blanc ?) -> Le code référence utilisait #ffffffff (blanc opaque)
-    // On garde le blanc opaque pour que ça soit visible sur le fond sombre/image
+    color: '#ffffffff', 
     textShadowColor: 'rgba(0,0,0,0.5)',
     textShadowOffset: { width: 2, height: 2 }, 
     textShadowRadius: 0,
     lineHeight: 34,
   },
   headerSubtitle: {
-      fontSize: 14, // Un peu plus petit que le titre
+      fontSize: 14, 
       fontWeight: '600',
-      color: 'rgba(255,255,255,0.7)', // Style "whiteSubText" ou similaire
+      color: 'rgba(255,255,255,0.7)', 
       marginTop: 2,
       fontStyle: 'italic',
       textShadowColor: 'rgba(0,0,0,0.5)',
