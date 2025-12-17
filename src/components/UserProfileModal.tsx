@@ -209,8 +209,11 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
   useEffect(() => {
     if (selectedDrawing) {
         fetchReactionsState();
+        // 🔥 CORRECTION: On force un délai clair et on reset l'état
         setAnimationReady(false);
-        const timer = setTimeout(() => setAnimationReady(true), 300);
+        const timer = setTimeout(() => {
+            setAnimationReady(true);
+        }, 500); // Délai légèrement augmenté pour être sûr que la modale est stable
         return () => clearTimeout(timer);
     } else {
         setAnimationReady(false);
@@ -602,7 +605,11 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                                         Le MirroredBackground en fond s'occupe de l'image (nette avec dégradé + floue).
                                     */}
                                     <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
-                                        {animationReady && (
+                                        {/* 🔥 CORRECTION : On attend TOUJOURS animationReady pour afficher le viewer,
+                                            et on passe startVisible={false} pour forcer l'animation. 
+                                            On évite le rendu "prématuré" statique. 
+                                        */}
+                                        {animationReady ? (
                                             <DrawingViewer
                                                 imageUri={selectedDrawingImageOptimized || selectedDrawing.cloud_image_url} 
                                                 canvasData={isSelectedUnlocked ? selectedDrawing.canvas_data : []}
@@ -613,18 +620,9 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                                                 animated={true}
                                                 autoCenter={false} 
                                             />
-                                        )}
-                                        {!animationReady && (
-                                            <DrawingViewer
-                                                imageUri={selectedDrawingImageOptimized || selectedDrawing.cloud_image_url} 
-                                                canvasData={isSelectedUnlocked ? selectedDrawing.canvas_data : []}
-                                                viewerSize={screenWidth} 
-                                                viewerHeight={screenWidth * (4/3)} 
-                                                transparentMode={true}
-                                                startVisible={true} 
-                                                animated={false}
-                                                autoCenter={false} 
-                                            />
+                                        ) : (
+                                            // Place holder invisible ou spinner si besoin pendant le délai
+                                            <View style={{ width: '100%', height: '100%' }} /> 
                                         )}
                                     </View>
                                     {isSelectedUnlocked && <Text style={styles.hintText}>Maintenir pour voir l'original</Text>}
@@ -853,4 +851,4 @@ const styles = StyleSheet.create({
       color: '#000',
       fontWeight: '900'
   }
-});
+});     
