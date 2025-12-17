@@ -1,9 +1,9 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { View, StyleSheet, Modal, Dimensions, PixelRatio, StatusBar, Text } from 'react-native';
+import { View, StyleSheet, Modal, Dimensions, PixelRatio, StatusBar, Text, TouchableOpacity } from 'react-native';
 import { Canvas, Rect, LinearGradient as SkiaGradient, vec, useImage, Image as SkiaImage, Group, Blur, Mask, Paint } from "@shopify/react-native-skia";
 import { DrawingViewer } from './DrawingViewer';
 import { getOptimizedImageUrl } from '../utils/imageOptimizer';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { X } from 'lucide-react-native';
 
 interface ShareModalProps {
     visible: boolean;
@@ -109,11 +109,6 @@ export const ShareModal: React.FC<ShareModalProps> = ({ visible, onClose, drawin
                     top={(screenHeight - (screenWidth * (4/3))) / 2} 
                 />
 
-                {/* HEADER (Titre Nyola) */}
-                <SafeAreaView style={styles.headerContainer} edges={['top']}>
-                    <Text style={styles.headerTitle}>Sunbim</Text>
-                </SafeAreaView>
-
                 {/* Contenu centré */}
                 <View style={styles.centeredContent}>
                     {/* Zone Image + Dessin */}
@@ -137,17 +132,26 @@ export const ShareModal: React.FC<ShareModalProps> = ({ visible, onClose, drawin
                             </View>
                         </View>
                     </View>
+
+                    {/* INFOS DU DESSIN (Titre + Auteur) PLACÉES JUSTE SOUS LA PHOTO */}
+                    <View style={styles.infoContainer}>
+                        <Text style={styles.drawingTitle} numberOfLines={1}>
+                            {drawing.label || "Sans titre"}
+                        </Text>
+                        <Text style={styles.authorName}>
+                            {author?.display_name || "Anonyme"}
+                        </Text>
+                    </View>
                 </View>
 
-                {/* INFOS DU DESSIN (Titre + Auteur, sans boutons) */}
-                <View style={styles.infoContainer}>
-                    <Text style={styles.drawingTitle} numberOfLines={1}>
-                        {drawing.label || "Sans titre"}
-                    </Text>
-                    <Text style={styles.authorName}>
-                        {author?.display_name || "Anonyme"}
-                    </Text>
-                </View>
+                {/* Bouton fermeture discret */}
+                <TouchableOpacity 
+                    style={styles.closeBtn} 
+                    onPress={onClose}
+                    hitSlop={20}
+                >
+                    <X color="rgba(255,255,255,0.6)" size={32} />
+                </TouchableOpacity>
 
             </View>
         </Modal>
@@ -161,32 +165,14 @@ const styles = StyleSheet.create({
       justifyContent: 'center', 
       alignItems: 'center'      
   },
-  headerContainer: {
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      right: 0,
-      alignItems: 'center',
-      paddingTop: 10,
-      zIndex: 10,
-  },
-  headerTitle: {
-      fontSize: 28,
-      fontWeight: '900',
-      color: '#FFF',
-      letterSpacing: -1,
-      textShadowColor: 'rgba(0,0,0,0.3)',
-      textShadowOffset: { width: 0, height: 2 },
-      textShadowRadius: 4,
-  },
   centeredContent: {
       width: '100%',
       justifyContent: 'center',
       alignItems: 'center',
   },
+  // Style ajusté pour placer les infos sous la photo avec un espace
   infoContainer: {
-      position: 'absolute',
-      bottom: 40,
+      marginTop: 20, // Espace sous la photo
       alignItems: 'center',
       paddingHorizontal: 20,
       width: '100%',
@@ -209,5 +195,14 @@ const styles = StyleSheet.create({
       textShadowColor: 'rgba(0,0,0,0.5)',
       textShadowOffset: { width: 0, height: 1 },
       textShadowRadius: 2,
+  },
+  closeBtn: {
+      position: 'absolute',
+      top: 60, // Ajusté pour safe area environ
+      right: 20,
+      zIndex: 100,
+      padding: 10,
+      backgroundColor: 'rgba(0,0,0,0.3)',
+      borderRadius: 25,
   }
 });
