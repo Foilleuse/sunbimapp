@@ -34,6 +34,7 @@ const MirroredBackground = ({ uri, width, height, top }: { uri: string, width: n
 
     return (
         <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
+            {/* 1. ARRIÈRE-PLAN : MIROIRS + FLOU */}
             <Group layer={<Paint><Blur blur={BLUR_RADIUS} /></Paint>}>
                 <SkiaImage image={image} x={bgX} y={top} width={bgWidth} height={height} fit="cover" />
                 <Group origin={vec(width / 2, top)} transform={[{ scaleY: -1 }]}>
@@ -44,6 +45,7 @@ const MirroredBackground = ({ uri, width, height, top }: { uri: string, width: n
                 </Group>
             </Group>
 
+            {/* 2. PREMIER-PLAN : IMAGE NETTE AVEC MASQUE (Le dégradé) */}
             <Mask
                 mode="luminance"
                 mask={
@@ -547,7 +549,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
             <Modal visible={!!selectedDrawing} animationType="slide" presentationStyle="pageSheet" onRequestClose={closeDrawing}>
                 {selectedDrawing && (
                     <View style={styles.modalContainer}>
-                        {/* FOND MIROIR AJOUTÉ */}
+                        {/* FOND MIROIR AJOUTÉ AVEC LE DÉGRADÉ (MASK) QUI EST DÉJÀ DANS LE COMPOSANT MirroredBackground */}
                         <MirroredBackground 
                             uri={selectedDrawingImageOptimized || selectedDrawing.cloud_image_url}
                             width={screenWidth}
@@ -574,10 +576,18 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                                     onPressOut={() => setIsHolding(false)}
                                     style={{ width: screenWidth, aspectRatio: 3/4, backgroundColor: 'transparent', marginTop: 0 }}
                                 >
-                                    {/* ✅ CORRECTION ALIGNEMENT : 
-                                        On retire l'Image React Native redondante.
-                                        Le DrawingViewer affiche déjà l'image de fond (nuage) ET le dessin
-                                        avec les mêmes coordonnées Skia, garantissant un alignement parfait.
+                                    {/* ✅ ALIGNEMENT & GOMME "HOLD" :
+                                        Le `MirroredBackground` gère le fond étendu et flou.
+                                        Ici, le `DrawingViewer` avec `transparentMode={true}` affiche SEULEMENT le dessin (traits).
+                                        L'image nette en dessous doit être indépendante pour rester visible quand on cache le dessin (isHolding).
+                                        Mais pour avoir le même effet de dégradé que le `MirroredBackground`, il faudrait appliquer le mask.
+                                        
+                                        Solution Simple : `MirroredBackground` affiche déjà l'image nette avec le mask en layer 2.
+                                        Donc on n'a PAS besoin d'afficher l'image ici, juste le dessin transparent par-dessus.
+                                        Ainsi quand on fait `isHolding` -> opacity 0 sur le dessin -> on voit juste le `MirroredBackground` derrière qui contient l'image nette masquée.
+                                        
+                                        Si le dessin disparaît (isHolding), l'image du MirroredBackground reste fixe = Pas de mouvement.
+                                        Et le dégradé est présent car il est dans MirroredBackground.
                                     */}
                                     
                                     <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
@@ -588,7 +598,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                                                 canvasData={isSelectedUnlocked ? selectedDrawing.canvas_data : []}
                                                 viewerSize={screenWidth} 
                                                 viewerHeight={screenWidth * (4/3)} 
-                                                transparentMode={false} // On remet en false pour qu'il affiche le nuage lui-même
+                                                transparentMode={true} // ✅ IMPORTANT : Transparent pour laisser voir le MirroredBackground derrière
                                                 startVisible={false} 
                                                 animated={true}
                                                 autoCenter={false} 
@@ -601,7 +611,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                                                 canvasData={isSelectedUnlocked ? selectedDrawing.canvas_data : []}
                                                 viewerSize={screenWidth} 
                                                 viewerHeight={screenWidth * (4/3)} 
-                                                transparentMode={false}
+                                                transparentMode={true} // ✅ IMPORTANT : Transparent ici aussi
                                                 startVisible={true} 
                                                 animated={false}
                                                 autoCenter={false} 
