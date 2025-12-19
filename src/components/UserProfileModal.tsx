@@ -26,8 +26,14 @@ const DrawingGridItem = memo(({ item, size, isUnlocked, onPress, spacing }: any)
 
     return (
         <TouchableOpacity 
-            onPress={() => onPress(item)}
-            disabled={!isUnlocked} 
+            onPress={() => {
+                if (isUnlocked) {
+                    onPress(item);
+                } else {
+                    Alert.alert("Jour manqué", "Vous n'avez pas dessiné ce jour-là.");
+                }
+            }}
+            activeOpacity={0.7}
             style={{ width: size, aspectRatio: 3/4, marginBottom: spacing, backgroundColor: '#F9F9F9', overflow: 'hidden', position: 'relative' }}
         >
             <DrawingViewer 
