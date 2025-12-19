@@ -44,8 +44,6 @@ function getSvgPathFromStroke(stroke: number[][]): string {
 const AnimatedPath = ({ pathData, index, progress, totalCount, startVisible }: { pathData: DrawingPath, index: number, progress: Animated.SharedValue<number>, totalCount: number, startVisible: boolean }) => {
     
     // RESTAURATION : Initialisation standard (sans forcer null si !startVisible)
-    // Cela peut causer un affichage initial du dessin complet avant l'animation si startVisible=false
-    // mais cela garantit que le path est chargé.
     const [currentPath, setCurrentPath] = useState<SkPath | null>(() => {
         // Si filled (nouveau), on attend l'animation sauf si points manquants
         if (pathData.isFilled && pathData.points) return null;
@@ -171,7 +169,7 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
     useEffect(() => {
         if (animated && !startVisible) {
             progress.value = 0;
-            // 🔥 MODIFICATION ICI : Durée ajustée à 2500ms (2.5s)
+            // Animation : Durée ajustée à 2500ms
             progress.value = withTiming(1, {
                 duration: 2500, 
                 easing: Easing.linear
@@ -181,32 +179,50 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
         }
     }, [animated, startVisible]); 
 
-    // 🔥 LOGIQUE DE NORMALISATION/DÉNORMALISATION
-    // Cette partie recalcule les points pour qu'ils s'adaptent à la taille actuelle du viewer
+    // 🔥 LOGIQUE DE NORMALISATION/DÉNORMALISATION CORRIGÉE POUR GALERIES
     const validPaths = useMemo(() => {
         if (!Array.isArray(canvasData)) return [];
         
         return canvasData
             .filter(p => p && (p.svgPath || (p.points && p.points.length > 0)))
             .map(p => {
-                // Détection : Si le premier point X est <= 1.5, on suppose que c'est normalisé (0 à 1)
-                // Sinon c'est des pixels bruts (anciens dessins)
+                // 1. Détection du type de données
+                // Si x <= 1.5, on considère que c'est normalisé (0-1)
                 const isNormalized = p.points && p.points.length > 0 && p.points[0][0] <= 1.5;
 
-                if (!isNormalized) {
-                    return p; // Ancien dessin : on rend tel quel
+                let localPoints: number[][] = [];
+                let localWidth: number = p.width;
+
+                if (isNormalized && p.points) {
+                    // CAS A : Dessin Normalisé -> On multiplie par la taille cible
+                    localPoints = p.points.map(([x, y, pressure]) => [
+                        x * targetWidth,
+                        y * targetHeight,
+                        pressure
+                    ]);
+                    localWidth = p.width * targetWidth; // L'épaisseur est aussi relative
+                } else if (!isNormalized && p.points) {
+                    // CAS B : Dessin en Pixels (Legacy)
+                    // On doit le redimensionner pour qu'il rentre dans la vignette
+                    // Hypothèse : Le dessin en pixels a été fait sur un écran de largeur 'screenWidth'
+                    const scaleRatio = targetWidth / screenWidth;
+                    
+                    localPoints = p.points.map(([x, y, pressure]) => [
+                        x * scaleRatio,
+                        y * scaleRatio,
+                        pressure
+                    ]);
+                    localWidth = p.width * scaleRatio;
+                } else {
+                    // CAS C : Pas de points (Vieux SVG pur) -> On ne peut pas facilement le redimensionner ici
+                    // Il s'affichera tel quel (risque de crop en vignette)
+                    return p;
                 }
 
-                // Nouveau dessin : on convertit les % en Pixels selon la taille actuelle du viewer
-                const denormalizedPoints = p.points!.map(([x, y, pressure]) => [
-                    x * targetWidth,
-                    y * targetHeight,
-                    pressure
-                ]);
-
-                // On doit aussi recalculer le SVG path à partir des nouveaux points
+                // 2. Régénération du SVG à partir des points redimensionnés
+                // Cela garantit que le dessin s'affiche correctement à n'importe quelle échelle
                 const options = {
-                    size: p.width * targetWidth, // La taille du trait est aussi relative !
+                    size: localWidth,
                     thinning: 0.37,
                     smoothing: 0.47,
                     streamline: 0.81,
@@ -217,25 +233,21 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
                     last: false,
                 };
                 
-                const outline = getStroke(denormalizedPoints, options);
+                const outline = getStroke(localPoints, options);
                 const newSvgPath = getSvgPathFromStroke(outline);
 
                 return {
                     ...p,
-                    points: denormalizedPoints,
+                    points: localPoints,
                     svgPath: newSvgPath,
-                    width: p.width * targetWidth // On adapte l'épaisseur du trait
+                    width: localWidth,
+                    isFilled: true // On force le mode fill car on a recalculé le contour
                 };
             });
-    }, [canvasData, targetWidth, targetHeight]);
+    }, [canvasData, targetWidth, targetHeight, screenWidth]);
 
     const scaleTransform = useMemo(() => {
-        // Si on a recalculé les points (isNormalized), on n'a plus besoin de scale global
-        // Sauf si c'est un ancien dessin (non normalisé) sur un écran différent
-        
-        // Pour simplifier : Si on a normalisé, le scale est 1.
-        // Si c'est des vieux dessins, on garde la logique précédente ou on force 1
-        // (Les vieux dessins resteront "figés" en pixels, c'est le comportement attendu pour la rétrocompatibilité)
+        // On a normalisé les points ci-dessus, donc on affiche à l'échelle 1:1
         return { translateX: 0, translateY: 0, scale: 1 }; 
     }, []);
 
