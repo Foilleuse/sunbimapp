@@ -1,15 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, Image, Alert, ActivityIndicator, Switch, ScrollView, TextInput, Platform } from 'react-native';
-import { X, LogOut, Camera, User, ChevronRight, Bell, Shield, CircleHelp, Trash2, Lock, Save } from 'lucide-react-native';
+import { X, LogOut, Camera, User, ChevronRight, Bell, Trash2, Lock } from 'lucide-react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabaseClient';
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
-// ✅ Import conservé comme demandé, même s'il n'est plus utilisé pour l'avatar
+// ✅ Import conservé comme demandé
 import { getOptimizedImageUrl } from '../utils/imageOptimizer';
 import { useRouter } from 'expo-router';
-import * as AppleAuthentication from 'expo-apple-authentication';
-import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 
 interface SettingsModalProps {
   visible: boolean;
@@ -38,19 +36,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
     }
   }, [profile]);
 
-  // --- CONFIGURATION GOOGLE SIGNIN ---
-  useEffect(() => {
-    try {
-        GoogleSignin.configure({
-            iosClientId: 'VOTRE_IOS_CLIENT_ID_GOOGLE.apps.googleusercontent.com',
-            webClientId: 'VOTRE_WEB_CLIENT_ID_GOOGLE.apps.googleusercontent.com', 
-            scopes: ['profile', 'email'],
-        });
-    } catch (e) {
-        console.log("Erreur config Google Signin (ignorer si non configuré):", e);
-    }
-  }, []);
-
   // --- GESTION MISE A JOUR TEXTE PROFIL ---
   const handleSaveProfile = async () => {
     if (!user) return;
@@ -67,9 +52,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
 
       if (error) throw error;
 
-      Alert.alert("Succès", "Profil mis à jour !");
+      Alert.alert("Success", "Profile updated!");
     } catch (error: any) {
-      Alert.alert("Erreur", error.message);
+      Alert.alert("Error", error.message);
     } finally {
       setIsSavingProfile(false);
     }
@@ -78,12 +63,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
   // --- GESTION PHOTO DE PROFIL ---
   const handleAvatarPress = () => {
       Alert.alert(
-          "Modifier la photo",
-          "Choisissez une source",
+          "Change Photo",
+          "Choose a source",
           [
-              { text: "Annuler", style: "cancel" },
-              { text: "Prendre une photo", onPress: handleTakePhoto },
-              { text: "Choisir dans la galerie", onPress: handlePickImage },
+              { text: "Cancel", style: "cancel" },
+              { text: "Take a photo", onPress: handleTakePhoto },
+              { text: "Choose from gallery", onPress: handlePickImage },
           ]
       );
   };
@@ -92,7 +77,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
       try {
           const { status } = await ImagePicker.requestCameraPermissionsAsync();
           if (status !== 'granted') {
-              Alert.alert("Permission refusée", "L'accès à la caméra est nécessaire.");
+              Alert.alert("Permission denied", "Camera access is required.");
               return;
           }
 
@@ -111,7 +96,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
               }
           }
       } catch (error) {
-          Alert.alert('Erreur', 'Impossible de lancer la caméra.');
+          Alert.alert('Error', 'Could not launch camera.');
       }
   };
 
@@ -119,7 +104,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert("Permission requise", "L'accès à la galerie est nécessaire.");
+        Alert.alert("Permission required", "Gallery access is required.");
         return;
       }
 
@@ -138,7 +123,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
         }
       }
     } catch (error) {
-      Alert.alert('Erreur', 'Impossible d\'ouvrir la galerie.');
+      Alert.alert('Error', 'Could not open gallery.');
     }
   };
 
@@ -162,7 +147,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
 
         if (uploadError) {
              if (uploadError.message.includes("bucket")) {
-                 throw new Error("Le bucket 'avatars' n'existe pas ou est mal configuré.");
+                 throw new Error("The 'avatars' bucket does not exist or is misconfigured.");
              }
              throw uploadError;
         }
@@ -178,66 +163,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
 
         if (updateError) throw updateError;
 
-        Alert.alert("Succès", "Photo de profil mise à jour !");
+        Alert.alert("Success", "Profile photo updated!");
     } catch (error: any) {
         console.error("Erreur upload complète:", error);
-        Alert.alert("Erreur", "Echec de l'upload : " + (error.message || "Erreur inconnue"));
+        Alert.alert("Error", "Upload failed: " + (error.message || "Unknown error"));
     } finally {
         setLoading(false);
     }
   };
 
-  // --- SOCIAL LOGIN (POUR LINKER UN COMPTE) ---
-  const linkGoogle = async () => {
-    try {
-      await GoogleSignin.hasPlayServices();
-      const userInfo = await GoogleSignin.signIn();
-      if (userInfo.idToken) {
-        const { data, error } = await supabase.auth.signInWithIdToken({
-          provider: 'google',
-          token: userInfo.idToken,
-        });
-        if (error) throw error;
-        Alert.alert("Succès", "Compte Google lié !");
-      }
-    } catch (error: any) {
-      if (error.code === statusCodes.SIGN_IN_CANCELLED) {
-      } else if (error.code === statusCodes.IN_PROGRESS) {
-      } else {
-        Alert.alert("Erreur Google", error.message);
-      }
-    }
-  };
-
-  const linkApple = async () => {
-    try {
-      const credential = await AppleAuthentication.signInAsync({
-        requestedScopes: [
-          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
-          AppleAuthentication.AppleAuthenticationScope.EMAIL,
-        ],
-      });
-      if (credential.identityToken) {
-        const { error } = await supabase.auth.signInWithIdToken({
-          provider: 'apple',
-          token: credential.identityToken,
-        });
-        if (error) throw error;
-        Alert.alert("Succès", "Compte Apple lié !");
-      }
-    } catch (e: any) {
-      if (e.code === 'ERR_REQUEST_CANCELED') {
-      } else {
-        Alert.alert("Erreur Apple", e.message);
-      }
-    }
-  };
-
-
   // --- GESTION MOT DE PASSE ---
   const handleUpdatePassword = async () => {
       if (newPassword.length < 6) {
-          Alert.alert("Erreur", "Le mot de passe doit contenir au moins 6 caractères.");
+          Alert.alert("Error", "Password must be at least 6 characters.");
           return;
       }
       setLoading(true);
@@ -245,11 +183,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
           const { error } = await supabase.auth.updateUser({ password: newPassword });
           if (error) throw error;
           
-          Alert.alert("Succès", "Votre mot de passe a été modifié.");
+          Alert.alert("Success", "Your password has been changed.");
           setNewPassword('');
           setIsChangingPassword(false);
       } catch (error: any) {
-          Alert.alert("Erreur", error.message);
+          Alert.alert("Error", error.message);
       } finally {
           setLoading(false);
       }
@@ -258,12 +196,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
   // --- GESTION SUPPRESSION COMPTE ---
   const handleDeleteAccount = () => {
       Alert.alert(
-          "Supprimer mon compte",
-          "Attention : Cette action est définitive. Toutes vos données seront effacées.",
+          "Delete Account",
+          "Warning: This action is permanent. All your data will be erased.",
           [
-              { text: "Annuler", style: "cancel" },
+              { text: "Cancel", style: "cancel" },
               { 
-                  text: "Supprimer définitivement", 
+                  text: "Delete Permanently", 
                   style: "destructive",
                   onPress: confirmDeleteAccount
               }
@@ -279,15 +217,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
           
           if (error) {
               console.error("Erreur suppression data:", error);
-              throw new Error("Impossible de supprimer les données. Contactez le support.");
+              throw new Error("Could not delete data. Please contact support.");
           }
 
           await signOut();
           onClose(); 
           router.replace('/');
-          Alert.alert("Compte supprimé", "Vos données ont été effacées. Au revoir.");
+          Alert.alert("Account Deleted", "Your data has been erased. Goodbye.");
       } catch (error: any) {
-          Alert.alert("Erreur", error.message);
+          Alert.alert("Error", error.message);
       } finally {
           setLoading(false);
       }
@@ -295,12 +233,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
 
   const handleLogout = () => {
       Alert.alert(
-          "Déconnexion",
-          "Êtes-vous sûr de vouloir vous déconnecter ?",
+          "Log Out",
+          "Are you sure you want to log out?",
           [
-              { text: "Annuler", style: "cancel" },
+              { text: "Cancel", style: "cancel" },
               { 
-                  text: "Se déconnecter", 
+                  text: "Log Out", 
                   style: "destructive", 
                   onPress: async () => { 
                       await signOut(); 
@@ -320,7 +258,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
         <View style={styles.container}>
             
             <View style={styles.header}>
-                <Text style={styles.headerTitle}>Paramètres</Text>
+                <Text style={styles.headerTitle}>Settings</Text>
                 <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
                     <X color="#000" size={24} />
                 </TouchableOpacity>
@@ -328,7 +266,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
 
             <ScrollView contentContainerStyle={styles.scrollContent}>
                 
-                {/* SECTION PROFIL MODIFIÉE */}
+                {/* SECTION PROFIL */}
                 <View style={styles.section}>
                     <View style={styles.profileHeader}>
                         <TouchableOpacity onPress={handleAvatarPress} disabled={loading} style={styles.avatarContainer}>
@@ -346,12 +284,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
                         
                         <View style={styles.profileInfo}>
                             {/* Inputs modifiables */}
-                            <Text style={styles.label}>Nom d'affichage</Text>
+                            <Text style={styles.label}>Display Name</Text>
                             <TextInput
                                 value={displayName}
                                 onChangeText={setDisplayName}
                                 style={styles.input}
-                                placeholder="Nom d'affichage"
+                                placeholder="Display Name"
                             />
                             
                             <Text style={styles.label}>Bio</Text>
@@ -359,7 +297,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
                                 value={bio}
                                 onChangeText={setBio}
                                 style={[styles.input, styles.bioInput]}
-                                placeholder="Votre bio..."
+                                placeholder="Your bio..."
                                 multiline
                                 numberOfLines={3}
                             />
@@ -374,44 +312,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
                                 {isSavingProfile ? (
                                     <ActivityIndicator size="small" color="#FFF" />
                                 ) : (
-                                    <Text style={styles.saveProfileText}>Enregistrer le profil</Text>
+                                    <Text style={styles.saveProfileText}>Save Profile</Text>
                                 )}
                             </TouchableOpacity>
                         </View>
                     </View>
                 </View>
 
-                {/* SECTION COMPTES LIÉS */}
-                <View style={styles.sectionTitleContainer}>
-                    <Text style={styles.sectionTitle}>COMPTES LIÉS</Text>
-                </View>
-                <View style={styles.menuContainer}>
-                    <TouchableOpacity style={styles.menuItem} onPress={linkGoogle}>
-                        <View style={styles.menuIconContainer}>
-                            <View style={{width:20, height:20, borderRadius:10, backgroundColor:'#DB4437', justifyContent:'center', alignItems:'center'}}>
-                                <Text style={{color:'#FFF', fontWeight:'bold', fontSize:10}}>G</Text>
-                            </View>
-                        </View>
-                        <Text style={styles.menuText}>Google</Text>
-                        <ChevronRight size={20} color="#CCC" />
-                    </TouchableOpacity>
-
-                    {Platform.OS === 'ios' && (
-                        <TouchableOpacity style={styles.menuItem} onPress={linkApple}>
-                            <View style={styles.menuIconContainer}>
-                                <View style={{width:20, height:20, borderRadius:10, backgroundColor:'#000', justifyContent:'center', alignItems:'center'}}>
-                                    <Text style={{color:'#FFF', fontWeight:'bold', fontSize:10}}></Text>
-                                </View>
-                            </View>
-                            <Text style={styles.menuText}>Apple</Text>
-                            <ChevronRight size={20} color="#CCC" />
-                        </TouchableOpacity>
-                    )}
-                </View>
-
                 {/* SECTION SECURITE */}
                 <View style={styles.sectionTitleContainer}>
-                    <Text style={styles.sectionTitle}>SÉCURITÉ</Text>
+                    <Text style={styles.sectionTitle}>SECURITY</Text>
                 </View>
                 <View style={styles.menuContainer}>
                     <TouchableOpacity 
@@ -421,7 +331,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
                         <View style={styles.menuIconContainer}>
                             <Lock size={20} color="#000" />
                         </View>
-                        <Text style={styles.menuText}>Changer de mot de passe</Text>
+                        <Text style={styles.menuText}>Change Password</Text>
                         <ChevronRight size={20} color={isChangingPassword ? "#000" : "#CCC"} transform={isChangingPassword ? [{rotate: '90deg'}] : []} />
                     </TouchableOpacity>
 
@@ -429,7 +339,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
                         <View style={styles.passwordForm}>
                             <TextInput 
                                 style={styles.passwordInput}
-                                placeholder="Nouveau mot de passe (min 6 car.)"
+                                placeholder="New password (min 6 chars)"
                                 secureTextEntry
                                 value={newPassword}
                                 onChangeText={setNewPassword}
@@ -440,7 +350,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
                                 onPress={handleUpdatePassword}
                                 disabled={newPassword.length < 6 || loading}
                             >
-                                {loading ? <ActivityIndicator color="#FFF" size="small" /> : <Text style={styles.saveBtnText}>Enregistrer</Text>}
+                                {loading ? <ActivityIndicator color="#FFF" size="small" /> : <Text style={styles.saveBtnText}>Save</Text>}
                             </TouchableOpacity>
                         </View>
                     )}
@@ -448,7 +358,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
 
                 {/* SECTION PREFERENCES */}
                 <View style={styles.sectionTitleContainer}>
-                    <Text style={styles.sectionTitle}>PRÉFÉRENCES</Text>
+                    <Text style={styles.sectionTitle}>PREFERENCES</Text>
                 </View>
                 
                 <View style={styles.menuContainer}>
@@ -467,17 +377,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
 
                 {/* SECTION DANGER */}
                 <View style={styles.sectionTitleContainer}>
-                    <Text style={[styles.sectionTitle, {color: '#FF3B30'}]}>ZONE DE DANGER</Text>
+                    <Text style={[styles.sectionTitle, {color: '#FF3B30'}]}>DANGER ZONE</Text>
                 </View>
 
                 <TouchableOpacity style={[styles.menuContainer, styles.logoutBtn]} onPress={handleLogout}>
                     <LogOut size={20} color="#000" />
-                    <Text style={[styles.logoutText, {color: '#000'}]}>Se déconnecter</Text>
+                    <Text style={[styles.logoutText, {color: '#000'}]}>Log Out</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity style={[styles.menuContainer, styles.logoutBtn, { borderColor: '#FF3B30', borderTopWidth: 1 }]} onPress={handleDeleteAccount}>
                     <Trash2 size={20} color="#FF3B30" />
-                    <Text style={styles.logoutText}>Supprimer mon compte</Text>
+                    <Text style={styles.logoutText}>Delete Account</Text>
                 </TouchableOpacity>
 
                 <Text style={styles.version}>Version 1.0.0</Text>
