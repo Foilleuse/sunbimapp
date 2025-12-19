@@ -120,12 +120,12 @@ export default function CameraPage() {
 
           if (dbError) throw dbError;
 
-          Alert.alert("Succès !", "Ton nuage a été envoyé.", [
+          Alert.alert("Nice!", "Your cloud has been sent", [
               { text: "Super", onPress: () => { setCapturedImage(null); router.back(); }}
           ]);
 
       } catch (e: any) {
-          console.error("Erreur upload:", e);
+          console.error("Error upload:", e);
           Alert.alert("Erreur d'envoi", e.message);
       } finally {
           setIsUploading(false);

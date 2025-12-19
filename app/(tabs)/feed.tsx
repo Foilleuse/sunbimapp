@@ -154,7 +154,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
             setUserReaction(myReaction);
 
         } catch (e) {
-            console.error("Erreur chargement réactions:", e);
+            console.error("Error loading reactions:", e);
         }
     };
 
@@ -201,54 +201,54 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
                 if (error) throw error;
             }
         } catch (e) {
-            console.error("Erreur mise à jour réaction:", e);
+            console.error("Error updating reaction:", e);
             setUserReaction(previousReaction);
             setReactionCounts(previousCounts);
-            Alert.alert("Oups", "Impossible d'enregistrer la réaction.");
+            Alert.alert("Oops", "Could not save reaction.");
         }
     };
 
     const handleReport = () => {
         Alert.alert(
             "Options",
-            "Que souhaitez-vous faire ?",
+            "What do you want to do?",
             [
-                { text: "Annuler", style: "cancel" },
+                { text: "Cancel", style: "cancel" },
                 { 
-                    text: "Signaler le contenu", 
+                    text: "Report content", 
                     onPress: async () => {
-                        if (!user) return Alert.alert("Erreur", "Vous devez être connecté pour signaler.");
+                        if (!user) return Alert.alert("Error", "You must be logged in to report.");
                         try {
                             const { error } = await supabase
                                 .from('reports')
-                                .insert({ reporter_id: user.id, drawing_id: drawing.id, reason: 'Contenu inapproprié' });
+                                .insert({ reporter_id: user.id, drawing_id: drawing.id, reason: 'Inappropriate content' });
                             
                             if (error) throw error;
-                            Alert.alert("Signalement envoyé", "Nous allons examiner cette image. Merci de votre vigilance.");
+                            Alert.alert("Report sent", "We will review this image. Thank you for your vigilance.");
                         } catch (e) {
                             console.error(e);
-                            Alert.alert("Erreur", "Impossible d'envoyer le signalement.");
+                            Alert.alert("Error", "Could not send report.");
                         }
                     }
                 },
                 { 
-                    text: "Bloquer l'utilisateur", 
+                    text: "Block user", 
                     style: 'destructive', 
                     onPress: async () => {
-                        if (!user) return Alert.alert("Erreur", "Vous devez être connecté pour bloquer.");
+                        if (!user) return Alert.alert("Error", "You must be logged in to block.");
                         try {
                             const { error } = await supabase
                                 .from('blocks')
                                 .insert({ blocker_id: user.id, blocked_id: author.id });
                             
                             if (error) throw error;
-                            Alert.alert("Utilisateur bloqué", "Vous ne verrez plus les contenus de cet utilisateur.");
+                            Alert.alert("User blocked", "You will no longer see content from this user.");
                         } catch (e: any) {
                             if (e.code === '23505') { 
-                                 Alert.alert("Info", "Vous avez déjà bloqué cet utilisateur.");
+                                 Alert.alert("Info", "You have already blocked this user.");
                             } else {
                                 console.error(e);
-                                Alert.alert("Erreur", "Impossible de bloquer l'utilisateur.");
+                                Alert.alert("Error", "Could not block user.");
                             }
                         }
                     }
@@ -291,7 +291,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
                         </TouchableOpacity>
 
                         <Text style={styles.drawingTitle} numberOfLines={1}>
-                            {drawing.label || "Sans titre"}
+                            {drawing.label || "Untitled"}
                         </Text>
                         
                         <TouchableOpacity onPress={handleReport} style={styles.iconBtnRight} hitSlop={15}>
@@ -304,7 +304,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
                         activeOpacity={0.7}
                         style={styles.authorContainer}
                     >
-                         <Text style={styles.userName}>{author?.display_name || "Anonyme"}</Text>
+                         <Text style={styles.userName}>{author?.display_name || "Anonymous"}</Text>
                     </TouchableOpacity>
 
                     <View style={styles.reactionBar}>
@@ -513,7 +513,7 @@ export default function FeedPage() {
                     </View>
                 ) : (
                     !loading && drawings.length === 0 ? (
-                        <View style={styles.centerBox}><Text style={styles.text}>La galerie est vide.</Text></View>
+                        <View style={styles.centerBox}><Text style={styles.text}>The gallery is empty.</Text></View>
                     ) : null
                 )}
 
