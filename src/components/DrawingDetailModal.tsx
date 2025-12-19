@@ -96,6 +96,9 @@ const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color, count }: an
                     size={24}
                 />
             </Animated.View>
+            <Text style={[styles.reactionText, isActive && styles.activeText]}>
+                {count > 0 ? count : ''}
+            </Text>
         </Pressable>
     );
 };
@@ -469,6 +472,16 @@ const styles = StyleSheet.create({
       alignItems: 'center', 
       justifyContent: 'center',
       padding: 8
+  },
+  reactionText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.9)',
+    marginTop: 4
+  },
+  activeText: {
+    color: '#FFF',
+    fontWeight: '900'
   },
   missedOverlay: {
       ...StyleSheet.absoluteFillObject,
