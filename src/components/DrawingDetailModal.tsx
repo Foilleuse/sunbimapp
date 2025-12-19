@@ -172,7 +172,7 @@ export const DrawingDetailModal: React.FC<DrawingDetailModalProps> = ({ visible,
             setUserReaction(myReaction);
 
         } catch (e) {
-            console.error("Erreur chargement réactions:", e);
+            console.error("Error loading reactions:", e);
         }
   };
 
@@ -230,23 +230,23 @@ export const DrawingDetailModal: React.FC<DrawingDetailModalProps> = ({ visible,
     if (!drawing || isMissed) return;
     Alert.alert(
         "Options",
-        "Que souhaitez-vous faire ?",
+        "What do you want to do?",
         [
-            { text: "Annuler", style: "cancel" },
+            { text: "Cancel", style: "cancel" },
             { 
-                text: "Signaler le contenu", 
+                text: "Report content", 
                 onPress: async () => {
-                    if (!currentUser) return Alert.alert("Erreur", "Vous devez être connecté pour signaler.");
+                    if (!currentUser) return Alert.alert("Error", "You must be logged in to report.");
                     try {
                         const { error } = await supabase
                             .from('reports')
-                            .insert({ reporter_id: currentUser.id, drawing_id: drawing.id, reason: 'Contenu inapproprié' });
+                            .insert({ reporter_id: currentUser.id, drawing_id: drawing.id, reason: 'Inappropriate content' });
                         
                         if (error) throw error;
-                        Alert.alert("Signalement envoyé", "Nous allons examiner cette image. Merci de votre vigilance.");
+                        Alert.alert("Report sent", "We will review this image. Thank you for your vigilance.");
                     } catch (e) {
                         console.error(e);
-                        Alert.alert("Erreur", "Impossible d'envoyer le signalement.");
+                        Alert.alert("Error", "Could not send report.");
                     }
                 }
             }
@@ -306,7 +306,7 @@ export const DrawingDetailModal: React.FC<DrawingDetailModalProps> = ({ visible,
                                         <Text style={styles.missedDate}>
                                             {new Date(drawing.date).toLocaleDateString(undefined, {day: '2-digit', month: '2-digit'})}
                                         </Text>
-                                        <Text style={styles.missedText}>Jour manqué</Text>
+                                        <Text style={styles.missedText}>Day missed</Text>
                                     </View>
                                 </View>
                             ) : (
@@ -342,7 +342,7 @@ export const DrawingDetailModal: React.FC<DrawingDetailModalProps> = ({ visible,
                             )}
 
                             <Text style={styles.drawingTitle} numberOfLines={1}>
-                                {isMissed ? "Pas de dessin" : (drawing.label || "Sans titre")}
+                                {isMissed ? "No drawing" : (drawing.label || "Untitled")}
                             </Text>
                             
                             {!isMissed && (
@@ -353,7 +353,7 @@ export const DrawingDetailModal: React.FC<DrawingDetailModalProps> = ({ visible,
                         </View>
                         
                         <Text style={styles.userName}>
-                            {isMissed ? "" : (author?.display_name || "Anonyme")}
+                            {isMissed ? "" : (author?.display_name || "Anonymous")}
                         </Text>
 
                         {/* Barre de réactions - Cachée si manqué */}
