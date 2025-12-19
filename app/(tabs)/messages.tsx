@@ -48,7 +48,7 @@ const FriendRow = memo(({ item, onOpenProfile, onUnfollow }: { item: any, onOpen
 
                 <View style={styles.textContainer}>
                     <Text style={styles.friendName} numberOfLines={1}>
-                        {item.display_name || "Utilisateur Anonyme"}
+                        {item.display_name || "Anonymous User"}
                     </Text>
                     {item.bio ? (
                         <Text style={styles.friendBio} numberOfLines={1}>{item.bio}</Text>
@@ -163,7 +163,7 @@ export default function FriendsPage() {
       setFollowing(formattedData);
 
     } catch (e) {
-      console.error("Erreur chargement amis:", e);
+      console.error("Error loading friends:", e);
       setFollowing([]); 
     } finally {
       setLoading(false);
@@ -181,7 +181,7 @@ export default function FriendsPage() {
           
           setFollowing(prev => prev.filter(item => item.id !== userIdToUnfollow));
       } catch (e) {
-          console.error("Erreur unfollow:", e);
+          console.error("Error unfollow:", e);
       }
   };
 
@@ -215,7 +215,7 @@ export default function FriendsPage() {
                 ListEmptyComponent={
                     <View style={styles.emptyState}>
                         <User size={48} color="#CCC" />
-                        <Text style={styles.emptyText}>Vous ne suivez personne pour le moment.</Text>
+                        <Text style={styles.emptyText}>You are not following anyone yet.</Text>
                     </View>
                 }
             />

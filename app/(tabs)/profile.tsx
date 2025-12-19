@@ -79,7 +79,7 @@ export default function ProfilePage() {
   };
 
   const handleAuth = async () => {
-      if (!email || !password) return Alert.alert("Erreur", "Remplissez tous les champs");
+      if (!email || !password) return Alert.alert("Error", "Fill in all fields");
       setAuthActionLoading(true);
       try {
           const { error } = isSignUp 
@@ -87,7 +87,7 @@ export default function ProfilePage() {
             : await supabase.auth.signInWithPassword({ email, password });
           if (error) throw error;
       } catch (e: any) {
-          Alert.alert("Erreur", e.message);
+          Alert.alert("Error", e.message);
       } finally {
           setAuthActionLoading(false);
       }
@@ -109,7 +109,7 @@ export default function ProfilePage() {
           return (
             <TouchableOpacity 
                 activeOpacity={0.7}
-                onPress={() => Alert.alert("Jour manqué", "Vous n'avez pas dessiné ce jour-là.")}
+                onPress={() => Alert.alert("Day missed", "You didn't draw that day.")}
                 style={{ width: ITEM_SIZE, aspectRatio: 3/4, marginBottom: SPACING, backgroundColor: '#EEE', position: 'relative' }}
             >
                 <Image 
@@ -159,8 +159,8 @@ export default function ProfilePage() {
               
               <View style={styles.authContainer}>
                   <View style={styles.logoContainer}>
-                      <Text style={styles.authTitle}>Profil</Text>
-                      <Text style={styles.authSubtitle}>Connectez-vous pour retrouver vos dessins.</Text>
+                      <Text style={styles.authTitle}>Profile</Text>
+                      <Text style={styles.authSubtitle}>Log in to find your drawings.</Text>
                   </View>
                   <View style={styles.inputGroup}>
                       <Mail color="#999" size={20} style={styles.inputIcon} />
@@ -168,13 +168,13 @@ export default function ProfilePage() {
                   </View>
                   <View style={styles.inputGroup}>
                       <Lock color="#999" size={20} style={styles.inputIcon} />
-                      <TextInput placeholder="Mot de passe" style={styles.input} placeholderTextColor="#999" secureTextEntry value={password} onChangeText={setPassword} />
+                      <TextInput placeholder="Password" style={styles.input} placeholderTextColor="#999" secureTextEntry value={password} onChangeText={setPassword} />
                   </View>
                   <TouchableOpacity style={styles.authBtn} onPress={handleAuth} disabled={authActionLoading}>
-                      {authActionLoading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.authBtnText}>{isSignUp ? "S'inscrire" : "Se connecter"}</Text>}
+                      {authActionLoading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.authBtnText}>{isSignUp ? "Sign Up" : "Log In"}</Text>}
                   </TouchableOpacity>
                   <TouchableOpacity onPress={() => setIsSignUp(!isSignUp)}>
-                      <Text style={styles.switchText}>{isSignUp ? "J'ai déjà un compte" : "Créer un compte"}</Text>
+                      <Text style={styles.switchText}>{isSignUp ? "I already have an account" : "Create an account"}</Text>
                   </TouchableOpacity>
               </View>
           </KeyboardAvoidingView>
@@ -199,9 +199,9 @@ export default function ProfilePage() {
               )}
               
               <View style={styles.profileTextContainer}>
-                  <Text style={styles.displayName}>{profile?.display_name || "Anonyme"}</Text>
+                  <Text style={styles.displayName}>{profile?.display_name || "Anonymous"}</Text>
                   <Text style={styles.bio} numberOfLines={3}>
-                      {profile?.bio || "Aucune bio pour le moment."}
+                      {profile?.bio || "No bio yet."}
                   </Text>
               </View>
 
@@ -230,7 +230,7 @@ export default function ProfilePage() {
                 ListEmptyComponent={
                     <View style={styles.emptyState}>
                         <AlertCircle color="#CCC" size={40} />
-                        <Text style={styles.emptyText}>Aucune activité pour le moment.</Text>
+                        <Text style={styles.emptyText}>No activity yet.</Text>
                     </View>
                 }
               />
