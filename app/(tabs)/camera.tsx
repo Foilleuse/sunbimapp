@@ -42,9 +42,9 @@ export default function CameraPage() {
   if (!permission.granted) {
     return (
       <View style={styles.container}>
-        <Text style={styles.message}>Permission caméra requise.</Text>
+        <Text style={styles.message}>Camera permission required.</Text>
         <TouchableOpacity style={styles.permissionBtn} onPress={requestPermission}>
-          <Text style={styles.permissionText}>Accorder</Text>
+          <Text style={styles.permissionText}>Grant</Text>
         </TouchableOpacity>
       </View>
     );
@@ -78,11 +78,11 @@ export default function CameraPage() {
             if (photo && photo.uri) {
                 setCapturedImage({ uri: photo.uri, base64: photo.base64 });
             } else {
-                throw new Error("Erreur capture photo.");
+                throw new Error("Photo capture error.");
             }
         } catch (e: any) {
-            console.error("Erreur capture:", e);
-            Alert.alert("Erreur", "Impossible de prendre la photo.");
+            console.error("Capture error:", e);
+            Alert.alert("Error", "Could not take photo.");
         } finally {
             setIsTakingPhoto(false);
         }
@@ -97,7 +97,7 @@ export default function CameraPage() {
   };
 
   const uploadToSupabase = async (base64Image: string) => {
-      if (!user) return Alert.alert("Oups", "Connecte-toi pour envoyer tes nuages !");
+      if (!user) return Alert.alert("Oops", "Log in to send your clouds!");
 
       setIsUploading(true);
       try {
@@ -120,13 +120,13 @@ export default function CameraPage() {
 
           if (dbError) throw dbError;
 
-          Alert.alert("Nice!", "Your cloud has been sent", [
-              { text: "Super", onPress: () => { setCapturedImage(null); router.back(); }}
+          Alert.alert("Success!", "Your cloud has been sent.", [
+              { text: "Great", onPress: () => { setCapturedImage(null); router.back(); }}
           ]);
 
       } catch (e: any) {
-          console.error("Error upload:", e);
-          Alert.alert("Erreur d'envoi", e.message);
+          console.error("Upload error:", e);
+          Alert.alert("Upload error", e.message);
       } finally {
           setIsUploading(false);
       }
@@ -183,7 +183,7 @@ export default function CameraPage() {
             {isUploading && (
                 <View style={styles.loadingOverlay}>
                     <ActivityIndicator size="large" color="#FFF" />
-                    <Text style={styles.loadingText}>Envoi du nuage...</Text>
+                    <Text style={styles.loadingText}>Sending cloud...</Text>
                 </View>
             )}
         </View>
@@ -198,7 +198,7 @@ export default function CameraPage() {
                      <TouchableOpacity style={[styles.actionBtn, styles.retakeBtn]} onPress={retakePicture} disabled={isUploading}>
                         <X color="#FFF" size={32} />
                     </TouchableOpacity>
-                    <Text style={styles.previewText}>Ça te plaît ?</Text>
+                    <Text style={styles.previewText}>Do you like it?</Text>
                     <TouchableOpacity style={[styles.actionBtn, styles.confirmBtn]} onPress={confirmUpload} disabled={isUploading}>
                         <Check color="#000" size={32} />
                     </TouchableOpacity>
@@ -206,7 +206,7 @@ export default function CameraPage() {
             ) : (
                 // --- CONTRÔLES DE CAPTURE ---
                 <View style={styles.captureColumn}>
-                    <Text style={styles.propositionText}>Propose un nuage du jour !</Text>
+                    <Text style={styles.propositionText}>Submit a cloud of the day!</Text>
                     
                     <TouchableOpacity 
                         style={[styles.captureBtn, isTakingPhoto && { opacity: 0.5 }]} 
