@@ -107,7 +107,11 @@ export default function ProfilePage() {
 
       if (item.type === 'missed') {
           return (
-            <View style={{ width: ITEM_SIZE, aspectRatio: 3/4, marginBottom: SPACING, backgroundColor: '#EEE', position: 'relative' }}>
+            <TouchableOpacity 
+                activeOpacity={0.7}
+                onPress={() => Alert.alert("Jour manqué", "Vous n'avez pas dessiné ce jour-là.")}
+                style={{ width: ITEM_SIZE, aspectRatio: 3/4, marginBottom: SPACING, backgroundColor: '#EEE', position: 'relative' }}
+            >
                 <Image 
                     source={{ uri: thumbOptimized || item.cloud_image_url }} 
                     style={{ width: '100%', height: '100%', opacity: 0.6 }} 
@@ -119,7 +123,7 @@ export default function ProfilePage() {
                         {new Date(item.date).toLocaleDateString(undefined, {day: '2-digit', month: '2-digit'})}
                     </Text>
                 </View>
-            </View>
+            </TouchableOpacity>
           );
       }
 
