@@ -115,13 +115,13 @@ export const ShareModal: React.FC<ShareModalProps> = ({ visible, onClose, drawin
                                 if (await Sharing.isAvailableAsync()) {
                                     await Sharing.shareAsync(videoUri, {
                                         mimeType: 'video/mp4',
-                                        dialogTitle: 'Partager mon dessin Sunbim',
+                                        dialogTitle: 'Share my Sunbim drawing',
                                         UTI: 'public.movie' 
                                     });
                                     // Fermer après partage
                                     onClose();
                                 } else {
-                                    Alert.alert("Erreur", "Le partage n'est pas disponible sur cet appareil");
+                                    Alert.alert("Error", "Sharing is not available on this device");
                                     onClose();
                                 }
                             } else {
@@ -130,7 +130,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({ visible, onClose, drawin
                             
                         } catch (e) {
                             console.warn("Erreur arrêt enregistrement:", e);
-                            Alert.alert("Erreur", "Impossible d'enregistrer la vidéo");
+                            Alert.alert("Error", "Could not record video");
                             onClose();
                         }
                     }, DRAWING_ANIMATION_DURATION + RECORDING_END_BUFFER);
@@ -173,7 +173,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({ visible, onClose, drawin
     const rawAuthor = propAuthor || drawing?.users;
     // Si c'est un tableau (possible avec Supabase), on prend le premier élément
     const author = Array.isArray(rawAuthor) ? rawAuthor[0] : rawAuthor;
-    const authorName = author?.display_name || "Anonyme";
+    const authorName = author?.display_name || "Anonymous";
 
     if (!drawing) return null;
 
@@ -231,7 +231,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({ visible, onClose, drawin
                 {/* 4. INFOS (Sous la photo) */}
                 <View style={[styles.infoContainer, { top: geometry.topPosition + geometry.imgHeight - 30 }]}>
                     <Text style={styles.drawingTitle} numberOfLines={1}>
-                        {drawing.label || "Sans titre"}
+                        {drawing.label || "Untitled"}
                     </Text>
                     <Text style={styles.authorName}>
                         by {authorName}
