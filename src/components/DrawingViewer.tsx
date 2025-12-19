@@ -181,18 +181,63 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
         }
     }, [animated, startVisible]); 
 
+    // 🔥 LOGIQUE DE NORMALISATION/DÉNORMALISATION
+    // Cette partie recalcule les points pour qu'ils s'adaptent à la taille actuelle du viewer
     const validPaths = useMemo(() => {
         if (!Array.isArray(canvasData)) return [];
-        return canvasData.filter(p => p && (p.svgPath || (p.points && p.points.length > 0)));
-    }, [canvasData]);
+        
+        return canvasData
+            .filter(p => p && (p.svgPath || (p.points && p.points.length > 0)))
+            .map(p => {
+                // Détection : Si le premier point X est <= 1.5, on suppose que c'est normalisé (0 à 1)
+                // Sinon c'est des pixels bruts (anciens dessins)
+                const isNormalized = p.points && p.points.length > 0 && p.points[0][0] <= 1.5;
+
+                if (!isNormalized) {
+                    return p; // Ancien dessin : on rend tel quel
+                }
+
+                // Nouveau dessin : on convertit les % en Pixels selon la taille actuelle du viewer
+                const denormalizedPoints = p.points!.map(([x, y, pressure]) => [
+                    x * targetWidth,
+                    y * targetHeight,
+                    pressure
+                ]);
+
+                // On doit aussi recalculer le SVG path à partir des nouveaux points
+                const options = {
+                    size: p.width * targetWidth, // La taille du trait est aussi relative !
+                    thinning: 0.37,
+                    smoothing: 0.47,
+                    streamline: 0.81,
+                    easing: (t: number) => t,
+                    start: { taper: 5, cap: true },
+                    end: { taper: 5, cap: true },
+                    simulatePressure: true,
+                    last: false,
+                };
+                
+                const outline = getStroke(denormalizedPoints, options);
+                const newSvgPath = getSvgPathFromStroke(outline);
+
+                return {
+                    ...p,
+                    points: denormalizedPoints,
+                    svgPath: newSvgPath,
+                    width: p.width * targetWidth // On adapte l'épaisseur du trait
+                };
+            });
+    }, [canvasData, targetWidth, targetHeight]);
 
     const scaleTransform = useMemo(() => {
-        if (autoCenter && validPaths.length > 0) {
-            return { translateX: 0, translateY: 0, scale: 1 }; 
-        }
-        const scale = targetWidth / screenWidth;
-        return { translateX: 0, translateY: 0, scale }; 
-    }, [validPaths, autoCenter, targetWidth, screenWidth]);
+        // Si on a recalculé les points (isNormalized), on n'a plus besoin de scale global
+        // Sauf si c'est un ancien dessin (non normalisé) sur un écran différent
+        
+        // Pour simplifier : Si on a normalisé, le scale est 1.
+        // Si c'est des vieux dessins, on garde la logique précédente ou on force 1
+        // (Les vieux dessins resteront "figés" en pixels, c'est le comportement attendu pour la rétrocompatibilité)
+        return { translateX: 0, translateY: 0, scale: 1 }; 
+    }, []);
 
     
     return (

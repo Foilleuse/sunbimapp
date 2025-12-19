@@ -9,6 +9,7 @@ interface DrawingCanvasProps {
   imageUri: string;
   strokeColor: string;
   strokeWidth: number;
+  onPathsChange?: (paths: DrawingPath[]) => void; // Ajout du callback pour remonter les données
   onClear?: () => void;
   isEraserMode?: boolean;
   blurRadius?: number;
@@ -50,7 +51,7 @@ function getSvgPathFromStroke(stroke: number[][]): string {
 }
 
 export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
-  ({ imageUri, strokeColor, strokeWidth, isEraserMode, blurRadius = 0 }, ref) => {
+  ({ imageUri, strokeColor, strokeWidth, isEraserMode, blurRadius = 0, onPathsChange }, ref) => {
     if (Platform.OS === 'web') return <View />;
 
     // Dimensions de l'écran (Viewport)
@@ -62,6 +63,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
 
     const image = useImage(imageUri);
 
+    // Chemins stockés localement (en PIXELS pour l'affichage immédiat)
     const [paths, setPaths] = useState<DrawingPath[]>([]);
     const [redoStack, setRedoStack] = useState<DrawingPath[]>([]);
     
@@ -79,14 +81,46 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
     const mode = useRef<'NONE' | 'DRAWING' | 'ZOOMING'>('NONE');
     const gestureStart = useRef<any>(null);
 
+    // Fonction pour notifier le parent avec des chemins NORMALISÉS (0-1)
+    const notifyPathsChanged = (currentPaths: DrawingPath[]) => {
+      if (!onPathsChange) return;
+
+      const normalizedPaths = currentPaths.map(p => {
+        // Si déjà normalisé (cas rare ici car on travaille en pixels locaux), on laisse
+        // Sinon on normalise points et width
+        // On vérifie si c'est du pixel : si x > 2 (car 0-1 est très petit)
+        if (p.points && p.points.length > 0 && p.points[0][0] > 2) {
+            return {
+                ...p,
+                width: p.width / PAPER_WIDTH, // Normalisation épaisseur relative à la largeur
+                points: p.points.map(([x, y, pressure]) => [
+                    x / PAPER_WIDTH,
+                    y / PAPER_HEIGHT,
+                    pressure
+                ])
+            };
+        }
+        return p;
+      });
+      
+      onPathsChange(normalizedPaths);
+    };
+
     useImperativeHandle(ref, () => ({
-      clearCanvas: () => { setPaths([]); setRedoStack([]); setCurrentPoints(null); },
+      clearCanvas: () => { 
+          setPaths([]); 
+          setRedoStack([]); 
+          setCurrentPoints(null);
+          notifyPathsChanged([]);
+      },
       undo: () => {
         setPaths(prev => {
           if (prev.length === 0) return prev;
           const newPaths = [...prev];
           const removed = newPaths.pop();
           if (removed) setRedoStack(s => [...s, removed]);
+          
+          notifyPathsChanged(newPaths);
           return newPaths;
         });
       },
@@ -95,13 +129,37 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
           if (prev.length === 0) return prev;
           const newStack = [...prev];
           const res = newStack.pop();
-          if (res) setPaths(p => [...p, res]);
+          if (res) {
+              const newPaths = (p: DrawingPath[]) => [...p, res];
+              setPaths(newPaths);
+              // On doit récupérer l'état calculé pour notifier, 
+              // comme setPaths est asynchrone, on utilise l'effet de bord ou on recalcule
+              // Ici on fait simple en supposant que paths est à jour au prochain rendu ou on triche un peu
+              // Mieux vaut utiliser un useEffect sur [paths] pour notifier, mais ici on le fait manuellement pour l'imperative handle
+              // Attention : 'paths' ici est la valeur de closure au moment du rendu...
+              // Pour simplifier, on ne notifie pas le redo immédiatement si c'est compliqué sans ref, 
+              // ou on utilise une ref pour les paths.
+          }
           return newStack;
         });
       },
-      getPaths: () => paths,
+      // Pour getPaths, on retourne les versions normalisées pour l'export final
+      getPaths: () => {
+          return paths.map(p => ({
+              ...p,
+              width: p.width / PAPER_WIDTH,
+              points: p.points.map(([x, y, pr]) => [x / PAPER_WIDTH, y / PAPER_HEIGHT, pr])
+          }));
+      },
       getSnapshot: async () => undefined
     }), [paths]);
+
+    // Effet pour notifier le parent quand les chemins changent (pour redo notamment)
+    // On évite de le mettre dans le useImperativeHandle pour redo
+    React.useEffect(() => {
+        notifyPathsChanged(paths);
+    }, [paths]);
+
 
     // --- INITIALISATION DU ZOOM ---
     if (image && !isInitialized.current) {
@@ -228,6 +286,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
           const svgPathData = getSvgPathFromStroke(outlinePoints);
 
           // 2. Sauvegarder le résultat final
+          // On stocke en LOCAL (PIXELS) pour l'affichage
           setPaths(prev => [...prev, {
             points: currentPoints, // On garde les points bruts (JSON)
             svgPath: svgPathData,  // On garde le SVG généré pour l'affichage facile
