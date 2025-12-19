@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, memo } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, Dimensions, Alert, Pressable, Platform, ScrollView, PixelRatio } from 'react-native';
-import { X, Heart, Lightbulb, Palette, Zap, MoreHorizontal, Share2 } from 'lucide-react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, Dimensions, Alert, Pressable, Platform, ScrollView, PixelRatio, Image } from 'react-native';
+import { X, Heart, Lightbulb, Palette, Zap, MoreHorizontal, Share2, AlertCircle } from 'lucide-react-native';
 import { supabase } from '../lib/supabaseClient';
 import { DrawingViewer } from './DrawingViewer';
 import { useAuth } from '../contexts/AuthContext';
@@ -119,10 +119,11 @@ export const DrawingDetailModal: React.FC<DrawingDetailModalProps> = ({ visible,
 
   // Si userProfile n'est pas passé, on essaie de le prendre depuis drawing.users (cas standard)
   const author = userProfile || drawing?.users;
+  const isMissed = drawing?.type === 'missed';
 
   useEffect(() => {
     if (visible && drawing) {
-        fetchReactionsState();
+        if (!isMissed) fetchReactionsState();
         setAnimationReady(false);
         const timer = setTimeout(() => {
             setAnimationReady(true);
@@ -143,7 +144,7 @@ export const DrawingDetailModal: React.FC<DrawingDetailModalProps> = ({ visible,
   }, [drawing, screenWidth]);
 
   const fetchReactionsState = async () => {
-        if (!drawing) return;
+        if (!drawing || isMissed) return;
         try {
             const { data: allReactions, error } = await supabase
                 .from('reactions')
@@ -173,7 +174,7 @@ export const DrawingDetailModal: React.FC<DrawingDetailModalProps> = ({ visible,
   };
 
   const handleReaction = async (type: ReactionType) => {
-        if (!currentUser || !type || !drawing) return;
+        if (!currentUser || !type || !drawing || isMissed) return;
 
         const previousReaction = userReaction;
         const previousCounts = { ...reactionCounts };
@@ -223,7 +224,7 @@ export const DrawingDetailModal: React.FC<DrawingDetailModalProps> = ({ visible,
   };
 
   const handleReport = () => {
-    if (!drawing) return;
+    if (!drawing || isMissed) return;
     Alert.alert(
         "Options",
         "Que souhaitez-vous faire ?",
@@ -283,82 +284,108 @@ export const DrawingDetailModal: React.FC<DrawingDetailModalProps> = ({ visible,
                 <View style={{ width: screenWidth, alignItems: 'center' }}> 
                     <Pressable 
                         onPressIn={() => {
-                            if (isUnlocked) setIsHolding(true);
+                            if (isUnlocked && !isMissed) setIsHolding(true);
                         }} 
                         onPressOut={() => setIsHolding(false)}
                         style={{ width: screenWidth, aspectRatio: 3/4, backgroundColor: 'transparent', marginTop: 0 }}
+                        disabled={isMissed}
                     >
                         <View style={{ flex: 1, opacity: isHolding ? 0 : 1 }}>
-                            {animationReady ? (
-                                <DrawingViewer
-                                    imageUri={optimizedModalImageUri || drawing.cloud_image_url} 
-                                    canvasData={isUnlocked ? drawing.canvas_data : []}
-                                    viewerSize={screenWidth} 
-                                    viewerHeight={screenWidth * (4/3)} 
-                                    transparentMode={true} 
-                                    startVisible={false} 
-                                    animated={true}
-                                    autoCenter={false} 
-                                />
+                            {isMissed ? (
+                                <View style={{ flex: 1 }}>
+                                    <Image
+                                        source={{ uri: optimizedModalImageUri || drawing.cloud_image_url }}
+                                        style={{ width: '100%', height: '100%' }}
+                                        resizeMode="cover"
+                                    />
+                                    <View style={styles.missedOverlay}>
+                                        <AlertCircle color="#000" size={64} style={{ marginBottom: 10 }} />
+                                        <Text style={styles.missedDate}>
+                                            {new Date(drawing.date).toLocaleDateString(undefined, {day: '2-digit', month: '2-digit'})}
+                                        </Text>
+                                        <Text style={styles.missedText}>Jour manqué</Text>
+                                    </View>
+                                </View>
                             ) : (
-                                <View style={{ width: '100%', height: '100%' }} /> 
+                                animationReady ? (
+                                    <DrawingViewer
+                                        imageUri={optimizedModalImageUri || drawing.cloud_image_url} 
+                                        canvasData={isUnlocked ? drawing.canvas_data : []}
+                                        viewerSize={screenWidth} 
+                                        viewerHeight={screenWidth * (4/3)} 
+                                        transparentMode={true} 
+                                        startVisible={false} 
+                                        animated={true}
+                                        autoCenter={false} 
+                                    />
+                                ) : (
+                                    <View style={{ width: '100%', height: '100%' }} /> 
+                                )
                             )}
                         </View>
-                        {isUnlocked && <Text style={styles.hintText}> </Text>}
+                        {isUnlocked && !isMissed && <Text style={styles.hintText}> </Text>}
                     </Pressable>
                 </View>
 
-                {/* Infos Dessin & Auteur */}
+                {/* Infos Dessin & Auteur (Masqués ou adaptés si Jour Manqué) */}
                 <View style={styles.infoCard}>
                     <View style={styles.infoContent}>
                         <View style={styles.titleRow}>
-                            {/* BOUTON PARTAGE */}
-                            <TouchableOpacity onPress={openShareModal} style={styles.iconBtnLeft} hitSlop={15}>
-                                <Share2 color="#CCC" size={24} />
-                            </TouchableOpacity>
+                            {/* BOUTON PARTAGE - Caché si manqué */}
+                            {!isMissed && (
+                                <TouchableOpacity onPress={openShareModal} style={styles.iconBtnLeft} hitSlop={15}>
+                                    <Share2 color="#CCC" size={24} />
+                                </TouchableOpacity>
+                            )}
 
                             <Text style={styles.drawingTitle} numberOfLines={1}>
-                                {drawing.label || "Sans titre"}
+                                {isMissed ? "Pas de dessin" : (drawing.label || "Sans titre")}
                             </Text>
                             
-                            <TouchableOpacity onPress={handleReport} style={styles.iconBtnRight} hitSlop={15}>
-                                <MoreHorizontal color="#CCC" size={24} />
-                            </TouchableOpacity>
+                            {!isMissed && (
+                                <TouchableOpacity onPress={handleReport} style={styles.iconBtnRight} hitSlop={15}>
+                                    <MoreHorizontal color="#CCC" size={24} />
+                                </TouchableOpacity>
+                            )}
                         </View>
                         
-                        <Text style={styles.userName}>{author?.display_name || "Anonyme"}</Text>
+                        <Text style={styles.userName}>
+                            {isMissed ? "" : (author?.display_name || "Anonyme")}
+                        </Text>
 
-                        {/* Barre de réactions */}
-                        <View style={styles.reactionBar}>
-                            <AnimatedReactionBtn
-                                icon={Heart}
-                                color="#FF3B30"
-                                isActive={userReaction === 'like'}
-                                count={reactionCounts.like}
-                                onPress={() => handleReaction('like')}
-                            />
-                            <AnimatedReactionBtn
-                                icon={Lightbulb}
-                                color="#FFCC00"
-                                isActive={userReaction === 'smart'}
-                                count={reactionCounts.smart}
-                                onPress={() => handleReaction('smart')}
-                            />
-                            <AnimatedReactionBtn
-                                icon={Palette}
-                                color="#5856D6"
-                                isActive={userReaction === 'beautiful'}
-                                count={reactionCounts.beautiful}
-                                onPress={() => handleReaction('beautiful')}
-                            />
-                            <AnimatedReactionBtn
-                                icon={Zap}
-                                color="#FF2D55"
-                                isActive={userReaction === 'crazy'}
-                                count={reactionCounts.crazy}
-                                onPress={() => handleReaction('crazy')}
-                            />
-                        </View>
+                        {/* Barre de réactions - Cachée si manqué */}
+                        {!isMissed && (
+                            <View style={styles.reactionBar}>
+                                <AnimatedReactionBtn
+                                    icon={Heart}
+                                    color="#FF3B30"
+                                    isActive={userReaction === 'like'}
+                                    count={reactionCounts.like}
+                                    onPress={() => handleReaction('like')}
+                                />
+                                <AnimatedReactionBtn
+                                    icon={Lightbulb}
+                                    color="#FFCC00"
+                                    isActive={userReaction === 'smart'}
+                                    count={reactionCounts.smart}
+                                    onPress={() => handleReaction('smart')}
+                                />
+                                <AnimatedReactionBtn
+                                    icon={Palette}
+                                    color="#5856D6"
+                                    isActive={userReaction === 'beautiful'}
+                                    count={reactionCounts.beautiful}
+                                    onPress={() => handleReaction('beautiful')}
+                                />
+                                <AnimatedReactionBtn
+                                    icon={Zap}
+                                    color="#FF2D55"
+                                    isActive={userReaction === 'crazy'}
+                                    count={reactionCounts.crazy}
+                                    onPress={() => handleReaction('crazy')}
+                                />
+                            </View>
+                        )}
                     </View>
                 </View>
             </ScrollView>
@@ -443,4 +470,27 @@ const styles = StyleSheet.create({
       justifyContent: 'center',
       padding: 8
   },
+  missedOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: 'rgba(255,255,255,0.4)',
+      justifyContent: 'center',
+      alignItems: 'center',
+  },
+  missedDate: {
+      fontSize: 24,
+      fontWeight: '900',
+      color: '#000',
+      backgroundColor: 'rgba(255,255,255,0.8)',
+      paddingHorizontal: 12,
+      paddingVertical: 4,
+      borderRadius: 8,
+      overflow: 'hidden',
+      marginTop: 10
+  },
+  missedText: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: '#000',
+      marginTop: 5
+  }
 });
