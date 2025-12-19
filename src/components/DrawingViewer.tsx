@@ -41,7 +41,21 @@ function getSvgPathFromStroke(stroke: number[][]): string {
 }
 
 // Composant interne pour gérer l'animation d'un chemin individuel
-const AnimatedPath = ({ pathData, index, progress, totalCount, startVisible }: { pathData: DrawingPath, index: number, progress: Animated.SharedValue<number>, totalCount: number, startVisible: boolean }) => {
+const AnimatedPath = ({ 
+    pathData, 
+    index, 
+    progress, 
+    totalCount, 
+    startVisible,
+    scale = 1 // Nouveau prop pour gérer l'échelle des vieux dessins
+}: { 
+    pathData: DrawingPath, 
+    index: number, 
+    progress: Animated.SharedValue<number>, 
+    totalCount: number, 
+    startVisible: boolean,
+    scale?: number
+}) => {
     
     // RESTAURATION : Initialisation standard (sans forcer null si !startVisible)
     const [currentPath, setCurrentPath] = useState<SkPath | null>(() => {
@@ -60,6 +74,11 @@ const AnimatedPath = ({ pathData, index, progress, totalCount, startVisible }: {
     });
 
     const isFilled = pathData.isFilled ?? false;
+
+    // Détection "Legacy SVG" : Pas de points bruts ET pas de mode remplissage
+    // Ce sont les seuls qui n'ont pas été redimensionnés dans validPaths
+    const isLegacySVG = !isFilled && !pathData.points;
+    const effectiveScale = isLegacySVG ? scale : 1;
 
     // Cette fonction s'exécute sur le JS Thread pour éviter les crashs Worklet/UI
     const updatePathOnJS = (currentProgress: number) => {
@@ -136,11 +155,14 @@ const AnimatedPath = ({ pathData, index, progress, totalCount, startVisible }: {
             path={displayPath}
             color={pathData.isEraser ? "#000" : pathData.color}
             style={isFilled ? "fill" : "stroke"}
-            strokeWidth={isFilled ? 0 : pathData.width}
+            // On applique l'échelle à l'épaisseur du trait aussi si c'est un legacy SVG
+            strokeWidth={isFilled ? 0 : pathData.width * effectiveScale}
             strokeCap="round"
             strokeJoin="round"
             blendMode={pathData.isEraser ? "clear" : "srcOver"}
             opacity={opacity}
+            // On transforme le chemin pour qu'il rentre dans la miniature
+            transform={[{ scale: effectiveScale }]}
         />
     );
 };
@@ -162,6 +184,10 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
     const targetWidth = viewerSize || screenWidth;
     const targetHeight = viewerHeight || targetWidth * (4/3); 
     
+    // Calcul du facteur d'échelle pour les vieux dessins (Legacy SVG)
+    // Si viewerSize est petit (miniature), legacyScale sera < 1 (ex: 0.25)
+    const legacyScale = targetWidth / screenWidth;
+
     const image = useImage(imageUri);
 
     const progress = useSharedValue(startVisible ? 1 : 0);
@@ -202,7 +228,7 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
                     ]);
                     localWidth = p.width * targetWidth; // L'épaisseur est aussi relative
                 } else if (!isNormalized && p.points) {
-                    // CAS B : Dessin en Pixels (Legacy)
+                    // CAS B : Dessin en Pixels (Legacy avec points)
                     // On doit le redimensionner pour qu'il rentre dans la vignette
                     // Hypothèse : Le dessin en pixels a été fait sur un écran de largeur 'screenWidth'
                     const scaleRatio = targetWidth / screenWidth;
@@ -215,12 +241,11 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
                     localWidth = p.width * scaleRatio;
                 } else {
                     // CAS C : Pas de points (Vieux SVG pur) -> On ne peut pas facilement le redimensionner ici
-                    // Il s'affichera tel quel (risque de crop en vignette)
+                    // On le laisse tel quel ici, et on gère le scale via le prop 'transform' dans AnimatedPath
                     return p;
                 }
 
-                // 2. Régénération du SVG à partir des points redimensionnés
-                // Cela garantit que le dessin s'affiche correctement à n'importe quelle échelle
+                // 2. Régénération du SVG à partir des points redimensionnés (Cas A & B)
                 const options = {
                     size: localWidth,
                     thinning: 0.37,
@@ -282,6 +307,7 @@ export const DrawingViewer: React.FC<DrawingViewerProps> = ({
                             totalCount={validPaths.length}
                             progress={progress}
                             startVisible={startVisible} 
+                            scale={legacyScale} // On passe l'échelle calculée
                         />
                     ))}
                 </Group>
