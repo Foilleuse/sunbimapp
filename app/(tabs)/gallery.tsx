@@ -162,7 +162,7 @@ export default function GalleryPage() {
                     <View style={styles.toolsContainer}>
                         <View style={styles.searchBar}>
                             <Search color="#999" size={18} />
-                            <TextInput placeholder="Rechercher..." placeholderTextColor="#999" style={styles.searchInput} value={searchText} onChangeText={setSearchText} onSubmitEditing={handleSearchSubmit} returnKeyType="search" />
+                            <TextInput placeholder="Search..." placeholderTextColor="#999" style={styles.searchInput} value={searchText} onChangeText={setSearchText} onSubmitEditing={handleSearchSubmit} returnKeyType="search" />
                             {searchText.length > 0 && <TouchableOpacity onPress={clearSearch}><XCircle color="#CCC" size={18} /></TouchableOpacity>}
                         </View>
                         <View style={styles.actionsRow}>
@@ -183,7 +183,7 @@ export default function GalleryPage() {
                             initialNumToRender={6}
                             windowSize={5}
                             removeClippedSubviews={Platform.OS === 'android'}
-                            ListEmptyComponent={<View style={styles.emptyState}><Text style={styles.emptyText}>Aucun dessin.</Text></View>}
+                            ListEmptyComponent={<View style={styles.emptyState}><Text style={styles.emptyText}>No drawings.</Text></View>}
                         />
                     )}
                 </View>
