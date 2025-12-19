@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform, Image, Pressable, Alert, PixelRatio, Share } from 'react-native';
 import { useEffect, useState, memo, useCallback, useMemo } from 'react';
-import { User, Eye, MoreHorizontal, Lightbulb, Palette, Laugh, Heart, ChevronLeft, ChevronRight, Share2 } from 'lucide-react-native';
+import { User, Eye, MoreHorizontal, Lightbulb, Palette, Laugh, Heart, ChevronLeft, ChevronRight, Share2, Zap } from 'lucide-react-native';
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { useAuth } from '../../src/contexts/AuthContext';
@@ -67,7 +67,7 @@ const MirroredBackground = ({ uri, width, height, top }: { uri: string, width: n
     );
 };
 
-const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color }: any) => {
+const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color, count }: any) => {
     const scale = useSharedValue(1);
 
     const animatedStyle = useAnimatedStyle(() => {
@@ -93,6 +93,9 @@ const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color }: any) => {
                     size={24} 
                 />
             </Animated.View>
+            <Text style={[styles.reactionText, isActive && styles.activeText]}>
+                {count > 0 ? count : ''}
+            </Text>
         </Pressable>
     );
 };
@@ -327,7 +330,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
                             onPress={() => handleReaction('beautiful')}
                         />
                         <AnimatedReactionBtn 
-                            icon={Laugh} 
+                            icon={Zap} 
                             color="#FF2D55" 
                             isActive={userReaction === 'crazy'} 
                             count={reactionCounts.crazy} 
