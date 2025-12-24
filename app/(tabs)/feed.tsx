@@ -412,7 +412,10 @@ export default function FeedPage() {
                 setBackgroundCloud(cloudData.image_url);
 
                 let blockedUserIds: string[] = [];
+                let reportedDrawingIds: string[] = []; // Liste des dessins signalés par moi
+
                 if (user) {
+                    // 1. Récupération des utilisateurs bloqués
                     const { data: blocks } = await supabase
                         .from('blocks')
                         .select('blocked_id')
@@ -420,6 +423,16 @@ export default function FeedPage() {
                     
                     if (blocks && blocks.length > 0) {
                         blockedUserIds = blocks.map(b => b.blocked_id);
+                    }
+
+                    // 2. Récupération des dessins signalés par moi
+                    const { data: reports } = await supabase
+                        .from('reports')
+                        .select('drawing_id')
+                        .eq('reporter_id', user.id);
+                    
+                    if (reports && reports.length > 0) {
+                        reportedDrawingIds = reports.map(r => r.drawing_id);
                     }
                 }
 
@@ -431,8 +444,14 @@ export default function FeedPage() {
                     .order('created_at', { ascending: false })
                     .limit(20);
 
+                // Exclusion des utilisateurs bloqués
                 if (blockedUserIds.length > 0) {
                     query = query.not('user_id', 'in', `(${blockedUserIds.join(',')})`);
+                }
+
+                // Exclusion des dessins signalés par l'utilisateur connecté
+                if (reportedDrawingIds.length > 0) {
+                    query = query.not('id', 'in', `(${reportedDrawingIds.join(',')})`);
                 }
 
                 const { data: drawingsData, error: drawingsError } = await query;
