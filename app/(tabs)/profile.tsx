@@ -13,6 +13,8 @@ import { DrawingDetailModal } from '../../src/components/DrawingDetailModal';
 // Imports pour le flou et la safe area
 import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+// Import du dégradé pour adoucir la limite du header
+import { LinearGradient } from 'expo-linear-gradient';
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -259,8 +261,11 @@ export default function ProfilePage() {
             </View>
           </View>
 
-          {/* Ligne de séparation subtile */}
-          <View style={styles.headerSeparator} />
+          {/* Dégradé pour adoucir la limite du flou */}
+          <LinearGradient
+            colors={['rgba(255,255,255,0.8)', 'rgba(255,255,255,0)']}
+            style={styles.blurGradient}
+          />
       </BlurView>
 
       {/* MODALE D'AGRANDISSEMENT VIA COMPOSANT */}
@@ -293,10 +298,14 @@ const styles = StyleSheet.create({
       right: 0,
       zIndex: 10,
   },
-  headerSeparator: {
-      height: 1,
-      backgroundColor: 'rgba(0,0,0,0.05)',
+  
+  // Nouveau style pour le dégradé
+  blurGradient: {
+      height: 20, // Hauteur du dégradé en bas du header
       width: '100%',
+      position: 'absolute',
+      bottom: -20, // Positionné juste en dessous du header visible
+      zIndex: 10,
   },
 
   profileBlock: { 
