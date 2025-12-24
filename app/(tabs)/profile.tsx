@@ -55,17 +55,24 @@ export default function ProfilePage() {
 
         if (cloudsError) throw cloudsError;
 
+        // --- MODIFICATION : Récupération des reports et retrait du filtre is_hidden ---
         const { data: userDrawings, error: drawingsError } = await supabase
             .from('drawings')
-            .select('*')
-            .eq('user_id', user?.id)
-            .eq('is_hidden', false);
+            .select('*, reports(id)') // On récupère les IDs des reports pour compter
+            .eq('user_id', user?.id);
+            // .eq('is_hidden', false); // RETIRÉ pour gérer dynamiquement
 
         if (drawingsError) throw drawingsError;
 
         const combinedHistory = allClouds?.map(cloud => {
             const drawing = userDrawings?.find(d => d.cloud_id === cloud.id);
-            if (drawing) {
+            
+            // --- FILTRAGE DYNAMIQUE ---
+            // On vérifie le nombre de signalements
+            const reportCount = drawing?.reports ? drawing.reports.length : 0;
+            const isHiddenByReports = reportCount >= 2;
+
+            if (drawing && !isHiddenByReports) {
                 return { ...drawing, type: 'drawing', id: drawing.id }; 
             } else {
                 return { 
