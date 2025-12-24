@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform, Image, Pressable, Alert, PixelRatio, Share } from 'react-native';
 import { useEffect, useState, memo, useCallback, useMemo } from 'react';
-import { User, Eye, MoreHorizontal, Heart, ChevronLeft, ChevronRight, Share2 } from 'lucide-react-native';
+import { User, Eye, MoreHorizontal, Heart, ChevronLeft, ChevronRight, Share2, CircleHelp } from 'lucide-react-native';
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { useAuth } from '../../src/contexts/AuthContext';
@@ -289,18 +289,9 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
             <View style={styles.cardInfo}>
                 <View style={styles.headerInfo}>
                     <View style={styles.titleRow}>
-                        {/* 🔥 BOUTON PARTAGE OUVRE LA MODALE IMMERSIVE */}
-                        <TouchableOpacity onPress={handleShare} style={styles.iconBtnLeft} hitSlop={15}>
-                            <Share2 color="#CCC" size={24} />
-                        </TouchableOpacity>
-
                         <Text style={styles.drawingTitle} numberOfLines={1}>
                             {drawing.label || "Untitled"}
                         </Text>
-                        
-                        <TouchableOpacity onPress={handleReport} style={styles.iconBtnRight} hitSlop={15}>
-                            <MoreHorizontal color="#CCC" size={24} />
-                        </TouchableOpacity>
                     </View>
 
                     <TouchableOpacity 
@@ -311,22 +302,36 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
                          <Text style={styles.userName}>{author?.display_name || "Anonymous"}</Text>
                     </TouchableOpacity>
 
+                    {/* BARRE D'ACTIONS COMPLÈTE (Partage - Réactions - Options) */}
                     <View style={styles.reactionBar}>
-                        <AnimatedReactionBtn 
-                            icon={Heart} 
-                            color="#FF3B30" 
-                            isActive={userReaction === 'like'} 
-                            count={reactionCounts.like} 
-                            onPress={() => handleReaction('like')}
-                        />
-                        <AnimatedReactionBtn 
-                            isCustomIcon={true}
-                            customContent="?"
-                            color="#FFCC00" 
-                            isActive={userReaction === 'question'} 
-                            count={reactionCounts.question} 
-                            onPress={() => handleReaction('question')}
-                        />
+                        {/* 1. Partage à gauche */}
+                        <TouchableOpacity onPress={handleShare} style={styles.actionBtn} hitSlop={15}>
+                            <Share2 color="#CCC" size={24} />
+                        </TouchableOpacity>
+
+                        {/* 2. Réactions au centre */}
+                        <View style={styles.reactionsCenter}>
+                            <AnimatedReactionBtn 
+                                icon={Heart} 
+                                color="#FF3B30" 
+                                isActive={userReaction === 'like'} 
+                                count={reactionCounts.like} 
+                                onPress={() => handleReaction('like')}
+                            />
+                            <AnimatedReactionBtn 
+                                isCustomIcon={true}
+                                customContent="?"
+                                color="#FFCC00" 
+                                isActive={userReaction === 'question'} 
+                                count={reactionCounts.question} 
+                                onPress={() => handleReaction('question')}
+                            />
+                        </View>
+
+                        {/* 3. Options à droite */}
+                        <TouchableOpacity onPress={handleReport} style={styles.actionBtn} hitSlop={15}>
+                            <MoreHorizontal color="#CCC" size={24} />
+                        </TouchableOpacity>
                     </View>
                 </View>
             </View>
@@ -585,7 +590,6 @@ const styles = StyleSheet.create({
         justifyContent: 'center', 
         alignItems: 'center', 
         marginBottom: 2,
-        position: 'relative'
     },
     drawingTitle: { 
         fontSize: 26, 
@@ -593,22 +597,8 @@ const styles = StyleSheet.create({
         color: '#FFF', 
         letterSpacing: -0.5, 
         textAlign: 'center',
-        maxWidth: '70%' // Réduit pour laisser place aux boutons
+        maxWidth: '90%'
     },
-    
-    // Position absolue pour les boutons gauche/droite
-    iconBtnLeft: {
-        position: 'absolute',
-        left: 0,
-        top: 5,
-        padding: 5
-    },
-    iconBtnRight: { // Ancien moreBtnAbsolute
-        position: 'absolute',
-        right: 0,
-        top: 5,
-        padding: 5 
-    }, 
     
     staticEyeBtn: {
         position: 'absolute',
@@ -639,13 +629,21 @@ const styles = StyleSheet.create({
 
     reactionBar: { 
         flexDirection: 'row', 
-        justifyContent: 'center', 
+        justifyContent: 'space-between', // Éléments espacés : Partage à gauche, Options à droite
         alignItems: 'center', 
         width: '100%',
-        gap: 60, // Augmenté pour l'espacement entre 2 icônes
-        paddingHorizontal: 10,
+        paddingHorizontal: 20, // Padding latéral pour décoller des bords
         paddingBottom: 20,
-        marginTop: 4
+        marginTop: 10
+    },
+    reactionsCenter: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: 60, // Espacement entre le Coeur et le ?
+    },
+    actionBtn: {
+        padding: 5
     },
     reactionBtn: { 
         alignItems: 'center', 
