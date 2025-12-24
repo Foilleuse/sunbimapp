@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, memo } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, Dimensions, Alert, Pressable, Platform, ScrollView, PixelRatio, Image } from 'react-native';
-import { X, Heart, Lightbulb, Palette, Zap, MoreHorizontal, Share2, AlertCircle } from 'lucide-react-native';
+import { X, Heart, Lightbulb, Palette, Zap, MoreHorizontal, Share2, AlertCircle, CircleHelp } from 'lucide-react-native';
 import { supabase } from '../lib/supabaseClient';
 import { DrawingViewer } from './DrawingViewer';
 import { useAuth } from '../contexts/AuthContext';
@@ -18,8 +18,8 @@ interface DrawingDetailModalProps {
   isUnlocked?: boolean; // Pour savoir si on peut voir le dessin original
 }
 
-// Types de réactions possibles
-type ReactionType = 'like' | 'smart' | 'beautiful' | 'crazy' | null;
+// Types de réactions possibles (Modifié : seulement like et question)
+type ReactionType = 'like' | 'question' | null;
 
 // --- COMPOSANT BACKGROUND : MIROIR + FLOU + FONDU ÉTENDU ---
 const MirroredBackground = ({ uri, width, height, top }: { uri: string, width: number, height: number, top: number }) => {
@@ -70,7 +70,7 @@ const MirroredBackground = ({ uri, width, height, top }: { uri: string, width: n
 };
 
 // --- COMPOSANT BOUTON DE RÉACTION ANIMÉ ---
-const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color, count }: any) => {
+const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color, count, isCustomIcon, customContent }: any) => {
     const scale = useSharedValue(1);
 
     const animatedStyle = useAnimatedStyle(() => {
@@ -90,11 +90,17 @@ const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color, count }: an
     return (
         <Pressable onPress={handlePress} style={styles.reactionBtn}>
             <Animated.View style={animatedStyle}>
-                <Icon
-                    color={isActive ? color : "#FFF"}
-                    fill={isActive ? color : "transparent"}
-                    size={24}
-                />
+                {isCustomIcon ? (
+                    <Text style={{ fontSize: 28, fontWeight: '900', color: isActive ? color : "#FFF", textAlign: 'center' }}>
+                        {customContent}
+                    </Text>
+                ) : (
+                    <Icon
+                        color={isActive ? color : "#FFF"}
+                        fill={isActive ? color : "transparent"}
+                        size={28}
+                    />
+                )}
             </Animated.View>
             <Text style={[styles.reactionText, isActive && styles.activeText]}>
                 {count > 0 ? count : ''}
@@ -113,9 +119,7 @@ export const DrawingDetailModal: React.FC<DrawingDetailModalProps> = ({ visible,
   const [userReaction, setUserReaction] = useState<ReactionType>(null);
   const [reactionCounts, setReactionCounts] = useState({
       like: 0,
-      smart: 0,
-      beautiful: 0,
-      crazy: 0
+      question: 0
   });
 
   const { width: screenWidth } = Dimensions.get('window');
@@ -135,7 +139,7 @@ export const DrawingDetailModal: React.FC<DrawingDetailModalProps> = ({ visible,
     } else {
         setAnimationReady(false);
         setUserReaction(null);
-        setReactionCounts({ like: 0, smart: 0, beautiful: 0, crazy: 0 });
+        setReactionCounts({ like: 0, question: 0 });
     }
   }, [visible, drawing]);
 
@@ -156,15 +160,16 @@ export const DrawingDetailModal: React.FC<DrawingDetailModalProps> = ({ visible,
 
             if (error) throw error;
 
-            const counts = { like: 0, smart: 0, beautiful: 0, crazy: 0 };
+            const counts = { like: 0, question: 0 };
             let myReaction: ReactionType = null;
 
             allReactions?.forEach((r: any) => {
-                if (counts.hasOwnProperty(r.reaction_type)) {
-                    counts[r.reaction_type as keyof typeof counts]++;
+                const type = r.reaction_type as keyof typeof counts;
+                if (counts.hasOwnProperty(type)) {
+                    counts[type]++;
                 }
                 if (currentUser && r.user_id === currentUser.id) {
-                    myReaction = r.reaction_type as ReactionType;
+                    myReaction = type;
                 }
             });
 
@@ -185,10 +190,11 @@ export const DrawingDetailModal: React.FC<DrawingDetailModalProps> = ({ visible,
         // Optimistic UI update
         if (userReaction === type) {
             setUserReaction(null);
-            setReactionCounts(prev => ({
-                ...prev,
-                [type]: Math.max(0, prev[type] - 1)
-            }));
+            setReactionCounts(prev => {
+                const newCounts = { ...prev };
+                newCounts[type] = Math.max(0, newCounts[type] - 1);
+                return newCounts;
+            });
             
             try {
                 await supabase.from('reactions').delete().eq('user_id', currentUser.id).eq('drawing_id', drawing.id);
@@ -334,22 +340,9 @@ export const DrawingDetailModal: React.FC<DrawingDetailModalProps> = ({ visible,
                 <View style={styles.infoCard}>
                     <View style={styles.infoContent}>
                         <View style={styles.titleRow}>
-                            {/* BOUTON PARTAGE - Caché si manqué */}
-                            {!isMissed && (
-                                <TouchableOpacity onPress={openShareModal} style={styles.iconBtnLeft} hitSlop={15}>
-                                    <Share2 color="#CCC" size={24} />
-                                </TouchableOpacity>
-                            )}
-
                             <Text style={styles.drawingTitle} numberOfLines={1}>
                                 {isMissed ? "No drawing" : (drawing.label || "Untitled")}
                             </Text>
-                            
-                            {!isMissed && (
-                                <TouchableOpacity onPress={handleReport} style={styles.iconBtnRight} hitSlop={15}>
-                                    <MoreHorizontal color="#CCC" size={24} />
-                                </TouchableOpacity>
-                            )}
                         </View>
                         
                         <Text style={styles.userName}>
@@ -359,34 +352,34 @@ export const DrawingDetailModal: React.FC<DrawingDetailModalProps> = ({ visible,
                         {/* Barre de réactions - Cachée si manqué */}
                         {!isMissed && (
                             <View style={styles.reactionBar}>
-                                <AnimatedReactionBtn
-                                    icon={Heart}
-                                    color="#FF3B30"
-                                    isActive={userReaction === 'like'}
-                                    count={reactionCounts.like}
-                                    onPress={() => handleReaction('like')}
-                                />
-                                <AnimatedReactionBtn
-                                    icon={Lightbulb}
-                                    color="#FFCC00"
-                                    isActive={userReaction === 'smart'}
-                                    count={reactionCounts.smart}
-                                    onPress={() => handleReaction('smart')}
-                                />
-                                <AnimatedReactionBtn
-                                    icon={Palette}
-                                    color="#5856D6"
-                                    isActive={userReaction === 'beautiful'}
-                                    count={reactionCounts.beautiful}
-                                    onPress={() => handleReaction('beautiful')}
-                                />
-                                <AnimatedReactionBtn
-                                    icon={Zap}
-                                    color="#FF2D55"
-                                    isActive={userReaction === 'crazy'}
-                                    count={reactionCounts.crazy}
-                                    onPress={() => handleReaction('crazy')}
-                                />
+                                {/* 1. Partage à gauche */}
+                                <TouchableOpacity onPress={openShareModal} style={styles.actionBtn} hitSlop={15}>
+                                    <Share2 color="#CCC" size={24} />
+                                </TouchableOpacity>
+
+                                {/* 2. Réactions au centre */}
+                                <View style={styles.reactionsCenter}>
+                                    <AnimatedReactionBtn
+                                        icon={Heart}
+                                        color="#FF3B30"
+                                        isActive={userReaction === 'like'}
+                                        count={reactionCounts.like}
+                                        onPress={() => handleReaction('like')}
+                                    />
+                                    <AnimatedReactionBtn
+                                        isCustomIcon={true}
+                                        customContent="?"
+                                        color="#FFCC00"
+                                        isActive={userReaction === 'question'}
+                                        count={reactionCounts.question}
+                                        onPress={() => handleReaction('question')}
+                                    />
+                                </View>
+
+                                {/* 3. Options à droite */}
+                                <TouchableOpacity onPress={handleReport} style={styles.actionBtn} hitSlop={15}>
+                                    <MoreHorizontal color="#CCC" size={24} />
+                                </TouchableOpacity>
                             </View>
                         )}
                     </View>
@@ -427,7 +420,6 @@ const styles = StyleSheet.create({
       justifyContent: 'center', 
       alignItems: 'center', 
       marginBottom: 2,
-      position: 'relative'
   },
   drawingTitle: { 
       fontSize: 26, 
@@ -463,15 +455,28 @@ const styles = StyleSheet.create({
   },
   reactionBar: { 
       flexDirection: 'row', 
-      justifyContent: 'space-around', 
-      alignItems: 'center', 
+      justifyContent: 'space-between', 
+      alignItems: 'flex-start',
       width: '100%',
-      paddingHorizontal: 10
+      paddingHorizontal: 20,
+      paddingBottom: 20,
+      marginTop: 10
+  },
+  reactionsCenter: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+      gap: 60, 
+  },
+  actionBtn: {
+      paddingTop: 6,
+      paddingHorizontal: 5,
+      paddingBottom: 5
   },
   reactionBtn: { 
       alignItems: 'center', 
       justifyContent: 'center',
-      padding: 8
+      padding: 4
   },
   reactionText: {
     fontSize: 12,
