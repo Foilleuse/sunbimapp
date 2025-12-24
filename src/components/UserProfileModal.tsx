@@ -205,15 +205,23 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
         
         if (isMounted && profileData) setUserProfile(profileData);
 
+        // --- MODIFICATION : Ajout de reports(id) et filtrage dynamique ---
         const { data: drawingsData, error: drawingsError } = await supabase
             .from('drawings')
-            .select('*') 
+            .select('*, reports(id)') 
             .eq('user_id', userId)
-            .eq('is_hidden', false) 
+            // .eq('is_hidden', false) // RETIRÉ
             .order('created_at', { ascending: false });
 
         if (drawingsError) throw drawingsError;
-        if (isMounted) setDrawings(drawingsData || []);
+
+        // Filtrage côté client : < 2 signalements
+        const safeDrawings = (drawingsData || []).filter((drawing: any) => {
+            const reportCount = drawing.reports ? drawing.reports.length : 0;
+            return reportCount < 2;
+        });
+
+        if (isMounted) setDrawings(safeDrawings);
 
         if (currentUser) {
             const { data: myDrawings } = await supabase
