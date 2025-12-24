@@ -235,6 +235,7 @@ const styles = StyleSheet.create({
         paddingTop: 5, 
         alignItems: 'center', 
         gap: 10,
+        marginTop: 50, // On pousse les outils vers le bas pour ne pas chevaucher le titre "nyola"
     },
     headerSeparator: {
         height: 1,
