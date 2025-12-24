@@ -326,7 +326,6 @@ export default function FriendsPage() {
                       onChangeText={handleSearch}
                       returnKeyType="search"
                       autoCapitalize="none"
-                      clearButtonMode="while-editing"
                   />
                   {searchText.length > 0 && (
                       <TouchableOpacity onPress={clearSearch}>
