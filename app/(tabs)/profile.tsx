@@ -300,6 +300,7 @@ const styles = StyleSheet.create({
   },
 
   profileBlock: { 
+      marginTop: 50,
       paddingBottom: 15, 
       paddingHorizontal: 20, 
       // Background transparent pour laisser passer le flou
