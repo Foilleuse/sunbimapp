@@ -32,32 +32,14 @@ const MirroredBackground = ({ uri, width, height }: { uri: string, width: number
 
     return (
         <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
+            {/* Couche floutée uniquement */}
             <Group layer={<Paint><Blur blur={BLUR_RADIUS} /></Paint>}>
                 <SkiaImage image={image} x={bgX} y={top} width={bgWidth} height={height} fit="cover" />
                 <Group origin={vec(width / 2, height/2)} transform={[{ scaleY: -1 }]}>
                     <SkiaImage image={image} x={bgX} y={top} width={bgWidth} height={height} fit="cover" />
                 </Group>
             </Group>
-
-            <Mask
-                mode="luminance"
-                mask={
-                    <Rect x={0} y={0} width={width} height={height}>
-                        <SkiaGradient
-                            start={vec(0, 0)}
-                            end={vec(0, height)}
-                            colors={["white", "white"]} 
-                            positions={[0, 1]}
-                        />
-                    </Rect>
-                }
-            >
-                <SkiaImage
-                    image={image}
-                    x={0} y={0} width={width} height={height}
-                    fit="cover"
-                />
-            </Mask>
+            {/* Suppression du Mask qui affichait l'image nette par-dessus */}
         </Canvas>
     );
 };
