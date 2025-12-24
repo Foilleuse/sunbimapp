@@ -13,7 +13,7 @@ import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Constantes de dimensions
-const ROW_HEIGHT = 80; // Hauteur réduite pour une liste plus compacte sans dessins
+const ROW_HEIGHT = 70; // Hauteur encore plus compacte
 
 // --- COMPOSANT BACKGROUND : MIROIR + FLOU ACCENTUÉ ---
 const MirroredBackground = ({ uri, width, height }: { uri: string, width: number, height: number }) => {
@@ -55,9 +55,8 @@ const FriendRow = memo(({ item, onOpenProfile, onUnfollow }: { item: any, onOpen
             onPress={() => onOpenProfile(item)}
             activeOpacity={0.7}
         >
-            {/* Fond semi-transparent subtil */}
-            <View style={styles.rowBackground} />
-
+            {/* Pas de background ici, juste transparent */}
+            
             <View style={styles.friendInfoContainer}>
                 <View style={styles.avatarContainer}>
                     {avatarUrl ? (
@@ -277,17 +276,11 @@ const styles = StyleSheet.create({
       flexDirection: 'row', 
       alignItems: 'center', 
       justifyContent: 'space-between', 
-      paddingVertical: 15, 
+      paddingVertical: 10, 
       height: ROW_HEIGHT,
       paddingHorizontal: 20, 
-      marginBottom: 2,
-      // Pas de bordure inférieure pour un look épuré
-  },
-  
-  // Fond subtil pour détacher le texte du background
-  rowBackground: {
-      ...StyleSheet.absoluteFillObject,
-      backgroundColor: 'rgba(255,255,255,0.4)', 
+      marginBottom: 0, // Suppression de la marge
+      // Suppression de toutes les bordures et couleurs de fond
   },
 
   friendInfoContainer: { 
