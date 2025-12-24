@@ -1,68 +1,73 @@
-import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, Dimensions, ActivityIndicator, TextInput, PixelRatio, Keyboard } from 'react-native';
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { View, Text, StyleSheet, FlatList, Dimensions, TouchableOpacity, ActivityIndicator, RefreshControl, TextInput, Keyboard, Pressable, Image, Platform, Modal, Alert, PixelRatio } from 'react-native';
+import { useEffect, useState, useCallback, memo, useMemo } from 'react';
 import { supabase } from '../../src/lib/supabaseClient';
-import { useAuth } from '../../src/contexts/AuthContext';
+import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
-import { Search, Heart, XCircle } from 'lucide-react-native';
 import { useFocusEffect } from 'expo-router';
+import { Search, Heart, Cloud, CloudOff, XCircle, User } from 'lucide-react-native';
+import { useAuth } from '../../src/contexts/AuthContext';
 import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer';
-import { Canvas, Rect, LinearGradient as SkiaGradient, vec, useImage, Image as SkiaImage, Group, Blur, Mask, Paint } from "@shopify/react-native-skia";
-import { BlurView } from 'expo-blur';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+// Import de la nouvelle modale
 import { DrawingDetailModal } from '../../src/components/DrawingDetailModal';
+// Import du composant de flou
+import { BlurView } from 'expo-blur';
+// Import pour gérer la zone de sécurité (encoche, status bar)
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-// --- BACKGROUND MIROIR ---
-const MirroredBackground = ({ uri, width, height }: { uri: string, width: number, height: number }) => {
-    const image = useImage(uri);
+// --- COMPOSANT VIGNETTE ---
+const GalleryItem = memo(({ item, itemSize, showClouds, onPress }: any) => {
     
-    if (!image) return null;
+    // 🔥 VIGNETTE : On force le ratio 3:4
+    const targetHeight = itemSize * (4/3);
 
-    const top = 0;
-    const BLUR_RADIUS = 60; 
-
-    const EXTRA_WIDTH = 100;
-    const bgWidth = width + EXTRA_WIDTH;
-    const bgX = -EXTRA_WIDTH / 2;
+    const optimizedUri = useMemo(() => {
+        if (!item.cloud_image_url) return null;
+        const physicalWidth = Math.round(itemSize * PixelRatio.get());
+        const physicalHeight = Math.round(targetHeight * PixelRatio.get()); 
+        return getOptimizedImageUrl(item.cloud_image_url, physicalWidth, physicalHeight);
+    }, [item.cloud_image_url, itemSize, targetHeight]);
 
     return (
-        <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
-            <Group layer={<Paint><Blur blur={BLUR_RADIUS} /></Paint>}>
-                <SkiaImage image={image} x={bgX} y={top} width={bgWidth} height={height} fit="cover" />
-                <Group origin={vec(width / 2, height/2)} transform={[{ scaleY: -1 }]}>
-                    <SkiaImage image={image} x={bgX} y={top} width={bgWidth} height={height} fit="cover" />
-                </Group>
-            </Group>
-        </Canvas>
+        <TouchableOpacity 
+            activeOpacity={0.9} onPress={() => onPress(item)}
+            style={{ width: itemSize, height: targetHeight, marginBottom: 1, backgroundColor: '#F9F9F9', overflow: 'hidden' }}
+        >
+            <DrawingViewer
+                imageUri={optimizedUri || item.cloud_image_url} 
+                canvasData={item.canvas_data} 
+                viewerSize={itemSize}
+                viewerHeight={targetHeight} 
+                transparentMode={!showClouds} 
+                startVisible={true} 
+                animated={false} 
+                autoCenter={false} 
+            />
+        </TouchableOpacity>
     );
-};
+}, (prev, next) => {
+    return prev.item.id === next.item.id && prev.showClouds === next.showClouds;
+});
 
 export default function GalleryPage() {
     const { user } = useAuth();
     const [drawings, setDrawings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
-    const [searchText, setSearchText] = useState('');
+    const [showClouds, setShowClouds] = useState(true);
     const [onlyLiked, setOnlyLiked] = useState(false);
-    const [backgroundCloud, setBackgroundCloud] = useState<string | null>(null);
-
-    // Modal Details
-    const [selectedDrawing, setSelectedDrawing] = useState<any>(null);
-    const [isDetailModalVisible, setIsDetailModalVisible] = useState(false);
+    const [searchText, setSearchText] = useState('');
     
-    const [headerHeight, setHeaderHeight] = useState(130);
+    const [selectedDrawing, setSelectedDrawing] = useState<any | null>(null);
+    
+    // Hauteur dynamique du header pour le padding de la liste
+    const [headerHeight, setHeaderHeight] = useState(130); 
+    
+    // Récupération des insets pour la Safe Area
     const insets = useSafeAreaInsets();
-    const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
-    
-    // Calcul taille grille
-    const COLUMN_COUNT = 3;
-    const SPACING = 2;
-    const ITEM_SIZE = (screenWidth - (SPACING * (COLUMN_COUNT - 1))) / COLUMN_COUNT;
 
-    useFocusEffect(
-        useCallback(() => {
-            fetchGallery();
-        }, [user, onlyLiked]) // On recharge si le filtre change
-    );
+    const { width: screenWidth } = Dimensions.get('window');
+    const SPACING = 1; 
+    const ITEM_SIZE = (screenWidth - SPACING) / 2;
 
     const fetchGallery = async (searchQuery = searchText) => {
         try {
@@ -75,47 +80,42 @@ export default function GalleryPage() {
                 .eq('published_for', today)
                 .maybeSingle();
 
-            if (cloudData) {
-                setBackgroundCloud(cloudData.image_url);
-            } else {
+            if (!cloudData) {
+                setDrawings([]);
                 setLoading(false);
                 return;
             }
 
-            let blockedUserIds: string[] = [];
-            let reportedDrawingIds: string[] = [];
+            if (cloudData.image_url) {
+                const targetWidth = Math.round(ITEM_SIZE * PixelRatio.get());
+                const targetHeight = Math.round((targetWidth / 3) * 4);
+                const prefetchUrl = getOptimizedImageUrl(cloudData.image_url, targetWidth, targetHeight);
+                if (prefetchUrl) {
+                    Image.prefetch(prefetchUrl).catch(e => console.log("Prefetch error:", e));
+                }
+            }
 
+            let blockedUserIds: string[] = [];
             if (user) {
-                // 1. Récupération des utilisateurs bloqués
                 const { data: blocks } = await supabase
                     .from('blocks')
                     .select('blocked_id')
                     .eq('blocker_id', user.id);
-                
-                if (blocks && blocks.length > 0) {
-                    blockedUserIds = blocks.map(b => b.blocked_id);
-                }
-
-                // 2. Récupération des dessins signalés (Dynamique)
-                const { data: reports } = await supabase
-                    .from('reports')
-                    .select('drawing_id')
-                    .eq('reporter_id', user.id);
-                
-                if (reports && reports.length > 0) {
-                    reportedDrawingIds = reports.map(r => r.drawing_id);
-                }
+                if (blocks) blockedUserIds = blocks.map(b => b.blocked_id);
             }
 
             let likedIds: string[] = [];
             if (onlyLiked && user) {
                 const { data: userLikes } = await supabase
-                    .from('reactions')
+                    .from('likes')
                     .select('drawing_id')
-                    .eq('user_id', user.id)
-                    .eq('reaction_type', 'like');
-                
-                if (userLikes) likedIds = userLikes.map(l => l.drawing_id);
+                    .eq('user_id', user.id);
+                if (!userLikes || userLikes.length === 0) {
+                    setDrawings([]);
+                    setLoading(false);
+                    return;
+                }
+                likedIds = userLikes.map(l => l.drawing_id);
             }
 
             let query = supabase
@@ -125,159 +125,89 @@ export default function GalleryPage() {
                 .eq('is_hidden', false) 
                 .order('created_at', { ascending: false });
 
-            // Exclusion des utilisateurs bloqués
-            if (blockedUserIds.length > 0) {
-                query = query.not('user_id', 'in', `(${blockedUserIds.join(',')})`);
-            }
-            
-            // Exclusion des dessins signalés (Correction : Exclusion explicite basée sur la liste récupérée)
-            if (reportedDrawingIds.length > 0) {
-                query = query.not('id', 'in', `(${reportedDrawingIds.join(',')})`);
-            }
-            
-            // Filtre "Aimés uniquement"
-            if (onlyLiked) {
-                if (likedIds.length > 0) {
-                    query = query.in('id', likedIds);
-                } else {
-                    setDrawings([]);
-                    setLoading(false);
-                    return;
-                }
-            }
-
-            // Recherche textuelle
-            if (searchQuery.trim().length > 0) {
-                query = query.ilike('label', `%${searchQuery.trim()}%`);
-            }
+            if (blockedUserIds.length > 0) query = query.not('user_id', 'in', `(${blockedUserIds.join(',')})`);
+            if (onlyLiked && likedIds.length > 0) query = query.in('id', likedIds);
+            if (searchQuery.trim().length > 0) query = query.ilike('label', `%${searchQuery.trim()}%`);
             
             const { data, error } = await query;
             if (error) throw error;
-
             setDrawings(data || []);
-
-        } catch (e) {
-            console.error("Error fetching gallery:", e);
-        } finally {
-            setLoading(false);
-            setRefreshing(false);
+        } catch (e) { 
+            console.error(e); 
+        } finally { 
+            setLoading(false); 
+            setRefreshing(false); 
         }
     };
 
-    const handleSearch = (text: string) => {
-        setSearchText(text);
-        fetchGallery(text);
+    useEffect(() => { fetchGallery(); }, [onlyLiked, user]); 
+    useFocusEffect(useCallback(() => { fetchGallery(); return () => closeViewer(); }, []));
+
+    const onRefresh = () => { setRefreshing(true); fetchGallery(); };
+    const handleSearchSubmit = () => { setLoading(true); fetchGallery(); Keyboard.dismiss(); };
+    const clearSearch = () => { setSearchText(''); setLoading(true); fetchGallery(''); Keyboard.dismiss(); };
+    const openViewer = useCallback((drawing: any) => setSelectedDrawing(drawing), []);
+    
+    const closeViewer = () => { 
+        setSelectedDrawing(null); 
     };
 
-    const clearSearch = () => {
-        setSearchText('');
-        Keyboard.dismiss();
-        fetchGallery('');
-    };
-
-    const handleRefresh = () => {
-        setRefreshing(true);
-        fetchGallery();
-    };
-
-    const optimizedBackground = useMemo(() => {
-        if (!backgroundCloud) return null;
-        const w = Math.round(screenWidth * PixelRatio.get());
-        const h = Math.round(screenHeight * PixelRatio.get());
-        return getOptimizedImageUrl(backgroundCloud, w, h);
-    }, [backgroundCloud, screenWidth, screenHeight]);
-
-    const renderItem = ({ item }: { item: any }) => {
-        const thumbUrl = getOptimizedImageUrl(item.image_url, 300, 300); // Miniature
-        return (
-            <TouchableOpacity 
-                style={{ width: ITEM_SIZE, height: ITEM_SIZE, marginBottom: SPACING, marginRight: SPACING }}
-                onPress={() => {
-                    setSelectedDrawing(item);
-                    setIsDetailModalVisible(true);
-                }}
-            >
-                <Image 
-                    source={{ uri: thumbUrl }} 
-                    style={{ width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.1)' }} 
-                    resizeMode="cover"
-                />
-            </TouchableOpacity>
-        );
-    };
+    const renderItem = useCallback(({ item }: { item: any }) => (
+        <GalleryItem item={item} itemSize={ITEM_SIZE} showClouds={showClouds} onPress={openViewer} />
+    ), [showClouds, ITEM_SIZE, openViewer]);
 
     return (
         <View style={styles.container}>
-            {backgroundCloud && (
-                <MirroredBackground 
-                    uri={optimizedBackground || backgroundCloud}
-                    width={screenWidth}
-                    height={screenHeight} 
-                />
-            )}
+            {/* LISTE EN PLEIN ÉCRAN (Z-INDEX BAS) */}
+            <View style={{flex: 1}}>
+                {loading && !refreshing ? (<View style={styles.loadingContainer}><ActivityIndicator size="large" color="#000" /></View>) : (
+                    <FlatList
+                        data={drawings} 
+                        renderItem={renderItem} 
+                        keyExtractor={(item) => item.id}
+                        numColumns={2} 
+                        columnWrapperStyle={{ gap: SPACING }} 
+                        // PaddingTop dynamique pour compenser le header absolu
+                        contentContainerStyle={{ paddingBottom: 100, paddingTop: headerHeight }}
+                        showsVerticalScrollIndicator={false}
+                        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#000" progressViewOffset={headerHeight}/>}
+                        initialNumToRender={6}
+                        windowSize={5}
+                        removeClippedSubviews={Platform.OS === 'android'}
+                        ListEmptyComponent={<View style={styles.emptyState}><Text style={styles.emptyText}>No drawings.</Text></View>}
+                    />
+                )}
+            </View>
 
+            {/* HEADER TRANSPARENT & FLOUTÉ (Z-INDEX HAUT) */}
+            {/* On applique le padding top ici pour respecter la Safe Area */}
             <BlurView 
                 intensity={80} 
                 tint="light" 
                 style={[styles.absoluteHeader, { paddingTop: insets.top }]}
                 onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
             >
-                <SunbimHeader showCloseButton={false} transparent={true} />
-                
+                <SunbimHeader showCloseButton={false} onClose={closeViewer} transparent={true} /> 
                 <View style={styles.toolsContainer}>
                     <View style={styles.searchBar}>
-                        <Search size={18} color="#999" />
-                        <TextInput
-                            style={styles.searchInput}
-                            placeholder="Search..."
-                            placeholderTextColor="#999"
-                            value={searchText}
-                            onChangeText={handleSearch}
-                            returnKeyType="search"
-                        />
-                        {searchText.length > 0 && (
-                            <TouchableOpacity onPress={clearSearch}>
-                                <XCircle size={18} color="#CCC" />
-                            </TouchableOpacity>
-                        )}
+                        <Search color="#999" size={18} />
+                        <TextInput placeholder="Search..." placeholderTextColor="#999" style={styles.searchInput} value={searchText} onChangeText={setSearchText} onSubmitEditing={handleSearchSubmit} returnKeyType="search" />
+                        {searchText.length > 0 && <TouchableOpacity onPress={clearSearch}><XCircle color="#CCC" size={18} /></TouchableOpacity>}
                     </View>
-                    <TouchableOpacity 
-                        style={[styles.filterBtn, onlyLiked && styles.filterBtnActive]}
-                        onPress={() => setOnlyLiked(!onlyLiked)}
-                    >
-                        <Heart size={20} color={onlyLiked ? "#FFF" : "#666"} fill={onlyLiked ? "#FFF" : "transparent"} />
-                    </TouchableOpacity>
+                    <View style={styles.actionsRow}>
+                        <TouchableOpacity style={[styles.actionBtn, onlyLiked && styles.activeBtn]} onPress={() => setOnlyLiked(!onlyLiked)}><Heart color={onlyLiked ? "#FFF" : "#000"} size={20} fill={onlyLiked ? "#FFF" : "transparent"}/></TouchableOpacity>
+                        <TouchableOpacity style={[styles.actionBtn, !showClouds && styles.activeBtn]} onPress={() => setShowClouds(!showClouds)}>{showClouds ? (<Cloud color="#000" size={20} />) : (<CloudOff color="#FFF" size={20} />)}</TouchableOpacity>
+                    </View>
                 </View>
+                {/* Bordure subtile pour séparer le header du contenu défilant dessous */}
                 <View style={styles.headerSeparator} />
             </BlurView>
 
-            <View style={styles.content}>
-                {loading ? (
-                    <ActivityIndicator style={{marginTop: headerHeight + 50}} color="#000" />
-                ) : (
-                    <FlatList
-                        data={drawings}
-                        renderItem={renderItem}
-                        keyExtractor={item => item.id}
-                        numColumns={COLUMN_COUNT}
-                        contentContainerStyle={{ paddingTop: headerHeight + 10, paddingBottom: 100 }}
-                        columnWrapperStyle={{ gap: SPACING }} // Si supporté, sinon gérer avec marginRight
-                        refreshing={refreshing}
-                        onRefresh={handleRefresh}
-                        ListEmptyComponent={
-                            <View style={styles.emptyState}>
-                                <Text style={styles.emptyText}>No drawings found.</Text>
-                            </View>
-                        }
-                    />
-                )}
-            </View>
-
-            {/* MODALE DETAIL */}
+            {/* MODALE DÉTAIL VIA COMPOSANT */}
             {selectedDrawing && (
                 <DrawingDetailModal
-                    visible={isDetailModalVisible}
-                    onClose={() => setIsDetailModalVisible(false)}
+                    visible={!!selectedDrawing}
+                    onClose={closeViewer}
                     drawing={selectedDrawing}
                 />
             )}
@@ -286,21 +216,38 @@ export default function GalleryPage() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#FFF' },
+    container: { flex: 1, backgroundColor: '#FFFFFF' },
+    loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    
+    // Header Absolute Styles
     absoluteHeader: {
-        position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 10,
+        // Le backgroundColor est géré par BlurView (tint)
     },
-    toolsContainer: {
-        flexDirection: 'row', paddingHorizontal: 15, paddingBottom: 10, paddingTop: 5, marginTop: 50, gap: 10
+    toolsContainer: { 
+        flexDirection: 'row', 
+        paddingHorizontal: 15, 
+        paddingBottom: 10, 
+        paddingTop: 5, 
+        alignItems: 'center', 
+        gap: 10,
+        marginTop: 50, // On pousse les outils vers le bas pour ne pas chevaucher le titre "nyola"
     },
-    searchBar: {
-        flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.05)', borderRadius: 20, paddingHorizontal: 12, height: 40, gap: 8
+    headerSeparator: {
+        height: 1,
+        backgroundColor: 'rgba(0,0,0,0.05)',
+        width: '100%',
     },
+
+    searchBar: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.05)', borderRadius: 20, paddingHorizontal: 12, height: 40, gap: 8 },
     searchInput: { flex: 1, fontSize: 14, color: '#000', height: '100%' },
-    filterBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.05)', justifyContent: 'center', alignItems: 'center' },
-    filterBtnActive: { backgroundColor: '#FF3B30' },
-    headerSeparator: { height: 1, backgroundColor: 'rgba(0,0,0,0.05)', width: '100%' },
-    content: { flex: 1 },
-    emptyState: { alignItems: 'center', marginTop: 100 },
-    emptyText: { color: '#000', fontSize: 16 }
+    actionsRow: { flexDirection: 'row', gap: 8 },
+    actionBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.5)', borderWidth: 1, borderColor: 'rgba(0,0,0,0.1)', justifyContent: 'center', alignItems: 'center' },
+    activeBtn: { backgroundColor: '#000', borderColor: '#000' },
+    emptyState: { marginTop: 100, alignItems: 'center' },
+    emptyText: { color: '#999' },
 });
