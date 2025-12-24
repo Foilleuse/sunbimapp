@@ -1,31 +1,29 @@
-import { View, Text, StyleSheet, FlatList, Dimensions, TouchableOpacity, ActivityIndicator, RefreshControl, TextInput, Keyboard, Pressable, Image, Platform, Modal, Alert, PixelRatio, SafeAreaView } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Dimensions, TouchableOpacity, ActivityIndicator, RefreshControl, TextInput, Keyboard, Pressable, Image, Platform, Modal, Alert, PixelRatio } from 'react-native';
 import { useEffect, useState, useCallback, memo, useMemo } from 'react';
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
 import { useFocusEffect } from 'expo-router';
-import { Search, Heart, Cloud, CloudOff, XCircle, User, MessageCircle, X, MoreHorizontal, Lightbulb, Palette, Zap } from 'lucide-react-native';
+import { Search, Heart, Cloud, CloudOff, XCircle, User } from 'lucide-react-native';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer';
 // Import de la nouvelle modale
 import { DrawingDetailModal } from '../../src/components/DrawingDetailModal';
+// Import du composant de flou
+import { BlurView } from 'expo-blur';
+// Import pour gérer la zone de sécurité (encoche, status bar)
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // --- COMPOSANT VIGNETTE ---
 const GalleryItem = memo(({ item, itemSize, showClouds, onPress }: any) => {
     
     // 🔥 VIGNETTE : On force le ratio 3:4
-    // Calcul de la hauteur cible pour le viewer (ratio 3:4 = largeur * 1.333)
     const targetHeight = itemSize * (4/3);
 
     const optimizedUri = useMemo(() => {
         if (!item.cloud_image_url) return null;
-        
-        // 1. Dimensions réelles
         const physicalWidth = Math.round(itemSize * PixelRatio.get());
-        // 2. Calcul de la hauteur 3:4
-        const physicalHeight = Math.round(targetHeight * PixelRatio.get()); // Utiliser la hauteur calculée
-
-        // 3. On passe width ET height ➔ L'optimiseur active le "Crop"
+        const physicalHeight = Math.round(targetHeight * PixelRatio.get()); 
         return getOptimizedImageUrl(item.cloud_image_url, physicalWidth, physicalHeight);
     }, [item.cloud_image_url, itemSize, targetHeight]);
 
@@ -38,11 +36,11 @@ const GalleryItem = memo(({ item, itemSize, showClouds, onPress }: any) => {
                 imageUri={optimizedUri || item.cloud_image_url} 
                 canvasData={item.canvas_data} 
                 viewerSize={itemSize}
-                viewerHeight={targetHeight} // Ajout explicite de la hauteur
+                viewerHeight={targetHeight} 
                 transparentMode={!showClouds} 
                 startVisible={true} 
                 animated={false} 
-                autoCenter={false} // Pas d'auto-center pour respecter le cadrage original
+                autoCenter={false} 
             />
         </TouchableOpacity>
     );
@@ -60,6 +58,12 @@ export default function GalleryPage() {
     const [searchText, setSearchText] = useState('');
     
     const [selectedDrawing, setSelectedDrawing] = useState<any | null>(null);
+    
+    // Hauteur dynamique du header pour le padding de la liste
+    const [headerHeight, setHeaderHeight] = useState(130); 
+    
+    // Récupération des insets pour la Safe Area
+    const insets = useSafeAreaInsets();
 
     const { width: screenWidth } = Dimensions.get('window');
     const SPACING = 1; 
@@ -82,11 +86,9 @@ export default function GalleryPage() {
                 return;
             }
 
-            // 🔥 PREFETCH : On demande aussi le 3:4 pour matcher le cache de la vignette
             if (cloudData.image_url) {
                 const targetWidth = Math.round(ITEM_SIZE * PixelRatio.get());
                 const targetHeight = Math.round((targetWidth / 3) * 4);
-                
                 const prefetchUrl = getOptimizedImageUrl(cloudData.image_url, targetWidth, targetHeight);
                 if (prefetchUrl) {
                     Image.prefetch(prefetchUrl).catch(e => console.log("Prefetch error:", e));
@@ -156,48 +158,59 @@ export default function GalleryPage() {
 
     return (
         <View style={styles.container}>
-            <SunbimHeader showCloseButton={false} onClose={closeViewer} /> 
-            <View style={{flex: 1, position: 'relative'}}>
-                <View style={{flex: 1}}>
-                    <View style={styles.toolsContainer}>
-                        <View style={styles.searchBar}>
-                            <Search color="#999" size={18} />
-                            <TextInput placeholder="Search..." placeholderTextColor="#999" style={styles.searchInput} value={searchText} onChangeText={setSearchText} onSubmitEditing={handleSearchSubmit} returnKeyType="search" />
-                            {searchText.length > 0 && <TouchableOpacity onPress={clearSearch}><XCircle color="#CCC" size={18} /></TouchableOpacity>}
-                        </View>
-                        <View style={styles.actionsRow}>
-                            <TouchableOpacity style={[styles.actionBtn, onlyLiked && styles.activeBtn]} onPress={() => setOnlyLiked(!onlyLiked)}><Heart color={onlyLiked ? "#FFF" : "#000"} size={20} fill={onlyLiked ? "#FFF" : "transparent"}/></TouchableOpacity>
-                            <TouchableOpacity style={[styles.actionBtn, !showClouds && styles.activeBtn]} onPress={() => setShowClouds(!showClouds)}>{showClouds ? (<Cloud color="#000" size={20} />) : (<CloudOff color="#FFF" size={20} />)}</TouchableOpacity>
-                        </View>
-                    </View>
-                    {loading && !refreshing ? (<View style={styles.loadingContainer}><ActivityIndicator size="large" color="#000" /></View>) : (
-                        <FlatList
-                            data={drawings} 
-                            renderItem={renderItem} 
-                            keyExtractor={(item) => item.id}
-                            numColumns={2} 
-                            columnWrapperStyle={{ gap: SPACING }} 
-                            contentContainerStyle={{ paddingBottom: 100 }}
-                            showsVerticalScrollIndicator={false}
-                            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#000"/>}
-                            initialNumToRender={6}
-                            windowSize={5}
-                            removeClippedSubviews={Platform.OS === 'android'}
-                            ListEmptyComponent={<View style={styles.emptyState}><Text style={styles.emptyText}>No drawings.</Text></View>}
-                        />
-                    )}
-                </View>
-
-                {/* MODALE DÉTAIL VIA COMPOSANT */}
-                {selectedDrawing && (
-                    <DrawingDetailModal
-                        visible={!!selectedDrawing}
-                        onClose={closeViewer}
-                        drawing={selectedDrawing}
-                        // L'auteur est déjà dans selectedDrawing.users via la jointure dans fetchGallery
+            {/* LISTE EN PLEIN ÉCRAN (Z-INDEX BAS) */}
+            <View style={{flex: 1}}>
+                {loading && !refreshing ? (<View style={styles.loadingContainer}><ActivityIndicator size="large" color="#000" /></View>) : (
+                    <FlatList
+                        data={drawings} 
+                        renderItem={renderItem} 
+                        keyExtractor={(item) => item.id}
+                        numColumns={2} 
+                        columnWrapperStyle={{ gap: SPACING }} 
+                        // PaddingTop dynamique pour compenser le header absolu
+                        contentContainerStyle={{ paddingBottom: 100, paddingTop: headerHeight }}
+                        showsVerticalScrollIndicator={false}
+                        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#000" progressViewOffset={headerHeight}/>}
+                        initialNumToRender={6}
+                        windowSize={5}
+                        removeClippedSubviews={Platform.OS === 'android'}
+                        ListEmptyComponent={<View style={styles.emptyState}><Text style={styles.emptyText}>No drawings.</Text></View>}
                     />
                 )}
             </View>
+
+            {/* HEADER TRANSPARENT & FLOUTÉ (Z-INDEX HAUT) */}
+            {/* On applique le padding top ici pour respecter la Safe Area */}
+            <BlurView 
+                intensity={80} 
+                tint="light" 
+                style={[styles.absoluteHeader, { paddingTop: insets.top }]}
+                onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
+            >
+                <SunbimHeader showCloseButton={false} onClose={closeViewer} transparent={true} /> 
+                <View style={styles.toolsContainer}>
+                    <View style={styles.searchBar}>
+                        <Search color="#999" size={18} />
+                        <TextInput placeholder="Search..." placeholderTextColor="#999" style={styles.searchInput} value={searchText} onChangeText={setSearchText} onSubmitEditing={handleSearchSubmit} returnKeyType="search" />
+                        {searchText.length > 0 && <TouchableOpacity onPress={clearSearch}><XCircle color="#CCC" size={18} /></TouchableOpacity>}
+                    </View>
+                    <View style={styles.actionsRow}>
+                        <TouchableOpacity style={[styles.actionBtn, onlyLiked && styles.activeBtn]} onPress={() => setOnlyLiked(!onlyLiked)}><Heart color={onlyLiked ? "#FFF" : "#000"} size={20} fill={onlyLiked ? "#FFF" : "transparent"}/></TouchableOpacity>
+                        <TouchableOpacity style={[styles.actionBtn, !showClouds && styles.activeBtn]} onPress={() => setShowClouds(!showClouds)}>{showClouds ? (<Cloud color="#000" size={20} />) : (<CloudOff color="#FFF" size={20} />)}</TouchableOpacity>
+                    </View>
+                </View>
+                {/* Bordure subtile pour séparer le header du contenu défilant dessous */}
+                <View style={styles.headerSeparator} />
+            </BlurView>
+
+            {/* MODALE DÉTAIL VIA COMPOSANT */}
+            {selectedDrawing && (
+                <DrawingDetailModal
+                    visible={!!selectedDrawing}
+                    onClose={closeViewer}
+                    drawing={selectedDrawing}
+                />
+            )}
         </View>
     );
 }
@@ -205,11 +218,34 @@ export default function GalleryPage() {
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#FFFFFF' },
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    toolsContainer: { flexDirection: 'row', paddingHorizontal: 15, paddingBottom: 15, paddingTop: 10, alignItems: 'center', gap: 10, borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
-    searchBar: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#F5F5F5', borderRadius: 20, paddingHorizontal: 12, height: 40, gap: 8 },
+    
+    // Header Absolute Styles
+    absoluteHeader: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 10,
+        // Le backgroundColor est géré par BlurView (tint)
+    },
+    toolsContainer: { 
+        flexDirection: 'row', 
+        paddingHorizontal: 15, 
+        paddingBottom: 10, 
+        paddingTop: 5, 
+        alignItems: 'center', 
+        gap: 10,
+    },
+    headerSeparator: {
+        height: 1,
+        backgroundColor: 'rgba(0,0,0,0.05)',
+        width: '100%',
+    },
+
+    searchBar: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.05)', borderRadius: 20, paddingHorizontal: 12, height: 40, gap: 8 },
     searchInput: { flex: 1, fontSize: 14, color: '#000', height: '100%' },
     actionsRow: { flexDirection: 'row', gap: 8 },
-    actionBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#FFF', borderWidth: 1, borderColor: '#EEE', justifyContent: 'center', alignItems: 'center' },
+    actionBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.5)', borderWidth: 1, borderColor: 'rgba(0,0,0,0.1)', justifyContent: 'center', alignItems: 'center' },
     activeBtn: { backgroundColor: '#000', borderColor: '#000' },
     emptyState: { marginTop: 100, alignItems: 'center' },
     emptyText: { color: '#999' },
