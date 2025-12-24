@@ -3,10 +3,9 @@ import { useEffect, useState, useCallback, useMemo, memo } from 'react';
 import { supabase } from '../../src/lib/supabaseClient';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
-import { User, UserCheck } from 'lucide-react-native';
+import { User, UserCheck, UserMinus } from 'lucide-react-native';
 import { useFocusEffect } from 'expo-router';
 import { UserProfileModal } from '../../src/components/UserProfileModal'; 
-import { DrawingViewer } from '../../src/components/DrawingViewer'; 
 import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer';
 // Imports pour le background et le style
 import { Canvas, Rect, LinearGradient as SkiaGradient, vec, useImage, Image as SkiaImage, Group, Blur, Mask, Paint } from "@shopify/react-native-skia";
@@ -14,11 +13,9 @@ import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Constantes de dimensions
-const ROW_HEIGHT = 90; // Réduit légèrement car plus de padding carte
-const DRAWING_HEIGHT = 70; 
-const DRAWING_WIDTH = DRAWING_HEIGHT * (3/4); 
+const ROW_HEIGHT = 80; // Hauteur réduite pour une liste plus compacte sans dessins
 
-// --- COMPOSANT BACKGROUND : MIROIR + FLOU ---
+// --- COMPOSANT BACKGROUND : MIROIR + FLOU ACCENTUÉ ---
 const MirroredBackground = ({ uri, width, height }: { uri: string, width: number, height: number }) => {
     const image = useImage(uri);
     
@@ -26,7 +23,8 @@ const MirroredBackground = ({ uri, width, height }: { uri: string, width: number
 
     // Le background prend tout l'écran
     const top = 0;
-    const BLUR_RADIUS = 30; // Flou un peu plus prononcé pour la lisibilité
+    // Flou augmenté pour effet "wallpaper" abstrait
+    const BLUR_RADIUS = 60; 
 
     const EXTRA_WIDTH = 100;
     const bgWidth = width + EXTRA_WIDTH;
@@ -69,19 +67,15 @@ const FriendRow = memo(({ item, onOpenProfile, onUnfollow }: { item: any, onOpen
     
     const avatarUrl = item.avatar_url;
 
-    const optimizedDrawingUrl = useMemo(() => {
-        if (!item.todaysDrawing?.cloudImageUrl) return null;
-        const w = Math.round(DRAWING_WIDTH * PixelRatio.get());
-        const h = Math.round(DRAWING_HEIGHT * PixelRatio.get());
-        return getOptimizedImageUrl(item.todaysDrawing.cloudImageUrl, w, h);
-    }, [item.todaysDrawing?.cloudImageUrl]);
-
     return (
         <TouchableOpacity 
             style={styles.friendItem} 
             onPress={() => onOpenProfile(item)}
             activeOpacity={0.7}
         >
+            {/* Fond semi-transparent subtil */}
+            <View style={styles.rowBackground} />
+
             <View style={styles.friendInfoContainer}>
                 <View style={styles.avatarContainer}>
                     {avatarUrl ? (
@@ -104,27 +98,14 @@ const FriendRow = memo(({ item, onOpenProfile, onUnfollow }: { item: any, onOpen
             </View>
             
             <View style={styles.rightContainer}>
-                {item.todaysDrawing ? (
-                    <View style={[styles.miniDrawingContainer, { width: DRAWING_WIDTH, height: DRAWING_HEIGHT }]}>
-                        <DrawingViewer 
-                            imageUri={optimizedDrawingUrl || item.todaysDrawing.cloudImageUrl}
-                            canvasData={item.todaysDrawing.canvasData}
-                            viewerSize={DRAWING_WIDTH}
-                            viewerHeight={DRAWING_HEIGHT}
-                            transparentMode={true} 
-                            animated={false}
-                            startVisible={true}
-                        />
-                    </View>
-                ) : (
-                    <TouchableOpacity 
-                        style={styles.unfollowBtn} 
-                        onPress={() => onUnfollow(item.followId, item.id)}
-                        hitSlop={10}
-                    >
-                        <UserCheck size={20} color="#000" />
-                    </TouchableOpacity>
-                )}
+                {/* Plus de dessin ici, juste le bouton de gestion */}
+                <TouchableOpacity 
+                    style={styles.unfollowBtn} 
+                    onPress={() => onUnfollow(item.followId, item.id)}
+                    hitSlop={15}
+                >
+                    <UserCheck size={20} color="#000" />
+                </TouchableOpacity>
             </View>
         </TouchableOpacity>
     );
@@ -159,9 +140,7 @@ export default function FriendsPage() {
 
       // 1. Récupérer le nuage du jour
       const { data: cloudData } = await supabase.from('clouds').select('id, image_url').eq('published_for', today).maybeSingle();
-      const todayCloudId = cloudData?.id;
-      const todayCloudUrl = cloudData?.image_url;
-
+      
       if (cloudData?.image_url) {
           setBackgroundCloud(cloudData.image_url);
       }
@@ -189,32 +168,14 @@ export default function FriendsPage() {
 
       if (usersError) throw usersError;
 
-      // 4. Récupérer les dessins du jour pour ces utilisateurs
-      let todaysDrawings: any[] = [];
-      if (todayCloudId && followingIds.length > 0) {
-          const { data: drawingsData } = await supabase
-            .from('drawings')
-            .select('user_id, canvas_data, cloud_image_url')
-            .eq('cloud_id', todayCloudId)
-            .in('user_id', followingIds);
-          
-          todaysDrawings = drawingsData || [];
-      }
-
-      // 5. Fusionner tout
+      // 4. Fusionner tout (plus besoin des dessins du jour ici)
       const formattedData = followsData.map(follow => {
           const userProfile = usersData?.find(u => u.id === follow.following_id);
           if (!userProfile) return null;
           
-          const userDrawing = todaysDrawings.find(d => d.user_id === follow.following_id);
-
           return {
               followId: follow.id, 
               ...userProfile,
-              todaysDrawing: userDrawing ? {
-                  canvasData: userDrawing.canvas_data,
-                  cloudImageUrl: userDrawing.cloud_image_url || todayCloudUrl
-              } : null
           };
       }).filter(item => item !== null);
 
@@ -328,18 +289,23 @@ const styles = StyleSheet.create({
       justifyContent: 'center'
   },
 
-  content: { flex: 1, paddingHorizontal: 0 }, // Retrait du padding horizontal pour toucher les bords
+  content: { flex: 1, paddingHorizontal: 0 }, 
   
   friendItem: { 
       flexDirection: 'row', 
       alignItems: 'center', 
       justifyContent: 'space-between', 
-      paddingVertical: 12, 
+      paddingVertical: 15, 
       height: ROW_HEIGHT,
-      paddingHorizontal: 20, // Padding interne à l'item
-      // Pas de bordure, pas de background, juste une liste épurée
-      borderBottomWidth: 1,
-      borderBottomColor: 'rgba(0,0,0,0.05)', // Séparateur très subtil
+      paddingHorizontal: 20, 
+      marginBottom: 2,
+      // Pas de bordure inférieure pour un look épuré
+  },
+  
+  // Fond subtil pour détacher le texte du background
+  rowBackground: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: 'rgba(255,255,255,0.4)', 
   },
 
   friendInfoContainer: { 
@@ -359,16 +325,10 @@ const styles = StyleSheet.create({
   rightContainer: {
       justifyContent: 'center',
       alignItems: 'center',
-      minWidth: 60
-  },
-  miniDrawingContainer: {
-      borderRadius: 6,
-      overflow: 'hidden',
-      borderWidth: 1,
-      borderColor: 'rgba(0,0,0,0.1)'
+      paddingLeft: 10,
   },
   unfollowBtn: { 
-      padding: 8,
+      padding: 10,
       backgroundColor: 'rgba(255,255,255,0.5)',
       borderRadius: 20
   },
