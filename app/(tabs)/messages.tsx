@@ -3,25 +3,74 @@ import { useEffect, useState, useCallback, useMemo, memo } from 'react';
 import { supabase } from '../../src/lib/supabaseClient';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { SunbimHeader } from '../../src/components/SunbimHeader';
-import { User, UserMinus, UserCheck } from 'lucide-react-native';
+import { User, UserCheck } from 'lucide-react-native';
 import { useFocusEffect } from 'expo-router';
 import { UserProfileModal } from '../../src/components/UserProfileModal'; 
 import { DrawingViewer } from '../../src/components/DrawingViewer'; 
 import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer';
+// Imports pour le background et le style
+import { Canvas, Rect, LinearGradient as SkiaGradient, vec, useImage, Image as SkiaImage, Group, Blur, Mask, Paint } from "@shopify/react-native-skia";
+import { BlurView } from 'expo-blur';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Constantes de dimensions
 const ROW_HEIGHT = 105;
-const DRAWING_HEIGHT = ROW_HEIGHT - 20; // 85
-const DRAWING_WIDTH = DRAWING_HEIGHT * (3/4); // ~64
+const DRAWING_HEIGHT = ROW_HEIGHT - 20; 
+const DRAWING_WIDTH = DRAWING_HEIGHT * (3/4); 
+
+// --- COMPOSANT BACKGROUND : MIROIR + FLOU (Copie de Feed) ---
+const MirroredBackground = ({ uri, width, height }: { uri: string, width: number, height: number }) => {
+    const image = useImage(uri);
+    
+    if (!image) return null;
+
+    // Le background prend tout l'écran, on utilise height pour tout couvrir
+    const top = 0;
+    const bottom = height;
+    const BLUR_RADIUS = 25; 
+
+    const EXTRA_WIDTH = 100;
+    const bgWidth = width + EXTRA_WIDTH;
+    const bgX = -EXTRA_WIDTH / 2;
+
+    return (
+        <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
+            <Group layer={<Paint><Blur blur={BLUR_RADIUS} /></Paint>}>
+                <SkiaImage image={image} x={bgX} y={top} width={bgWidth} height={height} fit="cover" />
+                {/* On duplique l'image pour remplir tout l'écran si nécessaire ou créer l'effet miroir */}
+                <Group origin={vec(width / 2, height/2)} transform={[{ scaleY: -1 }]}>
+                    <SkiaImage image={image} x={bgX} y={top} width={bgWidth} height={height} fit="cover" />
+                </Group>
+            </Group>
+
+            <Mask
+                mode="luminance"
+                mask={
+                    <Rect x={0} y={0} width={width} height={height}>
+                        <SkiaGradient
+                            start={vec(0, 0)}
+                            end={vec(0, height)}
+                            colors={["white", "white", "white"]} // Masque plein pour tout montrer
+                            positions={[0, 0.5, 1]}
+                        />
+                    </Rect>
+                }
+            >
+                <SkiaImage
+                    image={image}
+                    x={0} y={0} width={width} height={height}
+                    fit="cover"
+                />
+            </Mask>
+        </Canvas>
+    );
+};
 
 // --- SOUS-COMPOSANT OPTIMISÉ POUR CHAQUE LIGNE ---
 const FriendRow = memo(({ item, onOpenProfile, onUnfollow }: { item: any, onOpenProfile: (i: any) => void, onUnfollow: (fid: string, uid: string) => void }) => {
     
-    // 1. Optimisation Avatar (Désactivée)
-    // On utilise directement l'URL de l'avatar sans transformation
     const avatarUrl = item.avatar_url;
 
-    // 2. Optimisation Miniature Dessin (Ratio 3:4 physique)
     const optimizedDrawingUrl = useMemo(() => {
         if (!item.todaysDrawing?.cloudImageUrl) return null;
         const w = Math.round(DRAWING_WIDTH * PixelRatio.get());
@@ -35,6 +84,9 @@ const FriendRow = memo(({ item, onOpenProfile, onUnfollow }: { item: any, onOpen
             onPress={() => onOpenProfile(item)}
             activeOpacity={0.7}
         >
+            {/* Fond semi-transparent pour lisibilité */}
+            <View style={styles.rowBackground} />
+
             <View style={styles.friendInfoContainer}>
                 <View style={styles.avatarContainer}>
                     {avatarUrl ? (
@@ -60,7 +112,6 @@ const FriendRow = memo(({ item, onOpenProfile, onUnfollow }: { item: any, onOpen
                 {item.todaysDrawing ? (
                     <View style={[styles.miniDrawingContainer, { width: DRAWING_WIDTH, height: DRAWING_HEIGHT }]}>
                         <DrawingViewer 
-                            // On passe l'URL optimisée ici
                             imageUri={optimizedDrawingUrl || item.todaysDrawing.cloudImageUrl}
                             canvasData={item.todaysDrawing.canvasData}
                             viewerSize={DRAWING_WIDTH}
@@ -88,9 +139,16 @@ export default function FriendsPage() {
   const { user } = useAuth();
   const [following, setFollowing] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [backgroundCloud, setBackgroundCloud] = useState<string | null>(null);
   
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
+
+  // Gestion du style
+  const insets = useSafeAreaInsets();
+  const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+  // Hauteur fixe du header pour le padding (similaire à Gallery)
+  const headerHeight = 100 + insets.top; 
 
   useFocusEffect(
     useCallback(() => {
@@ -107,6 +165,10 @@ export default function FriendsPage() {
       const { data: cloudData } = await supabase.from('clouds').select('id, image_url').eq('published_for', today).maybeSingle();
       const todayCloudId = cloudData?.id;
       const todayCloudUrl = cloudData?.image_url;
+
+      if (cloudData?.image_url) {
+          setBackgroundCloud(cloudData.image_url);
+      }
 
       // 2. Récupérer les abonnements
       const { data: followsData, error: followsError } = await supabase
@@ -190,7 +252,13 @@ export default function FriendsPage() {
       setIsProfileModalVisible(true);
   };
 
-  // Le renderItem appelle maintenant le composant mémorisé FriendRow
+  const optimizedBackground = useMemo(() => {
+    if (!backgroundCloud) return null;
+    const w = Math.round(screenWidth * PixelRatio.get());
+    const h = Math.round(screenHeight * PixelRatio.get());
+    return getOptimizedImageUrl(backgroundCloud, w, h);
+  }, [backgroundCloud, screenWidth, screenHeight]);
+
   const renderFriend = ({ item }: { item: any }) => (
       <FriendRow 
           item={item} 
@@ -201,20 +269,38 @@ export default function FriendsPage() {
 
   return (
     <View style={styles.container}>
-      <SunbimHeader showCloseButton={false} />
+      {/* 1. BACKGROUND (Plein écran) */}
+      {backgroundCloud && (
+          <MirroredBackground 
+              uri={optimizedBackground || backgroundCloud}
+              width={screenWidth}
+              height={screenHeight} 
+          />
+      )}
+
+      {/* 2. Header Flouté Absolu */}
+      <BlurView 
+          intensity={50} 
+          tint="light" 
+          style={[styles.absoluteHeader, { paddingTop: insets.top, height: 80 + insets.top }]}
+      >
+          <SunbimHeader showCloseButton={false} transparent={true} />
+      </BlurView>
       
+      {/* 3. Contenu Liste */}
       <View style={styles.content}>
         {loading ? (
-            <ActivityIndicator style={{marginTop: 20}} color="#000" />
+            <ActivityIndicator style={{marginTop: 150}} color="#000" />
         ) : (
             <FlatList
                 data={following}
                 renderItem={renderFriend}
                 keyExtractor={item => item.id} 
-                contentContainerStyle={{ paddingBottom: 20 }}
+                // Padding pour passer sous le header et au-dessus de la navbar
+                contentContainerStyle={{ paddingTop: headerHeight, paddingBottom: 100 }}
                 ListEmptyComponent={
                     <View style={styles.emptyState}>
-                        <User size={48} color="#CCC" />
+                        <User size={48} color="#000" />
                         <Text style={styles.emptyText}>You are not following anyone yet.</Text>
                     </View>
                 }
@@ -235,18 +321,37 @@ export default function FriendsPage() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFF' },
-  content: { flex: 1, paddingHorizontal: 20, paddingTop: 10 },
+  container: { flex: 1, backgroundColor: '#FFF' }, // Background blanc par défaut, couvert par l'image
+  
+  absoluteHeader: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      zIndex: 10,
+      justifyContent: 'center'
+  },
+
+  content: { flex: 1, paddingHorizontal: 20 },
   
   friendItem: { 
       flexDirection: 'row', 
       alignItems: 'center', 
       justifyContent: 'space-between', 
       paddingVertical: 10, 
-      borderBottomWidth: 1, 
-      borderBottomColor: '#F5F5F5',
-      height: ROW_HEIGHT 
+      height: ROW_HEIGHT,
+      marginBottom: 10,
+      borderRadius: 15,
+      paddingHorizontal: 10,
+      overflow: 'hidden',
+      position: 'relative',
   },
+  // Fond semi-transparent pour la lisibilité sur le nuage
+  rowBackground: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: 'rgba(255,255,255,0.6)', 
+  },
+
   friendInfoContainer: { 
       flexDirection: 'row', 
       alignItems: 'center', 
@@ -255,11 +360,11 @@ const styles = StyleSheet.create({
   },
   avatarContainer: { marginRight: 15 },
   avatar: { width: 50, height: 50, borderRadius: 25 },
-  placeholderAvatar: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#F0F0F0', justifyContent: 'center', alignItems: 'center' },
+  placeholderAvatar: { width: 50, height: 50, borderRadius: 25, backgroundColor: 'rgba(0,0,0,0.1)', justifyContent: 'center', alignItems: 'center' },
   
   textContainer: { flex: 1, justifyContent: 'center' },
-  friendName: { fontSize: 16, fontWeight: '700', color: '#000', marginBottom: 2 },
-  friendBio: { fontSize: 13, color: '#888' },
+  friendName: { fontSize: 16, fontWeight: '800', color: '#000', marginBottom: 2 },
+  friendBio: { fontSize: 13, color: '#333', fontWeight: '500' },
   
   rightContainer: {
       justifyContent: 'center',
@@ -267,15 +372,17 @@ const styles = StyleSheet.create({
       minWidth: 60
   },
   miniDrawingContainer: {
-      borderRadius: 4,
+      borderRadius: 8,
       overflow: 'hidden',
+      borderWidth: 1,
+      borderColor: 'rgba(0,0,0,0.1)'
   },
   unfollowBtn: { 
       padding: 10,
-      backgroundColor: '#F5F5F5',
+      backgroundColor: 'rgba(255,255,255,0.8)',
       borderRadius: 20
   },
   
-  emptyState: { alignItems: 'center', marginTop: 50, gap: 10 },
-  emptyText: { color: '#999', fontSize: 16 }
+  emptyState: { alignItems: 'center', marginTop: 100, gap: 10 },
+  emptyText: { color: '#000', fontSize: 16, fontWeight: '600' }
 });

@@ -106,15 +106,33 @@ export default function TabLayout() {
         }}
       />
 
-      {/* 4. AMIS */}
+      {/* 4. AMIS - Barre Transparente + Flou (Nouveau) */}
       <Tabs.Screen
         name="messages"
         options={{
           tabBarIcon: ({ color }) => <Users color={color} size={28} />,
+          tabBarStyle: {
+            position: 'absolute',
+            backgroundColor: 'transparent',
+            borderTopWidth: 0,
+            elevation: 0,
+            height: Platform.OS === 'ios' ? 85 : 60,
+            paddingTop: 10,
+            bottom: 0,
+            left: 0,
+            right: 0,
+          },
+          tabBarBackground: () => (
+            <BlurView 
+              intensity={80} 
+              tint="light" 
+              style={StyleSheet.absoluteFill} 
+            />
+          ),
         }}
       />
 
-      {/* 5. PROFIL - Barre Transparente + Flou (Comme Galerie) */}
+      {/* 5. PROFIL - Barre Transparente + Flou */}
       <Tabs.Screen
         name="profile"
         options={{
