@@ -104,18 +104,21 @@ export default function GalleryPage() {
                 if (blocks) blockedUserIds = blocks.map(b => b.blocked_id);
             }
 
+            // --- FILTRE "ONLY LIKED" via la table REACTIONS ---
             let likedIds: string[] = [];
             if (onlyLiked && user) {
-                const { data: userLikes } = await supabase
-                    .from('likes')
+                const { data: userReactions } = await supabase
+                    .from('reactions')
                     .select('drawing_id')
-                    .eq('user_id', user.id);
-                if (!userLikes || userLikes.length === 0) {
+                    .eq('user_id', user.id)
+                    .eq('reaction_type', 'like'); // On filtre spécifiquement les likes
+
+                if (!userReactions || userReactions.length === 0) {
                     setDrawings([]);
                     setLoading(false);
                     return;
                 }
-                likedIds = userLikes.map(l => l.drawing_id);
+                likedIds = userReactions.map(l => l.drawing_id);
             }
 
             let query = supabase
@@ -126,7 +129,10 @@ export default function GalleryPage() {
                 .order('created_at', { ascending: false });
 
             if (blockedUserIds.length > 0) query = query.not('user_id', 'in', `(${blockedUserIds.join(',')})`);
+            
+            // Application du filtre sur les IDs likés
             if (onlyLiked && likedIds.length > 0) query = query.in('id', likedIds);
+            
             if (searchQuery.trim().length > 0) query = query.ilike('label', `%${searchQuery.trim()}%`);
             
             const { data, error } = await query;
@@ -174,7 +180,7 @@ export default function GalleryPage() {
                         initialNumToRender={6}
                         windowSize={5}
                         removeClippedSubviews={Platform.OS === 'android'}
-                        ListEmptyComponent={<View style={styles.emptyState}><Text style={styles.emptyText}>No drawings.</Text></View>}
+                        ListEmptyComponent={<View style={styles.emptyState}><Text style={styles.emptyText}>No drawings found.</Text></View>}
                     />
                 )}
             </View>
