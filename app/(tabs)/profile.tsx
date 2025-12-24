@@ -31,7 +31,8 @@ export default function ProfilePage() {
 
   // Gestion du header flouté
   const insets = useSafeAreaInsets();
-  const [headerHeight, setHeaderHeight] = useState(100);
+  // On initialise avec une valeur suffisante pour éviter le saut au chargement
+  const [totalHeaderHeight, setTotalHeaderHeight] = useState(180);
 
   const { width: screenWidth } = Dimensions.get('window');
   const SPACING = 1; 
@@ -159,42 +160,6 @@ export default function ProfilePage() {
       );
   };
 
-  // --- Composant d'entête de liste (Infos Profil) ---
-  const ListHeader = useMemo(() => {
-      return (
-        <View style={styles.profileBlock}>
-            <View style={styles.profileInfoContainer}>
-                {profile?.avatar_url ? (
-                    <Image 
-                        source={{ uri: profile.avatar_url }} 
-                        style={styles.profileAvatar} 
-                    />
-                ) : (
-                    <View style={[styles.profileAvatar, styles.placeholderAvatar]}>
-                        <User color="#666" size={35} />
-                    </View>
-                )}
-                
-                <View style={styles.profileTextContainer}>
-                    <Text style={styles.displayName}>{profile?.display_name || "Anonymous"}</Text>
-                    <Text style={styles.bio} numberOfLines={3}>
-                        {profile?.bio || "No bio yet."}
-                    </Text>
-                </View>
-
-                <View style={{ marginLeft: 10 }}>
-                    <TouchableOpacity 
-                        style={styles.iconOnlyBtn} 
-                        onPress={() => setShowSettings(true)}
-                    >
-                        <Settings color="#000" size={20} />
-                    </TouchableOpacity>
-                </View>
-            </View>
-        </View>
-      );
-  }, [profile]);
-
   if (!user) {
       return (
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
@@ -230,19 +195,17 @@ export default function ProfilePage() {
       {/* 1. Liste Principale (défile sous le header) */}
       <View style={{flex: 1}}>
           {loadingHistory ? (
-              <ActivityIndicator style={{marginTop: headerHeight + 20}} />
+              <ActivityIndicator style={{marginTop: totalHeaderHeight + 20}} />
           ) : (
               <FlatList
                 data={historyItems}
                 numColumns={NUM_COLS}
-                // Header du profil intégré au scroll
-                ListHeaderComponent={ListHeader}
                 keyExtractor={item => item.id}
                 renderItem={renderItem}
                 columnWrapperStyle={{ gap: SPACING }}
-                // Padding dynamique pour le header et la bottom bar
+                // Padding dynamique pour que le premier élément soit visible sous le header flouté
                 contentContainerStyle={{ 
-                    paddingTop: headerHeight, 
+                    paddingTop: totalHeaderHeight + 10, 
                     paddingBottom: 100 
                 }}
                 ListEmptyComponent={
@@ -255,14 +218,47 @@ export default function ProfilePage() {
           )}
       </View>
 
-      {/* 2. Header Flouté Absolu */}
+      {/* 2. Header & Profile Info Floutés (Statique et Absolu) */}
       <BlurView 
           intensity={80} 
           tint="light" 
           style={[styles.absoluteHeader, { paddingTop: insets.top }]}
-          onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
+          onLayout={(e) => setTotalHeaderHeight(e.nativeEvent.layout.height)}
       >
           <SunbimHeader showCloseButton={false} transparent={true} />
+          
+          {/* Bloc Info Profil intégré dans le BlurView */}
+          <View style={styles.profileBlock}>
+            <View style={styles.profileInfoContainer}>
+                {profile?.avatar_url ? (
+                    <Image 
+                        source={{ uri: profile.avatar_url }} 
+                        style={styles.profileAvatar} 
+                    />
+                ) : (
+                    <View style={[styles.profileAvatar, styles.placeholderAvatar]}>
+                        <User color="#666" size={35} />
+                    </View>
+                )}
+                
+                <View style={styles.profileTextContainer}>
+                    <Text style={styles.displayName}>{profile?.display_name || "Anonymous"}</Text>
+                    <Text style={styles.bio} numberOfLines={3}>
+                        {profile?.bio || "No bio yet."}
+                    </Text>
+                </View>
+
+                <View style={{ marginLeft: 10 }}>
+                    <TouchableOpacity 
+                        style={styles.iconOnlyBtn} 
+                        onPress={() => setShowSettings(true)}
+                    >
+                        <Settings color="#000" size={20} />
+                    </TouchableOpacity>
+                </View>
+            </View>
+          </View>
+
           {/* Ligne de séparation subtile */}
           <View style={styles.headerSeparator} />
       </BlurView>
@@ -289,7 +285,7 @@ export default function ProfilePage() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFF' },
   
-  // Header Absolu
+  // Header Absolu : contient SunbimHeader + Profil
   absoluteHeader: {
       position: 'absolute',
       top: 0,
@@ -304,16 +300,14 @@ const styles = StyleSheet.create({
   },
 
   profileBlock: { 
-      paddingTop: 10, 
-      paddingBottom: 20, 
+      paddingBottom: 15, 
       paddingHorizontal: 20, 
-      backgroundColor: '#FFF'
+      // Background transparent pour laisser passer le flou
   },
   
   profileInfoContainer: {
       flexDirection: 'row',
       alignItems: 'center',
-      // Pas de marginBottom ici, géré par le padding du bloc ou le gap
   },
   profileAvatar: { 
       width: 80, 
@@ -347,7 +341,7 @@ const styles = StyleSheet.create({
       height: 44, 
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: '#F5F5F5',
+      backgroundColor: 'rgba(255,255,255,0.5)', // Fond semi-transparent
       borderRadius: 12,
   },
   
