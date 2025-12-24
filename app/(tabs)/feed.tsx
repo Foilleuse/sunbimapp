@@ -629,10 +629,10 @@ const styles = StyleSheet.create({
 
     reactionBar: { 
         flexDirection: 'row', 
-        justifyContent: 'space-between', // Éléments espacés : Partage à gauche, Options à droite
-        alignItems: 'center', 
+        justifyContent: 'space-between', 
+        alignItems: 'flex-start', // Alignement vers le haut pour compenser la hauteur du texte
         width: '100%',
-        paddingHorizontal: 20, // Padding latéral pour décoller des bords
+        paddingHorizontal: 20, 
         paddingBottom: 20,
         marginTop: 10
     },
@@ -640,10 +640,12 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'center',
         alignItems: 'center',
-        gap: 60, // Espacement entre le Coeur et le ?
+        gap: 60, 
     },
     actionBtn: {
-        padding: 5
+        paddingTop: 6, // Padding ajusté pour aligner l'icône 24px avec l'icône 28px
+        paddingHorizontal: 5,
+        paddingBottom: 5
     },
     reactionBtn: { 
         alignItems: 'center', 
