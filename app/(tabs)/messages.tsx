@@ -104,19 +104,16 @@ export default function FriendsPage() {
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
 
+  // Hauteur dynamique du header pour le padding de la liste (similaire à Gallery)
+  const [headerHeight, setHeaderHeight] = useState(130);
+  
   const insets = useSafeAreaInsets();
   const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
   
-  // Hauteur augmentée pour inclure la barre de recherche (80 header + 60 searchbar + padding)
-  const HEADER_HEIGHT_EXTENDED = 140 + insets.top; 
-
   useFocusEffect(
     useCallback(() => {
         if (user) {
             fetchFollowing();
-            // Reset recherche quand on revient sur la page
-            // setSearchText(''); 
-            // setIsSearching(false);
         }
     }, [user])
   );
@@ -271,6 +268,13 @@ export default function FriendsPage() {
       setIsProfileModalVisible(true);
   };
 
+  const clearSearch = () => {
+    setSearchText('');
+    setIsSearching(false);
+    setSearchResults([]);
+    Keyboard.dismiss();
+  };
+
   const optimizedBackground = useMemo(() => {
     if (!backgroundCloud) return null;
     const w = Math.round(screenWidth * PixelRatio.get());
@@ -300,19 +304,20 @@ export default function FriendsPage() {
           />
       )}
 
-      {/* 2. Header Flouté (Statique + Barre de Recherche) */}
+      {/* 2. Header Flouté (Statique + Barre de Recherche comme Gallery) */}
       <BlurView 
-          intensity={50} 
+          intensity={80} 
           tint="light" 
-          style={[styles.absoluteHeader, { paddingTop: insets.top, height: HEADER_HEIGHT_EXTENDED }]}
+          style={[styles.absoluteHeader, { paddingTop: insets.top }]}
+          onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
       >
           {/* Header Titre */}
           <SunbimHeader showCloseButton={false} transparent={true} />
           
-          {/* Barre de Recherche */}
-          <View style={styles.searchContainer}>
+          {/* Outils / Barre de Recherche en dessous */}
+          <View style={styles.toolsContainer}>
               <View style={styles.searchBar}>
-                  <Search size={18} color="#666" style={{ marginRight: 8 }} />
+                  <Search size={18} color="#999" />
                   <TextInput
                       style={styles.searchInput}
                       placeholder="Search friends..."
@@ -324,24 +329,27 @@ export default function FriendsPage() {
                       clearButtonMode="while-editing"
                   />
                   {searchText.length > 0 && (
-                      <TouchableOpacity onPress={() => handleSearch('')}>
-                          <XCircle size={18} color="#999" />
+                      <TouchableOpacity onPress={clearSearch}>
+                          <XCircle size={18} color="#CCC" />
                       </TouchableOpacity>
                   )}
               </View>
           </View>
+          
+          {/* Séparateur */}
+          <View style={styles.headerSeparator} />
       </BlurView>
       
       {/* 3. Contenu Liste */}
       <View style={styles.content}>
         {loading ? (
-            <ActivityIndicator style={{marginTop: HEADER_HEIGHT_EXTENDED + 50}} color="#000" />
+            <ActivityIndicator style={{marginTop: headerHeight + 50}} color="#000" />
         ) : (
             <FlatList
                 data={displayData}
                 renderItem={renderUser}
                 keyExtractor={item => item.id} 
-                contentContainerStyle={{ paddingTop: HEADER_HEIGHT_EXTENDED + 10, paddingBottom: 100 }}
+                contentContainerStyle={{ paddingTop: headerHeight + 10, paddingBottom: 100 }}
                 keyboardShouldPersistTaps="handled"
                 ListEmptyComponent={
                     <View style={styles.emptyState}>
@@ -384,30 +392,35 @@ const styles = StyleSheet.create({
       left: 0,
       right: 0,
       zIndex: 10,
-      borderBottomWidth: 1,
-      borderBottomColor: 'rgba(0,0,0,0.05)',
+      // Le BlurView gère le background
+  },
+  
+  // Style aligné sur GalleryPage
+  toolsContainer: {
+      paddingHorizontal: 15,
+      paddingBottom: 10,
+      paddingTop: 5,
+      marginTop: 50, // Pousse sous le titre nyola
+  },
+  
+  headerSeparator: {
+      height: 1,
+      backgroundColor: 'rgba(0,0,0,0.05)',
+      width: '100%',
   },
 
-  searchContainer: {
-      paddingHorizontal: 20,
-      paddingBottom: 15,
-      marginTop: -10 // Remonter un peu sous le titre
-  },
   searchBar: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: 'rgba(255,255,255,0.7)',
-      borderRadius: 12,
+      backgroundColor: 'rgba(0,0,0,0.05)', // Gris clair comme Gallery
+      borderRadius: 20, // Plus arrondi comme Gallery
       paddingHorizontal: 12,
       height: 40,
-      shadowColor: "#000",
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.05,
-      shadowRadius: 2,
+      gap: 8
   },
   searchInput: {
       flex: 1,
-      fontSize: 15,
+      fontSize: 14, // Taille ajustée
       color: '#000',
       height: '100%'
   },
