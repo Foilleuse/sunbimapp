@@ -111,7 +111,7 @@ export default function GalleryPage() {
                     .from('reactions')
                     .select('drawing_id')
                     .eq('user_id', user.id)
-                    .eq('reaction_type', 'like'); // On filtre spécifiquement les likes
+                    .eq('reaction_type', 'like');
 
                 if (!userReactions || userReactions.length === 0) {
                     setDrawings([]);
@@ -121,11 +121,13 @@ export default function GalleryPage() {
                 likedIds = userReactions.map(l => l.drawing_id);
             }
 
+            // --- REQUÊTE PRINCIPALE ---
+            // On inclut 'reports(id)' pour compter les signalements dynamiquement
+            // On a retiré .eq('is_hidden', false) pour gérer l'affichage nous-mêmes
             let query = supabase
                 .from('drawings')
-                .select('*, users(display_name, avatar_url)')
+                .select('*, users(display_name, avatar_url), reports(id)')
                 .eq('cloud_id', cloudData.id)
-                .eq('is_hidden', false) 
                 .order('created_at', { ascending: false });
 
             if (blockedUserIds.length > 0) query = query.not('user_id', 'in', `(${blockedUserIds.join(',')})`);
@@ -137,7 +139,16 @@ export default function GalleryPage() {
             
             const { data, error } = await query;
             if (error) throw error;
-            setDrawings(data || []);
+            
+            // --- FILTRAGE DYNAMIQUE CLIENT ---
+            // On ne garde que les dessins qui ont moins de 2 signalements
+            const safeDrawings = (data || []).filter((drawing: any) => {
+                const reportCount = drawing.reports ? drawing.reports.length : 0;
+                return reportCount < 2;
+            });
+
+            setDrawings(safeDrawings);
+
         } catch (e) { 
             console.error(e); 
         } finally { 
