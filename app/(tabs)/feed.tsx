@@ -436,11 +436,11 @@ export default function FeedPage() {
                     }
                 }
 
+                // Modification ici : on demande les reports pour compter dynamiquement
                 let query = supabase
                     .from('drawings')
-                    .select('*, users(id, display_name, avatar_url)') 
+                    .select('*, users(id, display_name, avatar_url), reports(id)') 
                     .eq('cloud_id', cloudData.id)
-                    .eq('is_hidden', false) 
                     .order('created_at', { ascending: false })
                     .limit(20);
 
@@ -457,7 +457,15 @@ export default function FeedPage() {
                 const { data: drawingsData, error: drawingsError } = await query;
 
                 if (drawingsError) throw drawingsError;
-                setDrawings(drawingsData || []);
+
+                // --- FILTRAGE DYNAMIQUE CLIENT ---
+                // On ne garde que les dessins qui ont moins de 2 signalements
+                const safeDrawings = (drawingsData || []).filter((drawing: any) => {
+                    const reportCount = drawing.reports ? drawing.reports.length : 0;
+                    return reportCount < 2;
+                });
+
+                setDrawings(safeDrawings);
             }
         } catch (e) { console.error(e); } finally { setLoading(false); }
     };
