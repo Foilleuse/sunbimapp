@@ -10,6 +10,9 @@ import { SunbimHeader } from '../../src/components/SunbimHeader';
 import { getOptimizedImageUrl } from '../../src/utils/imageOptimizer';
 // Import de la nouvelle modale
 import { DrawingDetailModal } from '../../src/components/DrawingDetailModal';
+// Imports pour le flou et la safe area
+import { BlurView } from 'expo-blur';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -25,6 +28,10 @@ export default function ProfilePage() {
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
   const [authActionLoading, setAuthActionLoading] = useState(false);
+
+  // Gestion du header flouté
+  const insets = useSafeAreaInsets();
+  const [headerHeight, setHeaderHeight] = useState(100);
 
   const { width: screenWidth } = Dimensions.get('window');
   const SPACING = 1; 
@@ -100,7 +107,7 @@ export default function ProfilePage() {
   };
 
   const renderItem = ({ item }: { item: any }) => {
-      // Optimisation grille : calcul précis avec PixelRatio
+      // Optimisation grille
       const thumbW = Math.round(ITEM_SIZE * PixelRatio.get());
       const thumbH = Math.round(thumbW * (4/3));
       const thumbOptimized = getOptimizedImageUrl(item.cloud_image_url, thumbW, thumbH);
@@ -142,19 +149,56 @@ export default function ProfilePage() {
                 imageUri={thumbOptimized || item.cloud_image_url}
                 canvasData={item.canvas_data}
                 viewerSize={ITEM_SIZE}
-                viewerHeight={ITEM_SIZE * (4/3)} // Ajout hauteur explicite
+                viewerHeight={ITEM_SIZE * (4/3)} 
                 transparentMode={false}
                 animated={false}
                 startVisible={true}
-                autoCenter={false} // Pas d'auto-center pour respecter le crop
+                autoCenter={false} 
             />
         </TouchableOpacity>
       );
   };
 
+  // --- Composant d'entête de liste (Infos Profil) ---
+  const ListHeader = useMemo(() => {
+      return (
+        <View style={styles.profileBlock}>
+            <View style={styles.profileInfoContainer}>
+                {profile?.avatar_url ? (
+                    <Image 
+                        source={{ uri: profile.avatar_url }} 
+                        style={styles.profileAvatar} 
+                    />
+                ) : (
+                    <View style={[styles.profileAvatar, styles.placeholderAvatar]}>
+                        <User color="#666" size={35} />
+                    </View>
+                )}
+                
+                <View style={styles.profileTextContainer}>
+                    <Text style={styles.displayName}>{profile?.display_name || "Anonymous"}</Text>
+                    <Text style={styles.bio} numberOfLines={3}>
+                        {profile?.bio || "No bio yet."}
+                    </Text>
+                </View>
+
+                <View style={{ marginLeft: 10 }}>
+                    <TouchableOpacity 
+                        style={styles.iconOnlyBtn} 
+                        onPress={() => setShowSettings(true)}
+                    >
+                        <Settings color="#000" size={20} />
+                    </TouchableOpacity>
+                </View>
+            </View>
+        </View>
+      );
+  }, [profile]);
+
   if (!user) {
       return (
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
+              {/* Header Authentification (non flouté pour rester simple sur la page de login) */}
               <SunbimHeader showCloseButton={false} />
               
               <View style={styles.authContainer}>
@@ -183,50 +227,24 @@ export default function ProfilePage() {
 
   return (
     <View style={styles.container}>
-      <SunbimHeader showCloseButton={false} />
-
-      <View style={styles.profileBlock}>
-          <View style={styles.profileInfoContainer}>
-              {profile?.avatar_url ? (
-                  <Image 
-                    source={{ uri: profile.avatar_url }} // Utilisation directe de l'URL originale
-                    style={styles.profileAvatar} 
-                  />
-              ) : (
-                  <View style={[styles.profileAvatar, styles.placeholderAvatar]}>
-                      <User color="#666" size={35} />
-                  </View>
-              )}
-              
-              <View style={styles.profileTextContainer}>
-                  <Text style={styles.displayName}>{profile?.display_name || "Anonymous"}</Text>
-                  <Text style={styles.bio} numberOfLines={3}>
-                      {profile?.bio || "No bio yet."}
-                  </Text>
-              </View>
-
-              <View style={{ marginLeft: 10 }}>
-                 <TouchableOpacity 
-                    style={styles.iconOnlyBtn} 
-                    onPress={() => setShowSettings(true)}
-                  >
-                      <Settings color="#000" size={20} />
-                  </TouchableOpacity>
-              </View>
-          </View>
-      </View>
-
-      <View style={styles.historySection}>
+      {/* 1. Liste Principale (défile sous le header) */}
+      <View style={{flex: 1}}>
           {loadingHistory ? (
-              <ActivityIndicator style={{marginTop: 20}} />
+              <ActivityIndicator style={{marginTop: headerHeight + 20}} />
           ) : (
               <FlatList
                 data={historyItems}
                 numColumns={NUM_COLS}
-                contentContainerStyle={{ paddingBottom: 100 }}
-                columnWrapperStyle={{ gap: SPACING }}
+                // Header du profil intégré au scroll
+                ListHeaderComponent={ListHeader}
                 keyExtractor={item => item.id}
                 renderItem={renderItem}
+                columnWrapperStyle={{ gap: SPACING }}
+                // Padding dynamique pour le header et la bottom bar
+                contentContainerStyle={{ 
+                    paddingTop: headerHeight, 
+                    paddingBottom: 100 
+                }}
                 ListEmptyComponent={
                     <View style={styles.emptyState}>
                         <AlertCircle color="#CCC" size={40} />
@@ -236,6 +254,18 @@ export default function ProfilePage() {
               />
           )}
       </View>
+
+      {/* 2. Header Flouté Absolu */}
+      <BlurView 
+          intensity={80} 
+          tint="light" 
+          style={[styles.absoluteHeader, { paddingTop: insets.top }]}
+          onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
+      >
+          <SunbimHeader showCloseButton={false} transparent={true} />
+          {/* Ligne de séparation subtile */}
+          <View style={styles.headerSeparator} />
+      </BlurView>
 
       {/* MODALE D'AGRANDISSEMENT VIA COMPOSANT */}
       {selectedDrawing && (
@@ -259,6 +289,20 @@ export default function ProfilePage() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFF' },
   
+  // Header Absolu
+  absoluteHeader: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      zIndex: 10,
+  },
+  headerSeparator: {
+      height: 1,
+      backgroundColor: 'rgba(0,0,0,0.05)',
+      width: '100%',
+  },
+
   profileBlock: { 
       paddingTop: 10, 
       paddingBottom: 20, 
@@ -269,7 +313,7 @@ const styles = StyleSheet.create({
   profileInfoContainer: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginBottom: 20,
+      // Pas de marginBottom ici, géré par le padding du bloc ou le gap
   },
   profileAvatar: { 
       width: 80, 
@@ -307,7 +351,6 @@ const styles = StyleSheet.create({
       borderRadius: 12,
   },
   
-  historySection: { flex: 1, paddingTop: 15 },
   emptyState: { marginTop: 50, alignItems: 'center' },
   emptyText: { color: '#999', marginTop: 10 },
   

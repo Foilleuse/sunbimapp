@@ -31,7 +31,7 @@ export default function TabLayout() {
         tabBarInactiveTintColor: '#CCCCCC',
       }}
     >
-      {/* 1. FEED - Barre transparente (déjà géré sans flou pour l'instant, style spécifique) */}
+      {/* 1. FEED */}
       <Tabs.Screen
         name="feed"
         options={{
@@ -57,11 +57,10 @@ export default function TabLayout() {
         name="gallery"
         options={{
           tabBarIcon: ({ color }) => <ImageIcon color={color} size={28} />,
-          // Position absolue pour flotter au-dessus du contenu
           tabBarStyle: {
             position: 'absolute',
-            backgroundColor: 'transparent', // Important pour voir le flou
-            borderTopWidth: 0, // Pas de bordure pour un look épuré
+            backgroundColor: 'transparent',
+            borderTopWidth: 0,
             elevation: 0,
             height: Platform.OS === 'ios' ? 85 : 60,
             paddingTop: 10,
@@ -69,7 +68,6 @@ export default function TabLayout() {
             left: 0,
             right: 0,
           },
-          // Ajout de l'arrière-plan flouté
           tabBarBackground: () => (
             <BlurView 
               intensity={80} 
@@ -80,7 +78,7 @@ export default function TabLayout() {
         }}
       />
 
-      {/* 3. CAMERA (Bouton central) */}
+      {/* 3. CAMERA */}
       <Tabs.Screen
         name="camera"
         options={{
@@ -93,12 +91,10 @@ export default function TabLayout() {
                 marginBottom: Platform.OS === 'ios' ? 30 : 20,
               },
               isFeed ? {
-                // Style spécifique Feed : Pas de fond noir, fond transparent
                 backgroundColor: 'transparent',
                 shadowColor: "transparent",
                 elevation: 0
               } : {
-                // Style par défaut : Cercle noir avec ombre
                 backgroundColor: '#000', 
                 shadowColor: "#000", shadowOffset: {width:0, height:4}, shadowOpacity:0.3, shadowRadius:4,
                 elevation: 5
@@ -118,11 +114,29 @@ export default function TabLayout() {
         }}
       />
 
-      {/* 5. PROFIL */}
+      {/* 5. PROFIL - Barre Transparente + Flou (Comme Galerie) */}
       <Tabs.Screen
         name="profile"
         options={{
           tabBarIcon: ({ color }) => <User color={color} size={28} />,
+          tabBarStyle: {
+            position: 'absolute',
+            backgroundColor: 'transparent',
+            borderTopWidth: 0,
+            elevation: 0,
+            height: Platform.OS === 'ios' ? 85 : 60,
+            paddingTop: 10,
+            bottom: 0,
+            left: 0,
+            right: 0,
+          },
+          tabBarBackground: () => (
+            <BlurView 
+              intensity={80} 
+              tint="light" 
+              style={StyleSheet.absoluteFill} 
+            />
+          ),
         }}
       />
     </Tabs>
