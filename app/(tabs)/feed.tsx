@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform, Image, Pressable, Alert, PixelRatio, Share } from 'react-native';
 import { useEffect, useState, memo, useCallback, useMemo } from 'react';
-import { User, Eye, MoreHorizontal, Lightbulb, Palette, Laugh, Heart, ChevronLeft, ChevronRight, Share2, Zap } from 'lucide-react-native';
+import { User, Eye, MoreHorizontal, Heart, ChevronLeft, ChevronRight, Share2, CircleHelp } from 'lucide-react-native';
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { useAuth } from '../../src/contexts/AuthContext';
@@ -15,8 +15,8 @@ import { SunbimHeader } from '../../src/components/SunbimHeader';
 // Import du nouveau composant ShareModal
 import { ShareModal } from '../../src/components/ShareModal';
 
-// Types de réactions possibles
-type ReactionType = 'like' | 'smart' | 'beautiful' | 'crazy' | null;
+// Types de réactions possibles (Modifié : seulement like et question)
+type ReactionType = 'like' | 'question' | null;
 
 // --- COMPOSANT BACKGROUND : MIROIR + FLOU + FONDU ÉTENDU ---
 const MirroredBackground = ({ uri, width, height, top }: { uri: string, width: number, height: number, top: number }) => {
@@ -90,7 +90,7 @@ const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color, count }: an
                 <Icon 
                     color={isActive ? color : "#FFF"} 
                     fill={isActive ? color : "transparent"} 
-                    size={24} 
+                    size={28} 
                 />
             </Animated.View>
             <Text style={[styles.reactionText, isActive && styles.activeText]}>
@@ -106,9 +106,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
     const [userReaction, setUserReaction] = useState<ReactionType>(null);
     const [reactionCounts, setReactionCounts] = useState({
         like: 0,
-        smart: 0,
-        beautiful: 0,
-        crazy: 0
+        question: 0
     });
     
     const [isShareModalVisible, setShareModalVisible] = useState(false);
@@ -137,7 +135,7 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
 
             if (error) throw error;
 
-            const counts = { like: 0, smart: 0, beautiful: 0, crazy: 0 };
+            const counts = { like: 0, question: 0 };
             let myReaction: ReactionType = null;
 
             allReactions?.forEach((r: any) => {
@@ -316,25 +314,11 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
                             onPress={() => handleReaction('like')}
                         />
                         <AnimatedReactionBtn 
-                            icon={Lightbulb} 
+                            icon={CircleHelp} 
                             color="#FFCC00" 
-                            isActive={userReaction === 'smart'} 
-                            count={reactionCounts.smart} 
-                            onPress={() => handleReaction('smart')}
-                        />
-                        <AnimatedReactionBtn 
-                            icon={Palette} 
-                            color="#5856D6" 
-                            isActive={userReaction === 'beautiful'} 
-                            count={reactionCounts.beautiful} 
-                            onPress={() => handleReaction('beautiful')}
-                        />
-                        <AnimatedReactionBtn 
-                            icon={Zap} 
-                            color="#FF2D55" 
-                            isActive={userReaction === 'crazy'} 
-                            count={reactionCounts.crazy} 
-                            onPress={() => handleReaction('crazy')}
+                            isActive={userReaction === 'question'} 
+                            count={reactionCounts.question} 
+                            onPress={() => handleReaction('question')}
                         />
                     </View>
                 </View>
@@ -651,7 +635,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center', 
         alignItems: 'center', 
         width: '100%',
-        gap: 40,
+        gap: 60, // Augmenté pour l'espacement entre 2 icônes
         paddingHorizontal: 10,
         paddingBottom: 20,
         marginTop: 4
