@@ -205,33 +205,21 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
         
         if (isMounted && profileData) setUserProfile(profileData);
 
-        // --- MODIFICATION : Récupération des reports pour filtrage intelligent ---
+        // --- MODIFICATION : Récupération des reports pour filtrage simple ---
         const { data: drawingsData, error: drawingsError } = await supabase
             .from('drawings')
             .select('*, reports(id)') 
             .eq('user_id', userId)
-            // On NE filtre PAS sur is_hidden ici pour gérer le cas du "unhide" manuel
+            // On NE filtre PAS sur is_hidden dans la requête SQL
             .order('created_at', { ascending: false });
 
         if (drawingsError) throw drawingsError;
 
-        // --- LOGIQUE DE FILTRAGE HYBRIDE ---
+        // --- LOGIQUE DE FILTRAGE ULTRA SIMPLE ---
+        // Si nombre de signalements >= 2, on masque. Sinon on affiche.
         const safeDrawings = (drawingsData || []).filter((drawing: any) => {
             const reportCount = drawing.reports ? drawing.reports.length : 0;
-            
-            // Règle 1 : Si on voit 2 signalements ou plus, on cache impérativement.
-            if (reportCount >= 2) return false;
-
-            // Règle 2 : Sécurité pour le cas où certains signalements sont cachés (ex: RLS).
-            // Si le dessin est marqué 'hidden' côté serveur ET qu'on voit au moins 1 signalement,
-            // on le considère comme "en cours de modération" ou "signalé par d'autres", donc on cache.
-            if (drawing.is_hidden && reportCount > 0) return false;
-
-            // Règle 3 : Si is_hidden est true MAIS qu'on a 0 signalement, 
-            // c'est le cas où l'admin a effacé les signalements mais le flag est resté.
-            // Dans ce cas, on AFFICHE (return true par défaut).
-            
-            return true;
+            return reportCount < 2;
         });
 
         if (isMounted) setDrawings(safeDrawings);
