@@ -14,20 +14,19 @@ import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Constantes de dimensions
-const ROW_HEIGHT = 105;
-const DRAWING_HEIGHT = ROW_HEIGHT - 20; 
+const ROW_HEIGHT = 90; // Réduit légèrement car plus de padding carte
+const DRAWING_HEIGHT = 70; 
 const DRAWING_WIDTH = DRAWING_HEIGHT * (3/4); 
 
-// --- COMPOSANT BACKGROUND : MIROIR + FLOU (Copie de Feed) ---
+// --- COMPOSANT BACKGROUND : MIROIR + FLOU ---
 const MirroredBackground = ({ uri, width, height }: { uri: string, width: number, height: number }) => {
     const image = useImage(uri);
     
     if (!image) return null;
 
-    // Le background prend tout l'écran, on utilise height pour tout couvrir
+    // Le background prend tout l'écran
     const top = 0;
-    const bottom = height;
-    const BLUR_RADIUS = 25; 
+    const BLUR_RADIUS = 30; // Flou un peu plus prononcé pour la lisibilité
 
     const EXTRA_WIDTH = 100;
     const bgWidth = width + EXTRA_WIDTH;
@@ -37,7 +36,6 @@ const MirroredBackground = ({ uri, width, height }: { uri: string, width: number
         <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
             <Group layer={<Paint><Blur blur={BLUR_RADIUS} /></Paint>}>
                 <SkiaImage image={image} x={bgX} y={top} width={bgWidth} height={height} fit="cover" />
-                {/* On duplique l'image pour remplir tout l'écran si nécessaire ou créer l'effet miroir */}
                 <Group origin={vec(width / 2, height/2)} transform={[{ scaleY: -1 }]}>
                     <SkiaImage image={image} x={bgX} y={top} width={bgWidth} height={height} fit="cover" />
                 </Group>
@@ -50,8 +48,8 @@ const MirroredBackground = ({ uri, width, height }: { uri: string, width: number
                         <SkiaGradient
                             start={vec(0, 0)}
                             end={vec(0, height)}
-                            colors={["white", "white", "white"]} // Masque plein pour tout montrer
-                            positions={[0, 0.5, 1]}
+                            colors={["white", "white"]} 
+                            positions={[0, 1]}
                         />
                     </Rect>
                 }
@@ -84,16 +82,13 @@ const FriendRow = memo(({ item, onOpenProfile, onUnfollow }: { item: any, onOpen
             onPress={() => onOpenProfile(item)}
             activeOpacity={0.7}
         >
-            {/* Fond semi-transparent pour lisibilité */}
-            <View style={styles.rowBackground} />
-
             <View style={styles.friendInfoContainer}>
                 <View style={styles.avatarContainer}>
                     {avatarUrl ? (
                         <Image source={{ uri: avatarUrl }} style={styles.avatar} />
                     ) : (
                         <View style={[styles.avatar, styles.placeholderAvatar]}>
-                            <User size={24} color="#666" />
+                            <User size={20} color="#666" />
                         </View>
                     )}
                 </View>
@@ -147,6 +142,7 @@ export default function FriendsPage() {
   // Gestion du style
   const insets = useSafeAreaInsets();
   const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+  
   // Hauteur fixe du header pour le padding (similaire à Gallery)
   const headerHeight = 100 + insets.top; 
 
@@ -321,7 +317,7 @@ export default function FriendsPage() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFF' }, // Background blanc par défaut, couvert par l'image
+  container: { flex: 1, backgroundColor: '#FFF' }, 
   
   absoluteHeader: {
       position: 'absolute',
@@ -332,24 +328,18 @@ const styles = StyleSheet.create({
       justifyContent: 'center'
   },
 
-  content: { flex: 1, paddingHorizontal: 20 },
+  content: { flex: 1, paddingHorizontal: 0 }, // Retrait du padding horizontal pour toucher les bords
   
   friendItem: { 
       flexDirection: 'row', 
       alignItems: 'center', 
       justifyContent: 'space-between', 
-      paddingVertical: 10, 
+      paddingVertical: 12, 
       height: ROW_HEIGHT,
-      marginBottom: 10,
-      borderRadius: 15,
-      paddingHorizontal: 10,
-      overflow: 'hidden',
-      position: 'relative',
-  },
-  // Fond semi-transparent pour la lisibilité sur le nuage
-  rowBackground: {
-      ...StyleSheet.absoluteFillObject,
-      backgroundColor: 'rgba(255,255,255,0.6)', 
+      paddingHorizontal: 20, // Padding interne à l'item
+      // Pas de bordure, pas de background, juste une liste épurée
+      borderBottomWidth: 1,
+      borderBottomColor: 'rgba(0,0,0,0.05)', // Séparateur très subtil
   },
 
   friendInfoContainer: { 
@@ -359,12 +349,12 @@ const styles = StyleSheet.create({
       marginRight: 10
   },
   avatarContainer: { marginRight: 15 },
-  avatar: { width: 50, height: 50, borderRadius: 25 },
-  placeholderAvatar: { width: 50, height: 50, borderRadius: 25, backgroundColor: 'rgba(0,0,0,0.1)', justifyContent: 'center', alignItems: 'center' },
+  avatar: { width: 44, height: 44, borderRadius: 22 },
+  placeholderAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.05)', justifyContent: 'center', alignItems: 'center' },
   
   textContainer: { flex: 1, justifyContent: 'center' },
-  friendName: { fontSize: 16, fontWeight: '800', color: '#000', marginBottom: 2 },
-  friendBio: { fontSize: 13, color: '#333', fontWeight: '500' },
+  friendName: { fontSize: 16, fontWeight: '700', color: '#000', marginBottom: 2 },
+  friendBio: { fontSize: 13, color: '#333', fontWeight: '400' },
   
   rightContainer: {
       justifyContent: 'center',
@@ -372,17 +362,17 @@ const styles = StyleSheet.create({
       minWidth: 60
   },
   miniDrawingContainer: {
-      borderRadius: 8,
+      borderRadius: 6,
       overflow: 'hidden',
       borderWidth: 1,
       borderColor: 'rgba(0,0,0,0.1)'
   },
   unfollowBtn: { 
-      padding: 10,
-      backgroundColor: 'rgba(255,255,255,0.8)',
+      padding: 8,
+      backgroundColor: 'rgba(255,255,255,0.5)',
       borderRadius: 20
   },
   
-  emptyState: { alignItems: 'center', marginTop: 100, gap: 10 },
+  emptyState: { alignItems: 'center', marginTop: 150, gap: 10 },
   emptyText: { color: '#000', fontSize: 16, fontWeight: '600' }
 });
