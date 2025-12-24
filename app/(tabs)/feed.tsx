@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform, Image, Pressable, Alert, PixelRatio, Share } from 'react-native';
 import { useEffect, useState, memo, useCallback, useMemo } from 'react';
-import { User, Eye, MoreHorizontal, Heart, ChevronLeft, ChevronRight, Share2, CircleHelp } from 'lucide-react-native';
+import { User, Eye, MoreHorizontal, Heart, ChevronLeft, ChevronRight, Share2 } from 'lucide-react-native';
 import { supabase } from '../../src/lib/supabaseClient';
 import { DrawingViewer } from '../../src/components/DrawingViewer';
 import { useAuth } from '../../src/contexts/AuthContext';
@@ -67,7 +67,7 @@ const MirroredBackground = ({ uri, width, height, top }: { uri: string, width: n
     );
 };
 
-const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color, count }: any) => {
+const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color, count, isCustomIcon, customContent }: any) => {
     const scale = useSharedValue(1);
 
     const animatedStyle = useAnimatedStyle(() => {
@@ -87,11 +87,17 @@ const AnimatedReactionBtn = ({ onPress, isActive, icon: Icon, color, count }: an
     return (
         <Pressable onPress={handlePress} style={styles.reactionBtn}>
             <Animated.View style={animatedStyle}>
-                <Icon 
-                    color={isActive ? color : "#FFF"} 
-                    fill={isActive ? color : "transparent"} 
-                    size={28} 
-                />
+                {isCustomIcon ? (
+                    <Text style={{ fontSize: 28, fontWeight: '900', color: isActive ? color : "#FFF", textAlign: 'center' }}>
+                        {customContent}
+                    </Text>
+                ) : (
+                    <Icon 
+                        color={isActive ? color : "#FFF"} 
+                        fill={isActive ? color : "transparent"} 
+                        size={28} 
+                    />
+                )}
             </Animated.View>
             <Text style={[styles.reactionText, isActive && styles.activeText]}>
                 {count > 0 ? count : ''}
@@ -314,7 +320,8 @@ const FeedCard = memo(({ drawing, canvasSize, index, currentIndex, onUserPress, 
                             onPress={() => handleReaction('like')}
                         />
                         <AnimatedReactionBtn 
-                            icon={CircleHelp} 
+                            isCustomIcon={true}
+                            customContent="?"
                             color="#FFCC00" 
                             isActive={userReaction === 'question'} 
                             count={reactionCounts.question} 
